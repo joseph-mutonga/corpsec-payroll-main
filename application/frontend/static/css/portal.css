@@ -1,0 +1,485 @@
+/* CorpSec Guard Mobile Portal Design System — Pastel Theme */
+
+.portal-body {
+  margin: 0;
+  padding: 0;
+  background-color: #EBF1F7;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #0F172A;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* App Header */
+.portal-header {
+  background-color: #0F172A;
+  color: #FFFFFF;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.portal-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.portal-brand-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #7C3AED;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+}
+
+.portal-title-group h1 {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.portal-title-group span {
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.portal-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-logout {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-logout:hover {
+  background: #EF4444;
+  color: #FFFFFF;
+}
+
+/* Main View Area */
+.portal-main {
+  flex: 1;
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px 16px 90px 16px; /* Extra bottom padding for bottom nav */
+}
+
+/* Mobile Bottom Navigation Bar */
+.portal-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #FFFFFF;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 68px;
+  z-index: 100;
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
+}
+
+/* Optional PWA install prompt */
+.install-app-banner[hidden] {
+  display: none !important;
+}
+
+.install-app-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 576px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+body.portal-logged-in .install-app-banner {
+  bottom: 80px;
+}
+
+.install-app-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.install-app-copy strong {
+  color: #0F172A;
+  font-size: 13px;
+}
+
+.install-app-copy span {
+  color: #64748B;
+  font-size: 11px;
+}
+
+.install-app-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.install-app-button,
+.dismiss-install-button {
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 12px;
+}
+
+.install-app-button {
+  background: #7C3AED;
+  color: #FFFFFF;
+}
+
+.dismiss-install-button {
+  background: #F1F5F9;
+  color: #475569;
+}
+
+.nav-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #64748B;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 4px;
+  width: 20%;
+  height: 100%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-tab.active {
+  color: #7C3AED;
+  font-weight: 700;
+}
+
+.nav-tab-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Cards & Section Panels — Floating Pastel Cards */
+.portal-card {
+  background-color: #FFFFFF;
+  border-radius: 20px;
+  padding: 22px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin-top: 0;
+  margin-bottom: 14px;
+  color: #0F172A;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-badge.active, .status-badge.approved, .status-badge.present {
+  background-color: #D1FAE5;
+  color: #065F46;
+}
+
+.status-badge.warning, .status-badge.pending, .status-badge.open {
+  background-color: #FEF3C7;
+  color: #92400E;
+}
+
+.status-badge.danger, .status-badge.rejected {
+  background-color: #FEE2E2;
+  color: #991B1B;
+}
+
+/* Clock In / Out Large Button Container */
+.clock-container {
+  text-align: center;
+  padding: 12px 0;
+}
+
+.btn-clock {
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-clock:active {
+  transform: scale(0.98);
+}
+
+.btn-clock.clock-in {
+  background-color: #10B981;
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+}
+.btn-clock.clock-in:hover {
+  background-color: #059669;
+}
+
+.btn-clock.clock-out {
+  background-color: #EF4444;
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+}
+.btn-clock.clock-out:hover {
+  background-color: #DC2626;
+}
+
+/* Quick Action Tiles */
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.action-tile {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-tile:hover {
+  background: #F3E8FF;
+  border-color: #7C3AED;
+  transform: translateY(-2px);
+}
+
+.action-icon {
+  font-size: 26px;
+  margin-bottom: 6px;
+}
+
+.action-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  padding: 10px 18px;
+  border: 1px solid #CBD5E1;
+  border-radius: 9999px;
+  font-size: 14px;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.form-textarea {
+  border-radius: 16px;
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none;
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.btn-submit {
+  width: 100%;
+  background-color: #7C3AED;
+  color: #FFFFFF;
+  border: none;
+  padding: 12px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-submit:hover {
+  background-color: #6D28D9;
+  transform: translateY(-1px);
+}
+
+/* Lists & Timeline Item */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0F172A;
+}
+
+.history-date {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.history-desc {
+  font-size: 13px;
+  color: #334155;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  color: #64748B;
+}
+
+.empty-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+/* Notification & Alerts */
+.alert-banner {
+  padding: 12px 16px;
+  border-radius: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-success {
+  background-color: #DEF7EC;
+  color: #03543F;
+  border: 1px solid #BCF0DA;
+}
+
+.alert-danger {
+  background-color: #FDE8E8;
+  color: #9B1C1C;
+  border: 1px solid #FBD5D5;
+}
+
+/* Modal / Login Card Container */
+.login-wrapper {
+  max-width: 400px;
+  margin: 40px auto;
+  padding: 0 16px;
+}
+
+.login-card {
+  background: #FFFFFF;
+  border-radius: 24px;
+  padding: 32px 24px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08);
+  text-align: center;
+}
+
+@media (max-width: 420px) {
+  .install-app-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .install-app-actions {
+    width: 100%;
+  }
+
+  .install-app-button,
+  .dismiss-install-button {
+    flex: 1;
+  }
+}

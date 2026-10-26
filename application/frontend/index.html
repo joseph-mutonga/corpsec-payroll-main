@@ -1,0 +1,2025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CorpSec Payroll & Workforce System</title>
+  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="/static/js/app.js"></script>
+</head>
+<body>
+
+  <!-- UNIFIED LOGIN OVERLAY (Shown when unauthenticated) -->
+  <div id="unified-login-overlay" class="unified-login-overlay">
+    <div class="login-mesh-bg"></div>
+    <div class="login-container">
+      <div class="login-card-glass">
+        
+        <!-- Brand & Header -->
+        <div class="login-brand-header">
+          <div class="login-brand-badge">
+            <img src="/static/images/corpsec_logo_badge.png" alt="CorpSec Logo" class="login-brand-icon">
+          </div>
+          <h1 class="login-title">CORPSEC ENTERPRISE</h1>
+          <p class="login-tagline">Security Workforce, Roster & Statutory Payroll</p>
+          <div class="login-access-chip">
+            <span class="chip-pulse"></span>
+            <span>Unified Access Portal</span>
+          </div>
+        </div>
+
+        <!-- Dynamic Alert Banner -->
+        <div id="unified-login-alert" class="login-alert-banner" style="display:none;"></div>
+
+        <!-- Universal Sign-In Form -->
+        <form id="unified-login-form" onsubmit="handleUnifiedLogin(event)">
+          <div class="login-field-group">
+            <div class="login-field-label">
+              <label for="unified-login-id">Identity Credential</label>
+              <span class="label-helper-hint">Email, Guard ID (CS-XXXXX), or Phone</span>
+            </div>
+            <div class="login-input-wrapper">
+              <span class="input-icon">👤</span>
+              <input 
+                type="text" 
+                id="unified-login-id" 
+                class="login-text-input" 
+                placeholder="e.g. admin@corpsec.co.ke or CS-00431" 
+                required 
+                autocomplete="username"
+              >
+            </div>
+          </div>
+
+          <div class="login-field-group">
+            <div class="login-field-label">
+              <label for="unified-login-password">Password</label>
+              <span class="label-helper-hint">Bcrypt Encrypted Verification</span>
+            </div>
+            <div class="login-input-wrapper">
+              <span class="input-icon">🔒</span>
+              <input 
+                type="password" 
+                id="unified-login-password" 
+                class="login-text-input" 
+                placeholder="Enter account password" 
+                required 
+                autocomplete="current-password"
+              >
+              <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">👁️</button>
+            </div>
+          </div>
+
+          <button type="submit" id="unified-login-btn" class="btn-login-submit">
+            <span id="btn-login-text">Sign In to CorpSec</span>
+            <span id="btn-login-spinner" class="login-spinner" style="display:none;"></span>
+          </button>
+        </form>
+
+        <!-- Role-Based Auto-Dispatch Note -->
+        <div class="login-routing-note">
+          <div class="routing-badge">
+            <span class="routing-icon">⚡</span>
+            <div><strong>Automatic Role Dispatch:</strong> Sign in with any authorized CorpSec account. Administrators are routed to the Management Hub; Guards are routed to the Mobile Shift Portal.</div>
+          </div>
+        </div>
+
+        <!-- 1-Click Quick Fill Demo Credentials -->
+        <div class="login-quickfill-section">
+          <span class="quickfill-title">Quick Demo Sign-In:</span>
+          <div class="quickfill-chips">
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('admin@corpsec.co.ke', 'Admin@CorpSec2026!')">
+              <span class="chip-role">System Admin</span>
+              <span class="chip-id">admin@corpsec.co.ke</span>
+            </button>
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('peter.otieno@corpsec.co.ke', 'Guard@123456')">
+              <span class="chip-role">Guard</span>
+              <span class="chip-id">Peter Otieno (CS-00431)</span>
+            </button>
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('john.mwangi@corpsec.co.ke', 'Guard@123456')">
+              <span class="chip-role">Guard</span>
+              <span class="chip-id">John Mwangi (CS-00452)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="login-footer-legal">
+          <span>© 2026 CorpSec Investigations & Guarding Services Ltd. Compliant with Laws of Kenya.</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <!-- Sidebar Navigation -->
+  <aside id="sidebar">
+    <div class="brand-header">
+      <img src="/static/images/corpsec_logo_badge.png" alt="CorpSec Logo" class="brand-logo-img">
+      <div>
+        <h2>CORPSEC PAYROLL</h2>
+        <span class="brand-subtitle">INVESTIGATIONS & GUARDING SERVICES</span>
+      </div>
+    </div>
+    
+    <ul class="nav-links">
+      <div class="sidebar-section-title">MENU</div>
+      <li class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</li>
+      <li class="nav-item" onclick="switchTab('reports')">📈 Analytics & Reports</li>
+      <li class="nav-item" onclick="switchTab('incidents')">🚨 Incident Reports</li>
+      <li class="nav-item" onclick="switchTab('leave')">🏖️ Leave Requests</li>
+      <li class="nav-item" onclick="switchTab('guards')">🛡️ Guard Directory</li>
+      <li class="nav-item" onclick="switchTab('sites')">🏢 Client Sites & Rates</li>
+      <li class="nav-item" onclick="switchTab('shifts')">📅 Shift Roster</li>
+      
+      <div class="sidebar-section-title">FINANCIAL</div>
+      <li class="nav-item" onclick="switchTab('attendance')">⏰ Attendance & Overtime</li>
+      <li class="nav-item" onclick="switchTab('payroll')">⚙️ Payroll Engine</li>
+      <li class="nav-item" onclick="switchTab('payments')">💳 Payment Schedules</li>
+      <li class="nav-item" onclick="switchTab('statutory')">🏛️ Tax & Statutory Rates</li>
+
+      <div class="sidebar-section-title">TOOLS</div>
+      <li class="nav-item" onclick="switchTab('audit')">📜 Audit Trail</li>
+      <li class="nav-item" onclick="switchTab('settings')">⚙️ System Settings</li>
+    </ul>
+
+    <!-- Sidebar Bottom Promo Card -->
+    <div class="sidebar-promo-card">
+      <div class="promo-icon">🛡️</div>
+      <h4>CorpSec System Pro</h4>
+      <p>System operating smoothly with 100% database health.</p>
+      <button class="btn btn-primary" style="width:100%; font-size:12px; padding:8px 12px;" onclick="switchTab('reports')">View Analytics</button>
+    </div>
+
+    <div class="user-profile-badge">
+      <div>
+        <div style="font-weight:700; font-size:13px;" id="user-email-label">admin@corpsec.co.ke</div>
+        <div style="font-size:11px; color:#94A3B8;">CorpSec System Admin</div>
+      </div>
+      <button onclick="logout()" style="background:none; border:none; color:#EF4444; cursor:pointer; font-size:12px; font-weight:700;">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main Content View Container -->
+  <div id="main-content">
+    <header class="top-bar">
+      <div style="display: flex; align-items: center;">
+        <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+        <h1 class="page-title" id="current-page-title">Dashboard</h1>
+        <div id="top-bar-date-subtitle" style="font-size:12px; color:#64748B; margin-top:2px;">Data summary for September 18, 2026</div>
+      </div>
+      <div class="header-right-group" style="position:relative;">
+        <button class="icon-btn-pill" title="Search guards, sites, or shifts" aria-label="Search guards, sites, or shifts" onclick="toggleSearchModal()">🔍</button>
+        
+        <!-- Notification Bell Icon with Red Dot Indicator -->
+        <button class="icon-btn-pill" title="Notifications" aria-label="Notifications" aria-expanded="false" onclick="toggleNotificationsDropdown(event)">
+          🔔
+          <span class="notification-dot" id="header-notification-dot"></span>
+        </button>
+
+        <!-- Floating Notifications Dropdown Menu -->
+        <div id="dropdown-notifications" class="header-dropdown-menu" style="display:none; width:340px;">
+          <div class="dropdown-header-title">
+            <span>Notifications</span>
+            <span style="font-size:11px; color:var(--color-primary); cursor:pointer;" onclick="markNotificationsAsRead()">Mark all as read</span>
+          </div>
+          <div style="padding:16px; text-align:center; font-size:12px; color:#64748B;">
+            Loading notifications...
+          </div>
+        </div>
+
+        <!-- Profile Avatar Badge & Dropdown -->
+        <div class="user-avatar-badge" role="button" tabindex="0" aria-label="User Profile Menu" aria-expanded="false" onclick="toggleProfileDropdown(event)">
+          <img src="/static/images/corpsec_logo_badge.png" alt="Fiona Johnson" class="avatar-img">
+          <div class="avatar-info">
+            <span class="avatar-name">Fiona Johnson</span>
+            <span class="avatar-role">System Admin</span>
+          </div>
+        </div>
+
+        <!-- Floating Profile Dropdown Menu -->
+        <div id="dropdown-profile" class="header-dropdown-menu" style="display:none; width:220px; right:140px;">
+          <div class="dropdown-header-title">Fiona Johnson</div>
+          <div class="dropdown-item" onclick="openProfileModal()">👤 Admin Profile</div>
+          <div class="dropdown-item" onclick="switchTab('settings')">⚙️ System Settings</div>
+          <div style="border-top:1px solid #F1F5F9; margin:4px 0;"></div>
+          <div class="dropdown-item" style="color:#EF4444;" onclick="logout()">🚪 Sign Out</div>
+        </div>
+
+        <!-- Primary CTA: Run Payroll -->
+        <button class="btn btn-primary" id="btn-run-payroll-top" onclick="openRunPayrollModal()">▶ Run Payroll</button>
+      </div>
+    </header>
+
+    <div class="content-container">
+
+      <!-- Login Screen (Hidden if authenticated) -->
+      <div id="login-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="text-align: center;">
+          <img src="/static/images/corpsec_logo_full.jpg" alt="CorpSec Investigations & Guarding Services" style="max-width: 220px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+          <h2 style="margin-bottom:16px; font-size:20px;">CorpSec Admin Sign In</h2>
+          <form onsubmit="handleLogin(event)">
+            <div style="margin-bottom:16px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Email Address</label>
+              <input type="email" id="login-email" class="form-control" placeholder="e.g. admin@corpsec.co.ke" required>
+            </div>
+            <div style="margin-bottom:20px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Password</label>
+              <input type="password" id="login-password" class="form-control" placeholder="Enter password" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
+            <div style="margin-top:14px; font-size:12px; color:#64748B;">
+              🔑 Demo Admin: <span style="font-weight:700; color:#334155;">admin@corpsec.co.ke</span> / <span style="font-weight:700; color:#334155;">Admin@123456</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Search Modal Overlay -->
+      <div id="modal-search" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeSearchModal()">
+        <div class="modal-content" style="max-width: 600px; width: 90%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="font-size:18px; font-weight:800;">🔍 System Search</h3>
+            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeSearchModal()">✕</button>
+          </div>
+          <div style="margin-bottom:16px; position:relative;">
+            <input type="text" id="global-search-input" class="form-control" placeholder="Search guards by name/ID, client sites, or shift records..." oninput="handleGlobalSearch(this.value)" autofocus style="padding-left:40px;">
+            <span style="position:absolute; left:14px; top:12px; font-size:16px;">🔍</span>
+          </div>
+          <div id="search-results-list" style="display:flex; flex-direction:column; gap:10px; max-height:340px; overflow-y:auto;">
+            <div style="text-align: center; color: #64748B; padding: 20px;">Type to search live across guards, sites, and shift rosters...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Profile Details Modal -->
+      <div id="modal-profile" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeProfileModal()">
+        <div class="modal-content" style="max-width: 460px; width: 90%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid #F1F5F9; padding-bottom:12px;">
+            <h3 style="font-size:18px; font-weight:800;">👤 Admin Profile</h3>
+            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeProfileModal()">✕</button>
+          </div>
+          <div style="text-align:center; margin-bottom:20px;">
+            <img src="/static/images/corpsec_logo_badge.png" alt="Fiona Johnson" style="width:80px; height:80px; border-radius:50%; margin-bottom:12px; border:3px solid var(--color-primary);">
+            <h4 style="font-size:18px; font-weight:800; color:#0F172A;">Fiona Johnson</h4>
+            <span class="badge badge-active" style="margin-top:4px;">System Administrator</span>
+          </div>
+          <div style="background:#F8FAFC; border-radius:14px; padding:16px; margin-bottom:20px; display:flex; flex-direction:column; gap:10px; font-size:13px;">
+            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Email:</span><strong>fiona.johnson@corpsec.co.ke</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Employee ID:</span><strong>CS-ADM-001</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Access Level:</span><strong>Full Superuser Control</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Last Active:</span><strong>Today at 10:15 AM</strong></div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" style="flex:1;" onclick="closeProfileModal()">Close</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="closeProfileModal(); switchTab('settings');">⚙️ Settings</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Run Payroll Confirmation Modal -->
+      <div id="modal-confirm-payroll" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeRunPayrollModal()">
+        <div class="modal-content" style="max-width: 480px; width: 90%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="font-size:18px; font-weight:800;">▶ Execute Payroll Run</h3>
+            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeRunPayrollModal()">✕</button>
+          </div>
+          <div style="background:#F3E8FF; border-radius:14px; padding:16px; margin-bottom:20px; border:1px solid #E9D5FF;">
+            <div style="font-size:14px; font-weight:700; color:#581C87; margin-bottom:6px;">September 2026 Payroll Calculation</div>
+            <p style="font-size:13px; color:#475569;">Execute automated payroll calculation across active guards? This will compute gross pay, NSSF, SHIF, Housing Levy, and statutory PAYE taxes.</p>
+          </div>
+          <div style="display:flex; gap:12px;">
+            <button class="btn btn-secondary" style="flex:1;" onclick="closeRunPayrollModal()">Cancel</button>
+            <button class="btn btn-primary" id="btn-confirm-payroll-run" style="flex:1.5;" onclick="executePayrollRunConfirmed()">▶ Confirm & Run Payroll</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Import Shift Schedule CSV Modal -->
+      <div id="modal-import-csv" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeImportCsvModal()">
+        <div class="modal-content" style="max-width: 520px; width: 90%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="font-size:18px; font-weight:800;">📥 Import Shift Schedule CSV</h3>
+            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeImportCsvModal()">✕</button>
+          </div>
+          <div class="file-dropzone" onclick="document.getElementById('csv-file-input').click()">
+            <div style="font-size:36px; margin-bottom:8px;">📄</div>
+            <div style="font-weight:700; font-size:14px; margin-bottom:4px;">Drag & Drop Shift CSV File</div>
+            <div style="font-size:12px; color:#64748B;">or click to browse local files (.csv format)</div>
+            <input type="file" id="csv-file-input" accept=".csv" style="display:none;" onchange="handleCsvFileSelected(event)">
+          </div>
+          <div id="csv-file-preview" style="display:none; margin-top:16px; padding:12px 14px; background:#F8FAFC; border-radius:12px; border:1px solid #E2E8F0;">
+            <div style="font-weight:700; font-size:13px; color:#0F172A;" id="csv-filename-label">roster_september.csv</div>
+            <div style="font-size:11px; color:#64748B;" id="csv-file-meta">14.2 KB — 42 Roster Rows</div>
+          </div>
+          <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btn-secondary" style="flex:1;" onclick="closeImportCsvModal()">Cancel</button>
+            <button class="btn btn-primary" id="btn-submit-csv-import" style="flex:1.5;" onclick="executeShiftCsvImport()">📥 Import Roster</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Statutory Returns Modal -->
+      <div id="modal-export-returns" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeExportReturnsModal()">
+        <div class="modal-content" style="max-width: 500px; width: 90%;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="font-size:18px; font-weight:800;">📄 Statutory Returns Export Hub</h3>
+            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeExportReturnsModal()">✕</button>
+          </div>
+          <p style="font-size:13px; color:#64748B; margin-bottom:16px;">Select statutory export format for Kenya revenue compliance:</p>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
+            <a href="/api/v1/reports/nssf?export_format=csv" download class="btn btn-secondary" style="justify-content:space-between;"><span>📊 NSSF Monthly Schedule (CSV)</span><span>⬇️</span></a>
+            <a href="/api/v1/reports/shif?export_format=csv" download class="btn btn-secondary" style="justify-content:space-between;"><span>🏥 SHIF Monthly Return (CSV)</span><span>⬇️</span></a>
+            <a href="/api/v1/reports/housing-levy?export_format=csv" download class="btn btn-secondary" style="justify-content:space-between;"><span>🏠 Housing Levy Return (CSV)</span><span>⬇️</span></a>
+            <a href="/api/v1/reports/kra-p9/1/pdf" download class="btn btn-secondary" style="justify-content:space-between;"><span>📜 KRA P9 Certificate (PDF)</span><span>⬇️</span></a>
+          </div>
+          <button class="btn btn-primary" style="width:100%;" onclick="closeExportReturnsModal()">Done</button>
+        </div>
+      </div>
+
+      <!-- Tab Panel 1: Dashboard -->
+      <section id="panel-dashboard">
+        <div class="metrics-grid">
+          <div class="metric-card metric-cyan">
+            <div class="metric-header">
+              <div class="metric-label">Active Guards</div>
+              <div class="metric-icon-bubble">🛡️</div>
+            </div>
+            <div class="metric-value" id="metric-guards-count">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Live Roster Count</span>
+            </div>
+          </div>
+          <div class="metric-card metric-purple">
+            <div class="metric-header">
+              <div class="metric-label">Client Sites</div>
+              <div class="metric-icon-bubble">🏢</div>
+            </div>
+            <div class="metric-value" id="metric-sites-count">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Active Contracts</span>
+            </div>
+          </div>
+          <div class="metric-card metric-mint">
+            <div class="metric-header">
+              <div class="metric-label">Monthly Gross Payroll</div>
+              <div class="metric-icon-bubble">💵</div>
+            </div>
+            <div class="metric-value" id="metric-gross-payroll">KES 0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Calculated Gross</span>
+            </div>
+          </div>
+          <div class="metric-card metric-pink">
+            <div class="metric-header">
+              <div class="metric-label">Open Security Incidents</div>
+              <div class="metric-icon-bubble">🚨</div>
+            </div>
+            <div class="metric-value" style="color:#991B1B;" id="metric-anomalies-count">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-down">Action Required</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:24px;">
+          <div class="table-container">
+            <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0;">Recent Shift Activity</div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Guard</th>
+                  <th>Site</th>
+                  <th>Clock In</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="dashboard-activity-body">
+                <tr><td colspan="4" style="text-align:center; padding:16px; color:#64748B;">Loading recent shift activity...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
+            <h3 style="font-size:16px; font-weight:800; margin-bottom:16px; color:#0F172A;">Quick Actions</h3>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <button class="btn btn-secondary" style="justify-content:flex-start; font-size:13px; padding:12px 18px;" onclick="switchTab('payroll')">⚙️ Open Payroll Engine</button>
+              <button class="btn btn-secondary" style="justify-content:flex-start; font-size:13px; padding:12px 18px;" onclick="openImportCsvModal()">📥 Import Shift Schedule CSV</button>
+              <button class="btn btn-secondary" style="justify-content:flex-start; font-size:13px; padding:12px 18px;" onclick="openExportReturnsModal()">📑 Export Statutory Returns</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Panel 2: Guard Directory -->
+      <section id="panel-guards" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <input type="text" placeholder="Search by name, ID or phone..." class="form-control" style="max-width:320px;" onkeyup="filterGuardsTable(this.value)">
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" onclick="openOffDayAllowanceModal()">🗓️ Set Off-Day Allowance</button>
+            <button class="btn btn-primary" onclick="openAddGuardModal()">+ Add New Guard</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Emp No</th>
+                <th>Full Name</th>
+                <th>National ID</th>
+                <th>Phone</th>
+                <th>Basic Salary (KES)</th>
+                <th>Reliever</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="guards-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel 3: Client Sites & Rates -->
+      <section id="panel-sites" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 style="font-size:16px; font-weight:700;">Client Site Directory & Regional Salaries</h2>
+          <div style="display:flex; gap:12px;">
+            <button class="btn btn-secondary" onclick="openRegionModal()">🗺️ Manage Regions</button>
+            <button class="btn btn-secondary" onclick="openBulkSalaryModal()">📊 Bulk Salary Change</button>
+            <button class="btn btn-primary" onclick="openAddSiteModal()">+ Add New Site</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Site Name</th>
+                <th>Region</th>
+                <th>Client Name</th>
+                <th>Location</th>
+                <th>Default Salary (KES)</th>
+                <th>Daily Rate (KES)</th>
+                <th>Night Allowance</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="sites-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel 4: Shift Roster & Multi-Month Scheduling -->
+      <section id="panel-shifts" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:18px; font-weight:700; color:#0F172A;">Shift Roster & Guard Scheduling Matrix</h2>
+            <div style="font-size:12px; color:#64748B;">Manage recurring guard work patterns, single-day overrides, and shift schedules.</div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="display:flex; align-items:center; background:#F1F5F9; border:1px solid #CBD5E1; border-radius:8px; padding:4px 8px;">
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="changeRosterMonth(-1)">◀ Prev</button>
+              <span id="roster-month-label" style="font-weight:700; font-size:13px; min-width:140px; text-align:center; display:inline-block;">September 2026</span>
+              <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="changeRosterMonth(1)">Next ▶</button>
+            </div>
+            <button class="btn btn-secondary" style="font-size:13px;" onclick="openPatternModal()">🔄 Set Recurring Pattern</button>
+            <button class="btn btn-primary" style="font-size:13px;" onclick="openOverrideModal()">⚡ Single-Day Override</button>
+          </div>
+        </div>
+
+        <!-- Legend Bar -->
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:10px 16px; margin-bottom:16px; display:flex; gap:20px; align-items:center; font-size:12px; color:#475569; flex-wrap:wrap;">
+          <div><span style="display:inline-block; width:12px; height:12px; background:#EFF6FF; border:1px solid #93C5FD; border-radius:3px; vertical-align:middle; margin-right:4px;"></span> <strong>Day Shift (Pattern)</strong></div>
+          <div><span style="display:inline-block; width:12px; height:12px; background:#F3E8FF; border:1px solid #C084FC; border-radius:3px; vertical-align:middle; margin-right:4px;"></span> <strong>Night Shift (Pattern)</strong></div>
+          <div><span style="display:inline-block; width:12px; height:12px; background:#FEF3C7; border:1px solid #F59E0B; border-radius:3px; vertical-align:middle; margin-right:4px;"></span> <strong>⚡ Manual Override</strong></div>
+          <div><span style="display:inline-block; width:12px; height:12px; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:3px; vertical-align:middle; margin-right:4px;"></span> <strong>🏖️ Approved Leave</strong></div>
+          <div><span style="display:inline-block; width:12px; height:12px; background:#F1F5F9; border:1px solid #CBD5E1; border-radius:3px; vertical-align:middle; margin-right:4px;"></span> <strong>Off (Day Off)</strong></div>
+        </div>
+
+        <div class="table-container" style="overflow-x:auto;">
+          <table class="data-table" style="font-size:12px; text-align:center; min-width:1000px;">
+            <thead id="roster-grid-thead">
+              <!-- Dynamically populated header -->
+            </thead>
+            <tbody id="roster-grid-tbody">
+              <!-- Dynamically populated guard rows -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel 5: Attendance & Overtime -->
+      <section id="panel-attendance" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div>
+            <h2 style="font-size:16px; font-weight:700;">Daily Attendance Logs & Overtime Claims Queue</h2>
+            <div style="font-size:12px; color:#64748B;">Monitor shift logs, approve/reject overtime claims (1.5x / 2.0x), and manage manual corrections.</div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-primary" style="font-size:13px;" onclick="openManualAttendanceModal()">➕ Log Manual Shift</button>
+            <button class="btn btn-secondary" style="font-size:13px;" onclick="runPrePayrollAnomalyScan()">🔍 Scan Pre-Payroll Anomalies</button>
+          </div>
+        </div>
+
+        <!-- Overtime Claims Queue Card -->
+        <div style="background:#FFF; border:1px solid #CBD5E1; border-radius:12px; padding:16px 20px; margin-bottom:24px;">
+          <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span>⏱️ Overtime Claims Approval Queue</span>
+            <span style="font-size:11px; font-weight:600; background:#EEF2FF; color:#4338CA; padding:2px 8px; border-radius:12px;">Requires Admin Approval for Payroll</span>
+          </h3>
+          <div class="table-container" style="box-shadow:none; border:1px solid #E2E8F0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Claim ID</th>
+                  <th>Guard Name</th>
+                  <th>Site Name</th>
+                  <th>Shift Date</th>
+                  <th>OT Hours</th>
+                  <th>Multiplier</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="overtime-claims-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Daily Attendance Logs Card -->
+        <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:12px; padding:16px 20px;">
+          <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin-bottom:12px;">📋 Daily Shift Attendance Logs</h3>
+          <div class="table-container" style="box-shadow:none; border:1px solid #E2E8F0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Guard Name</th>
+                  <th>Site Name</th>
+                  <th>Clock In</th>
+                  <th>Clock Out</th>
+                  <th>Reg Hours</th>
+                  <th>OT Hours</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="attendance-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Panel 6: Guided Payroll Engine -->
+      <section id="panel-payroll" style="display:none;">
+        <div style="background:#FFF; padding:20px; border-radius:12px; border:1px solid #E2E8F0; margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <h2 style="font-size:18px; font-weight:700;">Guided Payroll Calculation Engine</h2>
+              <p style="font-size:13px; color:#64748B;">Calculates Gross Pay, Overtime, NSSF (6%), SHIF (2.75% min KES 300), Housing Levy (1.5%), and PAYE.</p>
+            </div>
+            <button class="btn btn-primary" style="padding:12px 24px;" onclick="triggerPayrollCalculation()">▶ Execute Calculation</button>
+          </div>
+        </div>
+
+        <!-- Employer Statutory Liabilities Summary Card (Phase 7 / Statutory Returns) -->
+        <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-radius:12px; padding:16px 20px; margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <h3 style="font-size:14px; font-weight:700; color:#334155; margin:0; display:flex; align-items:center; gap:8px;">
+              <span>🏢 Employer Statutory Liability & Contribution Summary</span>
+              <span style="font-size:11px; font-weight:600; background:#E2E8F0; color:#475569; padding:2px 8px; border-radius:12px;">Company Liabilities</span>
+            </h3>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <label style="font-size:12px; font-weight:700; color:#64748B;">Payroll Period:</label>
+              <select id="payroll-period-select" class="form-control" style="width:210px; font-weight:700; padding:4px 8px;" onchange="loadPayrollReview(this.value)"></select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+            <div style="background:#FFF; padding:12px 16px; border-radius:8px; border:1px solid #E2E8F0;">
+              <div style="font-size:11px; color:#64748B; font-weight:600;">Employer NSSF Matching</div>
+              <div id="employer-summary-nssf" style="font-size:16px; font-weight:700; color:#0F172A; margin-top:4px;">KES 0.00</div>
+              <div id="employer-nssf-cap-subtitle" style="font-size:10px; color:#94A3B8; margin-top:2px;">1:1 Match (Tier I & II Structure)</div>
+            </div>
+            <div style="background:#FFF; padding:12px 16px; border-radius:8px; border:1px solid #E2E8F0;">
+              <div style="font-size:11px; color:#64748B; font-weight:600;">Employer Housing Levy</div>
+              <div id="employer-summary-housing" style="font-size:16px; font-weight:700; color:#0F172A; margin-top:4px;">KES 0.00</div>
+              <div style="font-size:10px; color:#94A3B8; margin-top:2px;">1.5% Employer Matching</div>
+            </div>
+            <div style="background:#EEF2FF; padding:12px 16px; border-radius:8px; border:1px solid #C7D2FE;">
+              <div style="font-size:11px; color:#3730A3; font-weight:700;">Total Employer Statutory Liability</div>
+              <div id="employer-summary-total" style="font-size:16px; font-weight:800; color:#312E81; margin-top:4px;">KES 0.00</div>
+              <div style="font-size:10px; color:#4338CA; margin-top:2px;">Excluded from Employee Payslip</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0;">Gross-to-Net Payroll Review Table</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Emp No</th>
+                <th>Guard Name</th>
+                <th>Basic Pay</th>
+                <th>Overtime</th>
+                <th>Allowances</th>
+                <th>Gross Pay</th>
+                <th>NSSF</th>
+                <th>SHIF</th>
+                <th>Housing Levy</th>
+                <th>PAYE</th>
+                <th>Unpaid Leave</th>
+                <th>Net Pay</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="payroll-review-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel 7: Payment Schedules -->
+      <section id="panel-payments" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 style="font-size:16px; font-weight:700;">Disbursement Schedules (Bank & M-Pesa)</h2>
+          <div style="display:flex; gap:12px;">
+            <button class="btn btn-secondary" onclick="exportBankScheduleExcel()">📊 Export Bank Excel</button>
+            <button class="btn btn-primary" onclick="exportMpesaScheduleExcel()">📱 Export M-Pesa Excel</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee ID</th>
+                <th>Guard Name</th>
+                <th>Payment Method</th>
+                <th>Bank / Phone</th>
+                <th>Account Number</th>
+                <th>Net Amount (KES)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="payments-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel 8: Performance Overview Analytics & Statutory Returns -->
+      <section id="panel-reports" style="display:none;">
+
+        <!-- 1. Top 4 KPI Stat Cards Grid (Matching Reference Design) -->
+        <div class="metrics-grid">
+          <!-- Card 1: Featured Solid Violet Card -->
+          <div class="metric-card-featured">
+            <div class="metric-header">
+              <div class="metric-icon-bubble" style="background:rgba(255,255,255,0.2);">📜</div>
+              <span class="metric-trend trend-up" style="background:#D1FAE5; color:#065F46;">Calculated</span>
+            </div>
+            <div>
+              <div class="metric-label">Total Monthly Payroll</div>
+              <div class="metric-value" style="font-size:32px;" id="reports-metric-payroll">KES 0</div>
+              <div class="metric-subtext">Current period gross sum</div>
+            </div>
+          </div>
+
+          <!-- Card 2: Completed Shifts -->
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-icon-bubble" style="background:#F1F5F9; color:#0F172A;">💳</div>
+              <span class="metric-trend trend-up">Logged</span>
+            </div>
+            <div>
+              <div class="metric-label">Completed Shifts</div>
+              <div class="metric-value" id="reports-metric-shifts">0</div>
+              <div style="font-size:11px; color:#64748B;">Total shift logs</div>
+            </div>
+          </div>
+
+          <!-- Card 3: Active Guards -->
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-icon-bubble" style="background:#F1F5F9; color:#0F172A;">👤</div>
+              <span class="metric-trend trend-up">Active</span>
+            </div>
+            <div>
+              <div class="metric-label">Active Guards</div>
+              <div class="metric-value" id="reports-metric-guards">0</div>
+              <div style="font-size:11px; color:#64748B;">Unique guards on roster</div>
+            </div>
+          </div>
+
+          <!-- Card 4: Overtime Hours -->
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-icon-bubble" style="background:#F1F5F9; color:#0F172A;">📦</div>
+              <span class="metric-trend trend-up">Calculated</span>
+            </div>
+            <div>
+              <div class="metric-label">Overtime Hours</div>
+              <div class="metric-value" id="reports-metric-overtime">0 hrs</div>
+              <div style="font-size:11px; color:#64748B;">Extra hours logged</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Performance Overview 2-Column Dashboard Grid -->
+        <div class="report-grid-2col">
+
+          <!-- Left Main Panel: Payroll & Attendance Activity Bar Chart -->
+          <div class="report-card">
+            <div class="report-card-header">
+              <div>
+                <h3 class="report-card-title">Payroll & Attendance Activity</h3>
+                <p class="report-card-subtitle">Monthly payroll breakdown across 2026</p>
+              </div>
+              <select class="dropdown-pill">
+                <option>This Year</option>
+                <option>Last 6 Months</option>
+                <option>Q3 2026</option>
+              </select>
+            </div>
+
+            <div class="bar-chart-container">
+              <div class="bar-legend">
+                <span class="legend-pill"><span class="legend-dot" style="background:#E2E8F0;"></span> Gross Payroll</span>
+                <span class="legend-pill"><span class="legend-dot" style="background:#7C3AED;"></span> Net Disbursements</span>
+              </div>
+
+              <!-- Flex Bar Chart with Tooltip Floating Callout Pill -->
+              <div class="bar-chart-flex">
+
+                <!-- Floating Dark Callout Tooltip -->
+                <div class="chart-tooltip-pill">
+                  <div>● Live Monthly Summary</div>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">Jan</span>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">Feb</span>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">Mar</span>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">Apr</span>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">May</span>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">Jun</span>
+                </div>
+
+                <div class="bar-group">
+                  <div class="bar-pair-wrapper">
+                    <div class="bar-pillar bar-gross" style="height: 10%;"></div>
+                    <div class="bar-pillar bar-net" style="height: 10%;"></div>
+                  </div>
+                  <span class="bar-month-label">Jul</span>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Statutory Donut Gauge & Site Placement Bubble Nodes -->
+          <div>
+            <!-- Card 1: Statutory Deductions Concentric Donut Chart -->
+            <div class="report-card">
+              <div class="report-card-header">
+                <div>
+                  <h3 class="report-card-title">Statutory Deductions</h3>
+                  <p class="report-card-subtitle">Tax & statutory distribution</p>
+                </div>
+                <select class="dropdown-pill">
+                  <option>Today</option>
+                  <option>This Month</option>
+                </select>
+              </div>
+
+              <div class="ring-chart-wrapper">
+                <svg width="180" height="180" viewBox="0 0 180 180">
+                  <circle cx="90" cy="90" r="75" fill="none" stroke="#E2E8F0" stroke-width="12"/>
+                  <circle cx="90" cy="90" r="75" fill="none" stroke="#2563EB" stroke-width="12" stroke-dasharray="320 150" stroke-dashoffset="40"/>
+                  <circle cx="90" cy="90" r="60" fill="none" stroke="#EF4444" stroke-width="10" stroke-dasharray="240 100" stroke-dashoffset="20"/>
+                  <circle cx="90" cy="90" r="46" fill="none" stroke="#7C3AED" stroke-width="8" stroke-dasharray="180 80" stroke-dashoffset="10"/>
+                </svg>
+
+                <div class="donut-center-card">
+                  <div class="donut-center-value" id="reports-stat-total">KES 0</div>
+                  <div class="donut-center-label">Total Deductions</div>
+                </div>
+              </div>
+
+              <!-- Itemized Statutory List -->
+              <div class="stat-item-list">
+                <div class="stat-item-row">
+                  <span class="stat-item-name">⚡ PAYE Income Tax</span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="stat-item-val" id="reports-stat-paye">KES 0</span>
+                  </div>
+                </div>
+
+                <div class="stat-item-row">
+                  <span class="stat-item-name">🛡️ NSSF Pension</span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="stat-item-val" id="reports-stat-nssf">KES 0</span>
+                  </div>
+                </div>
+
+                <div class="stat-item-row">
+                  <span class="stat-item-name">🏥 SHIF Medical</span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="stat-item-val" id="reports-stat-shif">KES 0</span>
+                  </div>
+                </div>
+
+                <div class="stat-item-row">
+                  <span class="stat-item-name">🏠 Housing Levy</span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="stat-item-val" id="reports-stat-housing">KES 0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2: Site Placement Distribution Bubble Nodes -->
+            <div class="report-card">
+              <div class="report-card-header">
+                <div>
+                  <h3 class="report-card-title">Site Placement Distribution</h3>
+                  <p class="report-card-subtitle">Guard allocation across key sites</p>
+                </div>
+              </div>
+
+              <div class="bubble-nodes-wrapper" id="reports-site-bubble-nodes">
+                <div class="bubble-node bubble-md" style="background:#635BFF;">0</div>
+              </div>
+
+              <div class="site-progress-list" id="reports-site-progress-list">
+                <div style="text-align:center; padding:12px; color:#64748B; font-size:12px;">Loading sites...</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 3. Statutory Downloads & P9 Returns Section -->
+        <div style="margin-top:28px;">
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin-bottom:16px;">Statutory Returns & P9 Tax Card Downloads</h3>
+          
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:20px;">
+            <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
+              <h4 style="font-size:16px; font-weight:700; margin-bottom:6px;">NSSF Monthly Return</h4>
+              <p style="font-size:12px; color:#64748B; margin-bottom:16px;">Export 6% employee + 6% employer NSSF return file.</p>
+              <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="downloadNssfCsv()">📥 Download NSSF CSV</button>
+            </div>
+
+            <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
+              <h4 style="font-size:16px; font-weight:700; margin-bottom:6px;">SHIF Monthly Return</h4>
+              <p style="font-size:12px; color:#64748B; margin-bottom:16px;">Export 2.75% (KES 300 floor) SHIF statutory return file.</p>
+              <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="downloadShifCsv()">📥 Download SHIF CSV</button>
+            </div>
+
+            <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
+              <h4 style="font-size:16px; font-weight:700; margin-bottom:6px;">Housing Levy Return</h4>
+              <p style="font-size:12px; color:#64748B; margin-bottom:16px;">Export 1.5% employee + 1.5% employer Housing Levy file.</p>
+              <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="downloadHousingLevyCsv()">📥 Download Housing Levy CSV</button>
+            </div>
+
+            <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
+              <h4 style="font-size:16px; font-weight:700; margin-bottom:6px;">KRA P9 Tax Card Form</h4>
+              <p style="font-size:12px; color:#64748B; margin-bottom:16px;">Generate annual 12-month P9 tax deduction card for KRA returns.</p>
+              <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="downloadP9Pdf()">📄 Download P9 PDF</button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Tab Panel: Admin Incident Reports -->
+      <section id="panel-incidents" style="display:none;">
+        <div class="metrics-grid" style="margin-bottom:24px;">
+          <div class="metric-card metric-pink">
+            <div class="metric-header">
+              <div class="metric-label">Total Incidents</div>
+              <div class="metric-icon-bubble" style="background:#EF4444;">🚨</div>
+            </div>
+            <div class="metric-value" id="inc-metric-total">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-down">Logged on System</span>
+            </div>
+          </div>
+
+          <div class="metric-card metric-purple">
+            <div class="metric-header">
+              <div class="metric-label">Open Incidents</div>
+              <div class="metric-icon-bubble" style="background:#F59E0B;">⚠️</div>
+            </div>
+            <div class="metric-value" style="color:#D97706;" id="inc-metric-open">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Action Required</span>
+            </div>
+          </div>
+
+          <div class="metric-card metric-cyan">
+            <div class="metric-header">
+              <div class="metric-label">Under Investigation</div>
+              <div class="metric-icon-bubble" style="background:#2563EB;">🔍</div>
+            </div>
+            <div class="metric-value" style="color:#2563EB;" id="inc-metric-investigating">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">In Progress</span>
+            </div>
+          </div>
+
+          <div class="metric-card metric-mint">
+            <div class="metric-header">
+              <div class="metric-label">Resolved</div>
+              <div class="metric-icon-bubble" style="background:#10B981;">✅</div>
+            </div>
+            <div class="metric-value" style="color:#059669;" id="inc-metric-resolved">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Closed Cases</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" id="inc-filter-all" onclick="filterAdminIncidents('ALL')">All Cases</button>
+            <button class="btn btn-primary" id="inc-filter-open" onclick="filterAdminIncidents('OPEN')">⚠️ Open Only</button>
+            <button class="btn btn-secondary" id="inc-filter-resolved" onclick="filterAdminIncidents('RESOLVED')">✅ Resolved</button>
+          </div>
+          <button class="btn btn-secondary" onclick="loadAdminIncidents()">🔄 Refresh Incident Logs</button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Ref No</th>
+                <th>Date & Time</th>
+                <th>Reporting Guard</th>
+                <th>Client Site</th>
+                <th>Incident Type</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Admin Action</th>
+              </tr>
+            </thead>
+            <tbody id="incidents-table-body">
+              <tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading incident reports...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel: Admin Leave Requests -->
+      <section id="panel-leave" style="display:none;">
+        <div class="metrics-grid" style="margin-bottom:24px;">
+          <div class="metric-card metric-cyan">
+            <div class="metric-header">
+              <div class="metric-label">Total Requests</div>
+              <div class="metric-icon-bubble" style="background:#2563EB;">🏖️</div>
+            </div>
+            <div class="metric-value" id="leave-metric-total">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-down">All Submitted Requests</span>
+            </div>
+          </div>
+
+          <div class="metric-card metric-purple">
+            <div class="metric-header">
+              <div class="metric-label">Pending Approvals</div>
+              <div class="metric-icon-bubble" style="background:#F59E0B;">⚠️</div>
+            </div>
+            <div class="metric-value" style="color:#D97706;" id="leave-metric-pending">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Action Required</span>
+            </div>
+          </div>
+
+          <div class="metric-card metric-mint">
+            <div class="metric-header">
+              <div class="metric-label">Approved</div>
+              <div class="metric-icon-bubble" style="background:#10B981;">✅</div>
+            </div>
+            <div class="metric-value" style="color:#059669;" id="leave-metric-approved">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up">Approved Absences</span>
+            </div>
+          </div>
+
+          <div class="metric-card metric-pink">
+            <div class="metric-header">
+              <div class="metric-label">Rejected</div>
+              <div class="metric-icon-bubble" style="background:#EF4444;">❌</div>
+            </div>
+            <div class="metric-value" style="color:#991B1B;" id="leave-metric-rejected">0</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-down">Declined Applications</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" id="leave-filter-all" onclick="filterAdminLeave('ALL')">All Requests</button>
+            <button class="btn btn-primary" id="leave-filter-pending" onclick="filterAdminLeave('PENDING')">⚠️ Pending Only</button>
+            <button class="btn btn-secondary" id="leave-filter-approved" onclick="filterAdminLeave('APPROVED')">✅ Approved</button>
+            <button class="btn btn-secondary" id="leave-filter-rejected" onclick="filterAdminLeave('REJECTED')">❌ Rejected</button>
+          </div>
+          <button class="btn btn-secondary" onclick="loadAdminLeave()">🔄 Refresh Leave Requests</button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Req ID</th>
+                <th>Reporting Guard</th>
+                <th>Client Site</th>
+                <th>Leave Type</th>
+                <th>Duration (Dates)</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Admin Action</th>
+              </tr>
+            </thead>
+            <tbody id="leave-table-body">
+              <tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading guard leave requests...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Unpaid Leave Payroll Deductions Review Queue Card -->
+        <div style="background:#FFF; border:1px solid #CBD5E1; border-radius:12px; padding:16px 20px; margin-top:24px;">
+          <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span>💸 Unpaid Leave Payroll Deductions Queue</span>
+            <span style="font-size:11px; font-weight:600; background:#FEF3C7; color:#92400E; padding:2px 8px; border-radius:12px;">Manual Post-Tax Payroll Deduction Review</span>
+          </h3>
+          <div class="table-container" style="box-shadow:none; border:1px solid #E2E8F0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Deduction ID</th>
+                  <th>Guard Name</th>
+                  <th>Leave Dates</th>
+                  <th>Days Absent</th>
+                  <th>Daily Rate</th>
+                  <th>Deduction Amount</th>
+                  <th>Payroll Period</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="unpaid-leave-deductions-tbody">
+                <tr><td colspan="9" style="text-align:center; padding:16px; color:#64748B;">No unpaid leave deductions to display.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Panel 9: Audit Trail -->
+      <section id="panel-audit" style="display:none;">
+        <h2 style="font-size:16px; font-weight:700; margin-bottom:16px;">Immutable System Audit Trail</h2>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>User</th>
+                <th>Role</th>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Details / Reason</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab Panel 10: Settings -->
+      <section id="panel-settings" style="display:none;">
+        <div style="background:#FFF; padding:24px; border-radius:12px; border:1px solid #E2E8F0; max-width:640px;">
+          <h2 style="font-size:18px; font-weight:700; margin-bottom:20px;">Statutory Rates & System Parameters</h2>
+          <form onsubmit="handleSaveSettings(event)">
+            <div style="margin-bottom:16px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">NSSF Employee Rate (0.06 = 6%)</label>
+              <input type="text" id="set-nssf-rate" class="form-control" value="0.06">
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">SHIF Employee Rate (0.0275 = 2.75%)</label>
+              <input type="text" id="set-shif-rate" class="form-control" value="0.0275">
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">SHIF Minimum Floor (KES)</label>
+              <input type="text" id="set-shif-floor" class="form-control" value="300.0">
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Housing Levy Rate (0.015 = 1.5%)</label>
+              <input type="text" id="set-housing-rate" class="form-control" value="0.015">
+            </div>
+            <div style="margin-bottom:20px;">
+              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Monthly Personal Tax Relief (KES)</label>
+              <input type="text" id="set-relief" class="form-control" value="2400.0">
+            </div>
+            <button type="submit" class="btn btn-primary">Save Statutory Settings</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Tab Panel: Tax & Statutory Rates Management -->
+      <section id="panel-statutory" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800; color:#0F172A; margin:0 0 4px 0;">🏛️ Statutory Tax & Deduction Parameters</h2>
+            <p style="font-size:13px; color:#64748B; margin:0;">Versioned statutory parameters for NSSF, SHIF, Housing Levy, and PAYE tax bands. Rates use effective-date versioning to protect historical payroll integrity.</p>
+          </div>
+          <button class="btn btn-secondary" onclick="loadStatutoryRates()">🔄 Refresh Parameters</button>
+        </div>
+
+        <!-- Current Rates Overview Grid -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px;">
+
+          <!-- Card 1: NSSF Tiers -->
+          <div style="background:#FFF; padding:20px; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:16px; font-weight:800; margin:0; color:#0F172A;">🛡️ NSSF Contribution Tiers</h3>
+                <span style="font-size:11px; color:#64748B;">Multi-Tier Statutory Retirement Deductions</span>
+              </div>
+              <button class="btn btn-primary" style="padding:6px 12px; font-size:12px;" onclick="openNssfModal()">✏️ Update NSSF Tiers</button>
+            </div>
+            <div id="current-nssf-container">
+              <div style="padding:16px; text-align:center; color:#64748B; font-size:12px;">Loading NSSF Tiers...</div>
+            </div>
+          </div>
+
+          <!-- Card 2: SHIF Contribution -->
+          <div style="background:#FFF; padding:20px; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:16px; font-weight:800; margin:0; color:#0F172A;">🏥 SHIF Health Insurance</h3>
+                <span style="font-size:11px; color:#64748B;">Social Health Insurance Fund Rate & Floor</span>
+              </div>
+              <button class="btn btn-primary" style="padding:6px 12px; font-size:12px;" onclick="openShifModal()">✏️ Update SHIF</button>
+            </div>
+            <div id="current-shif-container">
+              <div style="padding:16px; text-align:center; color:#64748B; font-size:12px;">Loading SHIF Parameters...</div>
+            </div>
+          </div>
+
+          <!-- Card 3: Housing Levy -->
+          <div style="background:#FFF; padding:20px; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:16px; font-weight:800; margin:0; color:#0F172A;">🏠 Housing Levy</h3>
+                <span style="font-size:11px; color:#64748B;">Affordable Housing Employee & Employer Contributions</span>
+              </div>
+              <button class="btn btn-primary" style="padding:6px 12px; font-size:12px;" onclick="openHousingModal()">✏️ Update Housing Levy</button>
+            </div>
+            <div id="current-housing-container">
+              <div style="padding:16px; text-align:center; color:#64748B; font-size:12px;">Loading Housing Levy...</div>
+            </div>
+          </div>
+
+          <!-- Card 4: PAYE Tax Bands & Relief -->
+          <div style="background:#FFF; padding:20px; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:16px; font-weight:800; margin:0; color:#0F172A;">📄 PAYE Progressive Bands & Relief</h3>
+                <span style="font-size:11px; color:#64748B;">Income Tax Bands & Monthly Personal Relief</span>
+              </div>
+              <button class="btn btn-primary" style="padding:6px 12px; font-size:12px;" onclick="openPayeModal()">✏️ Update PAYE Bands</button>
+            </div>
+            <div id="current-paye-container">
+              <div style="padding:16px; text-align:center; color:#64748B; font-size:12px;">Loading PAYE Tax Bands...</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Collapsible Rate Version History -->
+        <div style="background:#FFF; padding:20px; border-radius:14px; border:1px solid #E2E8F0; margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleRateHistory()">
+            <div>
+              <h3 style="font-size:16px; font-weight:800; margin:0; color:#0F172A;">📜 Statutory Rate Audit & Version History</h3>
+              <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Complete audit trail showing effective date ranges, change notes, and admin updates.</p>
+            </div>
+            <span id="rate-history-toggle-icon" style="font-size:14px; font-weight:700; color:#3B5EDB;">▼ Show History</span>
+          </div>
+
+          <div id="rate-history-content" style="display:none; margin-top:16px; border-top:1px solid #F1F5F9; padding-top:16px;">
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Parameter Title</th>
+                    <th>Configured Values</th>
+                    <th>Effective From</th>
+                    <th>Effective To</th>
+                    <th>Status</th>
+                    <th>Change Reason / Notes</th>
+                    <th>Updated By</th>
+                  </tr>
+                </thead>
+                <tbody id="statutory-history-tbody">
+                  <tr><td colspan="8" style="text-align:center; padding:20px; color:#64748B;">Loading rate version history...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Toast Notification System Container -->
+  <div id="toast-container"></div>
+
+  <!-- Modal 1: Search Guards, Sites & Shifts Overlay -->
+  <div id="modal-search" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeSearchModal()">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🔍 System Search</h3>
+        <button onclick="closeSearchModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <input type="text" id="global-search-input" class="form-control" placeholder="Type guard name, employee ID (CS-XXXX), site name, or shift..." onkeyup="handleGlobalSearch(this.value)" autofocus>
+      </div>
+      <div id="search-results-list" style="max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+        <div style="text-align: center; color: #64748B; padding: 20px;">Type to search live across guards, sites, and shift rosters...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Confirm Payroll Run Modal -->
+  <div id="modal-confirm-payroll" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeRunPayrollModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">⚙️ Confirm Payroll Execution</h3>
+        <button onclick="closeRunPayrollModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="margin-bottom:20px;">
+        <p style="font-size:14px; color:#334155; line-height:1.5;">
+          You are about to execute full statutory payroll calculation for <strong>September 2026</strong> across active guards.
+        </p>
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:14px; margin-top:12px; font-size:12px; color:#475569;">
+          <div>● Applies NSSF 6% + SHIF 2.75% + Housing Levy 1.5%</div>
+          <div>● Computes progressive KRA PAYE tax bands & KES 2,400 relief</div>
+          <div>● Calculates overtime multiplier rates (1.5x regular, 2.0x holiday)</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeRunPayrollModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-confirm-payroll-run" onclick="executePayrollRunConfirmed()">▶ Confirm & Run Payroll</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Import Shift Schedule CSV Modal -->
+  <div id="modal-import-csv" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeImportCsvModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">📥 Import Shift Schedule CSV</h3>
+        <button onclick="closeImportCsvModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div class="file-dropzone" id="csv-dropzone" onclick="document.getElementById('csv-file-input').click()">
+          <div style="font-size:28px; margin-bottom:8px;">📄</div>
+          <div style="font-size:14px; font-weight:700; color:#0F172A;">Click or Drag & Drop Shift CSV File</div>
+          <div style="font-size:12px; color:#64748B; margin-top:4px;">Supports standard .csv shift roster format</div>
+          <input type="file" id="csv-file-input" accept=".csv" style="display:none;" onchange="handleCsvFileSelected(event)">
+        </div>
+
+        <div id="csv-file-preview" style="display:none; margin-top:16px; background:#F1F5F9; padding:12px 16px; border-radius:14px; font-size:13px;">
+          <div style="font-weight:700; color:#0F172A;" id="csv-filename-label">schedule_september_2026.csv</div>
+          <div style="font-size:11px; color:#64748B;" id="csv-file-meta">42 shift assignments detected</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeImportCsvModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-submit-csv-import" onclick="executeShiftCsvImport()">📥 Import Roster</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Admin Profile Details Modal -->
+  <div id="modal-profile" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeProfileModal()">
+    <div class="modal-content" style="max-width: 440px; text-align:center;">
+      <img src="/static/images/corpsec_logo_badge.png" alt="Fiona Johnson" style="width:72px; height:72px; border-radius:50%; border:3px solid var(--color-primary); margin-bottom:12px;">
+      <h3 style="font-size:20px; font-weight:800; color:#0F172A;">Fiona Johnson</h3>
+      <div style="font-size:13px; color:#64748B; margin-bottom:16px;">CorpSec System Administrator</div>
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:16px; padding:16px; text-align:left; margin-bottom:20px; font-size:13px; display:flex; flex-direction:column; gap:8px;">
+        <div><strong>Email:</strong> admin@corpsec.co.ke</div>
+        <div><strong>Role:</strong> Super Admin (Full Read/Write Access)</div>
+        <div><strong>Security Level:</strong> Tier 1 Operations</div>
+        <div><strong>Active Session:</strong> JWT Bearer Token (24h validity)</div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="closeProfileModal()">Close Profile</button>
+    </div>
+  </div>
+
+  <!-- Modal 5: Export Statutory Returns Modal Selector -->
+  <div id="modal-export-returns" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeExportReturnsModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">📑 Statutory Returns Export Hub</h3>
+        <button onclick="closeExportReturnsModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+        <button class="btn btn-secondary" style="justify-content:space-between; padding:14px 18px;" onclick="downloadNssfCsv(); closeExportReturnsModal();">
+          <span>🛡️ NSSF Monthly Return (6% + 6%)</span>
+          <span>📥 CSV</span>
+        </button>
+        <button class="btn btn-secondary" style="justify-content:space-between; padding:14px 18px;" onclick="downloadShifCsv(); closeExportReturnsModal();">
+          <span>🏥 SHIF Monthly Return (2.75%)</span>
+          <span>📥 CSV</span>
+        </button>
+        <button class="btn btn-secondary" style="justify-content:space-between; padding:14px 18px;" onclick="downloadHousingLevyCsv(); closeExportReturnsModal();">
+          <span>🏠 Housing Levy Return (1.5%)</span>
+          <span>📥 CSV</span>
+        </button>
+        <button class="btn btn-primary" style="justify-content:space-between; padding:14px 18px;" onclick="downloadP9Pdf(); closeExportReturnsModal();">
+          <span>📄 KRA P9 Annual Tax Card</span>
+          <span>📄 PDF</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: Add New Guard Modal -->
+  <div id="modal-add-guard" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeAddGuardModal()">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🛡️ Add New Security Guard</h3>
+        <button onclick="closeAddGuardModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleAddGuardSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Employee Number</label>
+            <input type="text" id="new-guard-emp-no" class="form-control" required placeholder="e.g. CS-00460" value="CS-00460">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Full Name</label>
+            <input type="text" id="new-guard-name" class="form-control" required placeholder="e.g. David Ochieng">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">National ID Number</label>
+            <input type="text" id="new-guard-id" class="form-control" required placeholder="e.g. 34567890">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Phone Number</label>
+            <input type="text" id="new-guard-phone" class="form-control" required placeholder="e.g. 0712345678">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Email Address (Optional)</label>
+            <input type="email" id="new-guard-email" class="form-control" placeholder="e.g. guard@corpsec.co.ke">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Initial Portal Password <span style="color:#EF4444;">*</span></label>
+            <input type="password" id="new-guard-password" class="form-control" required minlength="6" placeholder="Set initial password (min 6 chars)">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Assigned Site</label>
+            <select id="new-guard-site-select" class="form-control" onchange="updateGuardSiteSalaryHint()"></select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Monthly Basic Salary (KES)</label>
+            <input type="number" id="new-guard-salary" class="form-control" placeholder="Leave empty for site default">
+            <span style="font-size:11px; color:#64748B; margin-top:2px; display:block;" id="guard-salary-hint">Leave blank to inherit site default salary. Type a value to override.</span>
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:10px 12px; border-radius:8px;">
+            <label style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="new-guard-is-reliever"> 🔄 Mark Guard as Reliever (Floating Coverage Guard)
+            </label>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Hire Date</label>
+            <input type="date" id="new-guard-hire-date" class="form-control" value="2026-09-19" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeAddGuardModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">+ Register Guard</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 7: Add New Site Modal -->
+  <div id="modal-add-site" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeAddSiteModal()">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🏢 Add New Client Site</h3>
+        <button onclick="closeAddSiteModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleAddSiteSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Site Name</label>
+            <input type="text" id="new-site-name" class="form-control" required placeholder="e.g. Karen Hub Gate B">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Region</label>
+            <select id="new-site-region-select" class="form-control">
+              <option value="">No Region Selected</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Client Company Name</label>
+            <input type="text" id="new-site-client" class="form-control" required placeholder="e.g. Karen Commercial Ltd">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Location</label>
+            <input type="text" id="new-site-location" class="form-control" required placeholder="e.g. Karen, Nairobi">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Default Guard Basic Salary (KES)</label>
+            <input type="number" id="new-site-basic-salary" class="form-control" value="15000" required placeholder="Default pay for guards at this site">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Daily Billing Rate (KES)</label>
+            <input type="number" id="new-site-rate" class="form-control" value="1200" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeAddSiteModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">+ Create Site</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 8: Bulk Salary Change Modal -->
+  <div id="modal-bulk-salary" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeBulkSalaryModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">📊 Bulk Salary Adjustment</h3>
+        <button onclick="closeBulkSalaryModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleBulkSalarySubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Percentage Salary Increase (%)</label>
+            <input type="number" id="bulk-salary-pct" class="form-control" value="5" step="0.5" required>
+          </div>
+          <p style="font-size:12px; color:#64748B;">Applies percentage salary increment across all active guards in the selected division.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeBulkSalaryModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply Increment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 9: Update NSSF Tiers Modal -->
+  <div id="modal-statutory-nssf" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeNssfModal()">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🛡️ Update NSSF Contribution Tiers</h3>
+        <button onclick="closeNssfModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleNssfTiersSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div style="font-size:12px; color:#64748B;">Configure NSSF tiers. Income up to upper limit will be taxed at specified rate per tier. Leave upper limit blank/0 for uncapped.</div>
+          
+          <div id="nssf-tier-rows-container" style="display:flex; flex-direction:column; gap:10px;">
+            <!-- Tier rows injected via JS -->
+          </div>
+
+          <button type="button" class="btn btn-secondary" style="width:auto; align-self:flex-start; font-size:12px;" onclick="addNssfTierRow()">+ Add Tier</button>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; border-top:1px solid #E2E8F0; padding-top:14px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Effective From Date *</label>
+              <input type="date" id="nssf-effective-from" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Reason / Reference Note *</label>
+              <input type="text" id="nssf-change-reason" class="form-control" placeholder="e.g. 2026 NSSF revision notice" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeNssfModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save NSSF Version</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 10: Update SHIF Rate Modal -->
+  <div id="modal-statutory-shif" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeShifModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🏥 Update SHIF Contribution Rate</h3>
+        <button onclick="closeShifModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleShifSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Employee Rate (%) *</label>
+            <input type="number" id="shif-rate-input" class="form-control" step="0.01" value="2.75" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Minimum Floor Amount (KES) *</label>
+            <input type="number" id="shif-floor-input" class="form-control" step="1" value="300" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Effective From Date *</label>
+            <input type="date" id="shif-effective-from" class="form-control" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Reason / Reference Note *</label>
+            <input type="text" id="shif-change-reason" class="form-control" placeholder="e.g. Government gazetted SHIF update" required>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeShifModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save SHIF Version</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 11: Update Housing Levy Modal -->
+  <div id="modal-statutory-housing" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeHousingModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🏠 Update Housing Levy Rate</h3>
+        <button onclick="closeHousingModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleHousingSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Employee Rate (%) *</label>
+            <input type="number" id="housing-emp-rate-input" class="form-control" step="0.01" value="1.5" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Employer Rate (%) *</label>
+            <input type="number" id="housing-empr-rate-input" class="form-control" step="0.01" value="1.5" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Effective From Date *</label>
+            <input type="date" id="housing-effective-from" class="form-control" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Reason / Reference Note *</label>
+            <input type="text" id="housing-change-reason" class="form-control" placeholder="e.g. Housing levy statutory adjustment" required>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeHousingModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Housing Levy Version</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 12: Update PAYE Bands Modal -->
+  <div id="modal-statutory-paye" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closePayeModal()">
+    <div class="modal-content" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">📄 Update PAYE Tax Bands & Personal Relief</h3>
+        <button onclick="closePayeModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handlePayeSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div style="font-size:12px; color:#64748B;">Configure progressive KRA PAYE tax bands. Leave upper limit blank for the top uncapped band.</div>
+          
+          <div id="paye-bands-rows-container" style="display:flex; flex-direction:column; gap:10px;">
+            <!-- Band rows injected via JS -->
+          </div>
+
+          <button type="button" class="btn btn-secondary" style="width:auto; align-self:flex-start; font-size:12px;" onclick="addPayeBandRow()">+ Add Tax Band</button>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Monthly Personal Relief (KES) *</label>
+            <input type="number" id="paye-relief-input" class="form-control" value="2400" required>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; border-top:1px solid #E2E8F0; padding-top:14px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Effective From Date *</label>
+              <input type="date" id="paye-effective-from" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Reason / Reference Note *</label>
+              <input type="text" id="paye-change-reason" class="form-control" placeholder="e.g. KRA annual tax band revision" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closePayeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save PAYE Version</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 13: PAYE Audit Breakdown Modal -->
+  <div id="modal-paye-breakdown" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closePayeBreakdownModal()">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">📊 PAYE Tax Audit Breakdown</h3>
+        <button onclick="closePayeBreakdownModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div id="paye-breakdown-modal-content" style="padding:10px 0;">
+        <!-- Injected via JS -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closePayeBreakdownModal()">Close Audit View</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 14: Log Manual Attendance Modal -->
+  <div id="modal-manual-attendance" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeManualAttendanceModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">➕ Log Manual Shift Attendance</h3>
+        <button onclick="closeManualAttendanceModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleManualAttendanceSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Select Guard *</label>
+            <select id="manual-att-guard-id" class="form-control" required>
+              <!-- Populated via JS -->
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Shift Date *</label>
+            <input type="date" id="manual-att-date" class="form-control" required>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Clock In Time *</label>
+              <input type="datetime-local" id="manual-att-clock-in" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Clock Out Time *</label>
+              <input type="datetime-local" id="manual-att-clock-out" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Notes / Reason</label>
+            <input type="text" id="manual-att-notes" class="form-control" placeholder="e.g. Supervisor paper-based log entry">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeManualAttendanceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Shift Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 15: Correct Attendance Record Modal -->
+  <div id="modal-correct-attendance" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeCorrectAttendanceModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">✏️ Correct Attendance Record</h3>
+        <button onclick="closeCorrectAttendanceModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleCorrectAttendanceSubmit(event)">
+        <input type="hidden" id="correct-att-id">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div style="font-size:12px; color:#64748B;" id="correct-att-guard-info">Guard: -</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Actual Clock In</label>
+              <input type="datetime-local" id="correct-att-clock-in" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Actual Clock Out</label>
+              <input type="datetime-local" id="correct-att-clock-out" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Status *</label>
+            <select id="correct-att-status" class="form-control" required>
+              <option value="PRESENT">PRESENT</option>
+              <option value="ABSENT">ABSENT</option>
+              <option value="LATE">LATE</option>
+              <option value="OFF">OFF</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Correction Reason *</label>
+            <input type="text" id="correct-att-reason" class="form-control" placeholder="e.g. Guard forgot to clock out at end of shift" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeCorrectAttendanceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply Correction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 16: Pre-Payroll Anomaly Scan Modal -->
+  <div id="modal-anomalies" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeAnomaliesModal()">
+    <div class="modal-content" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🔍 Pre-Payroll Attendance Anomalies</h3>
+        <button onclick="closeAnomaliesModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div id="anomalies-modal-content" style="padding:10px 0; max-height:400px; overflow-y:auto;">
+        <!-- Injected via JS -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeAnomaliesModal()">Close Scan Results</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 17: Set Guard Recurring Pattern Modal -->
+  <div id="modal-roster-pattern" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closePatternModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🔄 Set Guard Recurring Roster Pattern</h3>
+        <button onclick="closePatternModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handlePatternSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Guard *</label>
+            <select id="pattern-guard-id" class="form-control" required></select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Client Site *</label>
+            <select id="pattern-site-id" class="form-control" required></select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Shift Type *</label>
+            <select id="pattern-shift-id" class="form-control" required></select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Work Days *</label>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:12px;">
+              <label><input type="checkbox" name="pattern_days" value="0" checked> Mon</label>
+              <label><input type="checkbox" name="pattern_days" value="1" checked> Tue</label>
+              <label><input type="checkbox" name="pattern_days" value="2" checked> Wed</label>
+              <label><input type="checkbox" name="pattern_days" value="3" checked> Thu</label>
+              <label><input type="checkbox" name="pattern_days" value="4" checked> Fri</label>
+              <label><input type="checkbox" name="pattern_days" value="5"> Sat</label>
+              <label><input type="checkbox" name="pattern_days" value="6"> Sun</label>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Effective Start Date *</label>
+            <input type="date" id="pattern-start-date" class="form-control" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closePatternModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Generate Rolling Roster</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 18: Single-Day Override Modal -->
+  <div id="modal-roster-override" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeOverrideModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">⚡ Set Single-Day Roster Override</h3>
+        <button onclick="closeOverrideModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleOverrideSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Guard *</label>
+            <select id="override-guard-id" class="form-control" required></select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Target Shift Date *</label>
+            <input type="date" id="override-date" class="form-control" required>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Assignment Type *</label>
+            <select id="override-action-type" class="form-control" onchange="toggleOverrideSiteShiftDisplay(this.value)">
+              <option value="ASSIGN">Assign Specific Site & Shift</option>
+              <option value="OFF">Single Day Off (Unassigned)</option>
+            </select>
+          </div>
+          <div id="override-site-shift-group">
+            <div style="margin-bottom:12px;">
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Client Site</label>
+              <select id="override-site-id" class="form-control"></select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Shift Type</label>
+              <select id="override-shift-id" class="form-control"></select>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Notes / Reason</label>
+            <input type="text" id="override-notes" class="form-control" placeholder="e.g. Reliever covering absent guard">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeOverrideModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply Override</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create Region -->
+  <div id="modal-add-region" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeRegionModal()">
+    <div class="modal-content" style="max-width:440px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🗺️ Create New Geographic Region</h3>
+        <button onclick="closeRegionModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleCreateRegionSubmit(event)">
+        <div style="margin-bottom:20px;">
+          <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Region Name *</label>
+          <input type="text" id="new-region-name" class="form-control" required placeholder="e.g. Rift Valley, Coast, Nyanza" minlength="2">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeRegionModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">+ Create Region</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Set Off-Day Allowance -->
+  <div id="modal-off-day-allowance" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeOffDayAllowanceModal()">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">🗓️ Set Guard Off-Day Allowance</h3>
+        <button onclick="closeOffDayAllowanceModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form onsubmit="handleOffDayAllowanceSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Select Guard *</label>
+            <select id="allowance-guard-id" class="form-control" required></select>
+          </div>
+          <div style="display:flex; gap:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Year *</label>
+              <input type="number" id="allowance-year" class="form-control" value="2026" required>
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Month *</label>
+              <select id="allowance-month" class="form-control" required>
+                <option value="9">September (09)</option>
+                <option value="10">October (10)</option>
+                <option value="11">November (11)</option>
+                <option value="12">December (12)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Off Days Allowed for Month *</label>
+            <input type="number" id="allowance-days" class="form-control" value="4" min="0" max="15" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeOffDayAllowanceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Allowance</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Approve Off-Day Request with Reliever Assignment -->
+  <div id="modal-approve-off-day" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeApproveOffDayModal()">
+    <div class="modal-content" style="max-width:540px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800;">✅ Approve Off-Day Request & Assign Reliever</h3>
+        <button onclick="closeApproveOffDayModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div id="approve-off-day-details" style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:10px; font-size:13px;">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <h4 style="font-size:14px; font-weight:700; margin-bottom:8px;">Assign Reliever Coverage per Date (Required)</h4>
+        <div id="reliever-assignment-rows" style="display:flex; flex-direction:column; gap:10px; max-height:220px; overflow-y:auto; padding:4px;">
+          <!-- Dynamically populated per off day date -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeApproveOffDayModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitApproveOffDayWithReliever()">Approve & Assign Reliever</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Dismiss Unpaid Leave Deduction -->
+  <div id="modal-dismiss-deduction" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeDismissDeductionModal()">
+    <div class="modal-content" style="max-width:500px;">
+      <h3 style="margin-bottom:12px; font-size:16px; font-weight:700;">❌ Dismiss Unpaid Leave Deduction</h3>
+      <p style="font-size:13px; color:#64748B; margin-bottom:16px;">
+        Dismissing this deduction will exclude it from the guard's payroll calculation. A brief dismissal reason is required for audit logging.
+      </p>
+      <input type="hidden" id="dismiss-deduction-id">
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px;">Dismissal Reason *</label>
+        <input type="text" id="dismiss-deduction-reason" class="form-control" placeholder="e.g. Approved with pay allowance by Management" required minlength="3">
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" onclick="closeDismissDeductionModal()">Cancel</button>
+        <button class="btn btn-danger" style="background:#EF4444; border-color:#EF4444; color:white;" onclick="submitDismissDeduction()">Dismiss Deduction</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Guard File / Profile View -->
+  <div id="modal-guard-file" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target===this)closeGuardFileModal()">
+    <div class="modal-content" style="max-width:800px; width:100%; background:#0F172A; border:1px solid #1E293B; border-radius:24px; padding:0; overflow:hidden; margin:auto;">
+      <!-- Modal Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:#0F172A; border-bottom:1px solid #1E293B; position:sticky; top:0; z-index:10;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:20px;">📋</span>
+          <div>
+            <div style="font-size:15px; font-weight:800; color:#F1F5F9;">Guard Personnel File</div>
+            <div style="font-size:11px; color:#64748B;">Full profile, statutory details &amp; attendance record</div>
+          </div>
+        </div>
+        <button onclick="closeGuardFileModal()" style="background:#1E293B; border:1px solid #334155; color:#94A3B8; border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+      <!-- Modal Body (dynamically filled by JS) -->
+      <div id="guard-file-body" style="padding:20px; min-height:200px;"></div>
+      <!-- Modal Footer -->
+      <div style="padding:14px 24px; border-top:1px solid #1E293B; display:flex; justify-content:flex-end; background:#0F172A;">
+        <button class="btn btn-secondary" onclick="closeGuardFileModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

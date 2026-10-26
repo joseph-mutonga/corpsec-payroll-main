@@ -1,0 +1,337 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0F172A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>CorpSec Guard Mobile Portal</title>
+  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/static/images/corpsec_pwa_192.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/static/css/portal.css">
+</head>
+<body class="portal-body">
+
+
+  <!-- 2. PORTAL HEADER (Shown when logged in) -->
+  <header id="portal-header" class="portal-header" style="display:none;">
+    <div class="portal-brand">
+      <img src="/static/images/corpsec_logo_badge.png" alt="CorpSec" class="portal-brand-img">
+      <div class="portal-title-group">
+        <h1 id="header-guard-name">GUARD PORTAL</h1>
+        <span>CORPSEC INVESTIGATIONS</span>
+      </div>
+    </div>
+    <div class="portal-user-badge">
+      <button class="btn-logout" onclick="logoutGuard()">Logout</button>
+    </div>
+  </header>
+
+  <aside id="install-app-banner" class="install-app-banner" role="dialog" aria-label="Install CorpSec Guard" hidden>
+    <div class="install-app-copy">
+      <strong>Install CorpSec Guard</strong>
+      <span>Quick access from your home screen</span>
+    </div>
+    <div class="install-app-actions">
+      <button id="install-app-button" class="install-app-button" type="button">Install</button>
+      <button id="dismiss-install-button" class="dismiss-install-button" type="button">Not now</button>
+    </div>
+  </aside>
+
+  <!-- 3. MAIN PORTAL CONTENT AREA -->
+  <main id="portal-main" class="portal-main" style="display:none;">
+
+    <!-- TAB 1: HOME DASHBOARD -->
+    <section id="section-home">
+      <!-- Today's Shift Card -->
+      <div class="portal-card">
+        <div class="card-title">
+          <span>ðŸ“… Today's Shift Roster</span>
+          <span id="dash-clock-status" class="status-badge warning">â³ Loading...</span>
+        </div>
+        <div style="background:#F8FAFC; border-radius:10px; padding:14px; margin-bottom:16px; border:1px solid #E2E8F0;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; color:#64748B;">Assigned Site</span>
+            <span style="font-weight:700; font-size:14px; color:#0F172A;" id="dash-site-name">Loading assigned site...</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; color:#64748B;">Shift Schedule</span>
+            <span style="font-weight:600; font-size:13px; color:#334155;" id="dash-shift-name">Loading schedule...</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:12px; color:#64748B;">Guard Employee ID</span>
+            <span style="font-family:monospace; font-weight:700; font-size:13px; color:#3B5EDB;" id="dash-emp-num">--</span>
+          </div>
+        </div>
+
+        <!-- Clock In/Out Large Action Button -->
+        <div class="clock-container">
+          <button id="btn-clock-action" class="btn-clock clock-in" disabled>
+            â³ Loading clock status...
+          </button>
+        </div>
+      </div>
+
+      <!-- Latest Payslip Tile -->
+      <div class="portal-card">
+        <div class="card-title">
+          <span>ðŸ’µ Latest Payslip Summary</span>
+          <span style="font-size:12px; color:#64748B;" id="dash-pay-period">--</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:14px;">
+          <div>
+            <div style="font-size:12px; color:#1E40AF; font-weight:600;">Net Monthly Salary</div>
+            <div style="font-size:20px; font-weight:800; color:#1E3A8A;" id="dash-net-pay">KES 0.00</div>
+          </div>
+          <button class="btn-submit" style="width:auto; padding:8px 14px; font-size:12px;" onclick="downloadLatestPayslip()">ðŸ“„ Download PDF</button>
+        </div>
+      </div>
+
+      <!-- Quick Action Tiles -->
+      <div class="portal-card">
+        <div class="card-title">ðŸš€ Quick Actions</div>
+        <div class="action-grid">
+          <div class="action-tile" onclick="switchPortalTab('leave')">
+            <div class="action-icon">ðŸ–ï¸</div>
+            <div class="action-label">Request Leave</div>
+          </div>
+          <div class="action-tile" onclick="switchPortalTab('incidents')">
+            <div class="action-icon">ðŸš¨</div>
+            <div class="action-label">Report Incident</div>
+          </div>
+          <div class="action-tile" onclick="switchPortalTab('payslips')">
+            <div class="action-icon">ðŸ“„</div>
+            <div class="action-label">My Payslips</div>
+          </div>
+          <div class="action-tile" onclick="switchPortalTab('profile')">
+            <div class="action-icon">ðŸ‘¤</div>
+            <div class="action-label">My Profile</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: LEAVE & OFF DAYS -->
+    <section id="section-leave" style="display:none;">
+      <!-- Off Days Card -->
+      <div class="portal-card" style="background:#EEF2FF; border:1px solid #C7D2FE;">
+        <div class="card-title" style="color:#3730A3;">ðŸ—“ï¸ Monthly Off-Day Allowance</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <div>
+            <div style="font-size:12px; color:#4338CA;">Current Month Allowance</div>
+            <div id="off-day-allowance-label" style="font-size:18px; font-weight:800; color:#312E81;">Loading allowance...</div>
+          </div>
+          <span id="off-day-remaining-badge" class="status-badge active" style="background:#4338CA; color:#FFF;">Remaining: --</span>
+        </div>
+      </div>
+
+      <div class="portal-card">
+        <div class="card-title">ðŸ—“ï¸ Request Off Days</div>
+        <div id="off-day-alert-banner" class="alert-banner alert-danger" style="display:none;"></div>
+        <div id="off-day-success-banner" class="alert-banner alert-success" style="display:none;"></div>
+        <form id="off-day-form" onsubmit="handleOffDaySubmit(event)">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label class="form-label">Off Start Date</label>
+              <input type="date" id="off-day-start-date" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Off End Date</label>
+              <input type="date" id="off-day-end-date" class="form-input" required>
+            </div>
+          </div>
+          <button type="submit" class="btn-submit" style="background:#4338CA;">Submit Off-Day Request</button>
+        </form>
+      </div>
+
+      <div class="portal-card">
+        <div class="card-title">ðŸ“‹ My Off-Day Requests</div>
+        <div id="off-day-history-list" class="history-list"></div>
+      </div>
+
+      <div class="portal-card">
+        <div class="card-title">ðŸ–ï¸ Submit Leave Request</div>
+        <div id="leave-alert-banner" class="alert-banner alert-danger" style="display:none;"></div>
+        <div id="leave-success-banner" class="alert-banner alert-success" style="display:none;"></div>
+        <form id="leave-form" onsubmit="handleLeaveSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">Leave Type</label>
+            <select id="leave-type" class="form-select" required>
+              <option value="Unpaid Leave">Unpaid Leave</option>
+              <option value="Annual Leave">Annual Leave</option>
+              <option value="Annual">Annual Leave (Standard)</option>
+              <option value="Sick">Sick Leave</option>
+              <option value="Compassionate">Compassionate Leave</option>
+              <option value="Emergency">Emergency Leave</option>
+            </select>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label class="form-label">Start Date</label>
+              <input type="date" id="leave-start-date" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">End Date</label>
+              <input type="date" id="leave-end-date" class="form-input" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reason / Justification</label>
+            <textarea id="leave-reason" class="form-textarea" rows="3" placeholder="Provide reason for leave request..." required></textarea>
+          </div>
+          <button type="submit" class="btn-submit">Submit Leave Request</button>
+        </form>
+      </div>
+
+      <div class="portal-card">
+        <div class="card-title">ðŸ“‹ My Past Leave Requests</div>
+        <div id="leave-history-list" class="history-list"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: REPORT INCIDENTS -->
+    <section id="section-incidents" style="display:none;">
+      <div class="portal-card">
+        <div class="card-title">ðŸš¨ Report Site Incident</div>
+        
+        <div id="incident-alert-banner" class="alert-banner alert-danger" style="display:none;"></div>
+        <div id="incident-success-banner" class="alert-banner alert-success" style="display:none;"></div>
+
+        <form id="incident-form" onsubmit="handleIncidentSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">Incident Category</label>
+            <select id="incident-type" class="form-select" required>
+              <option value="Security Breach">Security Breach / Intrusions</option>
+              <option value="Property Damage">Property Damage / Vandalism</option>
+              <option value="Theft / Burglary">Theft / Burglary</option>
+              <option value="Medical Emergency">Medical Emergency / Injury</option>
+              <option value="Trespassing">Trespassing</option>
+              <option value="Other">Other Security Event</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Detailed Incident Description</label>
+            <textarea id="incident-desc" class="form-textarea" rows="4" placeholder="Describe what happened, location on site, time, and action taken..." required></textarea>
+          </div>
+          <button type="submit" class="btn-submit" style="background-color:#EF4444;">ðŸš¨ Submit Incident Report</button>
+        </form>
+      </div>
+
+      <div class="portal-card">
+        <div class="card-title">ðŸ“‘ My Reported Incidents</div>
+        <div id="incident-history-list" class="history-list"></div>
+      </div>
+    </section>
+
+    <!-- TAB 4: PAYSLIPS -->
+    <section id="section-payslips" style="display:none;">
+      <!-- Top Prominent Card: Current / Latest Payslip -->
+      <div id="latest-payslip-card" class="portal-card" style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); color: #FFFFFF; border: 1px solid #334155;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#94A3B8; font-weight:700;">Latest Payslip</span>
+            <h3 id="latest-payslip-period" style="margin:2px 0 0 0; font-size:20px; font-weight:800; color:#FFFFFF;">September 2026</h3>
+          </div>
+          <span class="status-badge active" style="background:#10B981; color:#FFF;">CONFIRMED</span>
+        </div>
+        
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:rgba(255,255,255,0.06); padding:14px; border-radius:12px; margin-bottom:16px;">
+          <div>
+            <div style="font-size:11px; color:#94A3B8;">Gross Earnings</div>
+            <div id="latest-payslip-gross" style="font-size:16px; font-weight:700; color:#E2E8F0;">KES 0.00</div>
+          </div>
+          <div>
+            <div style="font-size:11px; color:#94A3B8;">Take Home (Net)</div>
+            <div id="latest-payslip-net" style="font-size:18px; font-weight:800; color:#34D399;">KES 0.00</div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px;" id="latest-payslip-actions">
+          <button id="btn-view-latest-pdf" class="btn-submit" style="flex:1; background:#2563EB; font-size:13px; padding:10px 14px;" onclick="viewLatestPayslipPdf()">ðŸ‘ï¸ View PDF</button>
+          <button id="btn-download-latest-pdf" class="btn-submit" style="flex:1; background:#059669; font-size:13px; padding:10px 14px;" onclick="downloadLatestPayslipPdf()">â¬‡ï¸ Download PDF</button>
+        </div>
+      </div>
+
+      <!-- Payslip History List -->
+      <div class="portal-card">
+        <div class="card-title">ðŸ“œ Payslip History</div>
+        <p style="font-size:12px; color:#64748B; margin-bottom:12px;">All previous pay periods preserved for tax returns (KRA P9) and financial records.</p>
+        <div id="payslip-history-list" class="history-list"></div>
+      </div>
+    </section>
+
+    <!-- TAB 5: PROFILE -->
+    <section id="section-profile" style="display:none;">
+      <div class="portal-card" style="text-align:center;">
+        <div style="width:70px; height:70px; background:#3B5EDB; color:#FFF; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; margin:0 auto 12px auto;">
+          ðŸ›¡ï¸
+        </div>
+        <h2 id="prof-full-name" style="margin:0 0 4px 0; font-size:18px;">Peter Otieno</h2>
+        <span id="prof-emp-num" style="font-family:monospace; font-weight:700; color:#3B5EDB; font-size:14px;">CS-00431</span>
+      </div>
+
+      <div class="portal-card">
+        <div class="card-title">ðŸ‘¤ Personal Details</div>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
+          <div style="display:flex; justify-content:space-between; border-bottom:1px solid #F1F5F9; padding-bottom:8px;">
+            <span style="color:#64748B;">Primary Site:</span>
+            <span style="font-weight:700; color:#0F172A;" id="prof-site">Westlands Mall</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-bottom:1px solid #F1F5F9; padding-bottom:8px;">
+            <span style="color:#64748B;">Current Shift:</span>
+            <span style="font-weight:600; color:#0F172A;" id="prof-shift">Day Shift</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-bottom:1px solid #F1F5F9; padding-bottom:8px;">
+            <span style="color:#64748B;">Registered Email:</span>
+            <span style="font-weight:600; color:#0F172A;" id="prof-email">peter.otieno@corpsec.co.ke</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-bottom:1px solid #F1F5F9; padding-bottom:8px;">
+            <span style="color:#64748B;">Phone Number:</span>
+            <span style="font-weight:600; color:#0F172A;" id="prof-phone">0721654321</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:#64748B;">Employment Status:</span>
+            <span class="status-badge active">ACTIVE</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="portal-card">
+        <button class="btn-clock clock-out" style="width:100%;" onclick="logoutGuard()">
+          ðŸ”’ Sign Out of Guard Portal
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 4. MOBILE BOTTOM NAVIGATION BAR -->
+  <nav id="portal-bottom-nav" class="portal-bottom-nav" style="display:none;">
+    <div id="nav-tab-home" class="nav-tab active" onclick="switchPortalTab('home')">
+      <span class="nav-tab-icon">ðŸ </span>
+      <span>Home</span>
+    </div>
+    <div id="nav-tab-leave" class="nav-tab" onclick="switchPortalTab('leave')">
+      <span class="nav-tab-icon">ðŸ–ï¸</span>
+      <span>Leave</span>
+    </div>
+    <div id="nav-tab-incidents" class="nav-tab" onclick="switchPortalTab('incidents')">
+      <span class="nav-tab-icon">ðŸš¨</span>
+      <span>Incidents</span>
+    </div>
+    <div id="nav-tab-payslips" class="nav-tab" onclick="switchPortalTab('payslips')">
+      <span class="nav-tab-icon">ðŸ“„</span>
+      <span>Payslips</span>
+    </div>
+    <div id="nav-tab-profile" class="nav-tab" onclick="switchPortalTab('profile')">
+      <span class="nav-tab-icon">ðŸ‘¤</span>
+      <span>Profile</span>
+    </div>
+  </nav>
+
+
+  <script src="/static/js/portal.js?v=20260919"></script>
+</body>
+</html>

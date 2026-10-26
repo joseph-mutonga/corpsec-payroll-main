@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+__pycache__/
+.pytest_cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+*.pyc
+venv/
+.venv/
+
+# Databases - DO NOT upload
+*.db
+*.sqlite
+*.sqlite3
+
+# Next.js / build files
+.next/
+out/
+dist/
+build/
+
+# Logs
+*.log
+
+# Test / temporary files
+scratch/
+tmp/
+temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local IDE files
+.vscode/
+.idea/
+
+# Generated documents / personal data
+*.pdf
