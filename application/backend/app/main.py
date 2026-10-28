@@ -18,7 +18,7 @@ from application.backend.app.core.limiter import limiter, _rate_limit_exceeded_h
 from slowapi.errors import RateLimitExceeded
 from application.backend.app.models import *
 from application.backend.app.api.v1 import (
-    auth, guards, sites, shifts, attendance, overtime, payroll, payslips, payments, guard_portal, reports, audit, settings as sys_settings, archive, incidents, leave, statutory, roster, regions, off_days
+    auth, guards, sites, shifts, attendance, overtime, payroll, payslips, payments, guard_portal, reports, audit, settings as sys_settings, archive, incidents, leave, statutory, roster, regions, off_days, supervisor as supervisor_module
 )
 
 # Ensure database tables exist and schema columns are synchronized
@@ -66,6 +66,7 @@ app.include_router(archive.router, prefix=settings.API_V1_STR)
 app.include_router(incidents.router, prefix=settings.API_V1_STR)
 app.include_router(leave.router, prefix=settings.API_V1_STR)
 app.include_router(statutory.router, prefix=settings.API_V1_STR)
+app.include_router(supervisor_module.router, prefix=settings.API_V1_STR)
 
 # Serve Static Assets & SPA index.html
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend"))

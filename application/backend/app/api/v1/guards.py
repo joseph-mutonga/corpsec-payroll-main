@@ -26,6 +26,8 @@ def _format_guard(guard: Guard) -> dict:
         "national_id": guard.national_id,
         "phone": guard.phone,
         "email": guard.email,
+        "gender": guard.gender or "Male",
+        "date_of_birth": guard.date_of_birth,
         "site_id": guard.primary_site_id,
         "shift_id": guard.shift_id,
         "hire_date": guard.hire_date,

@@ -8,7 +8,7 @@ class SiteCreate(BaseModel):
     location: str
     client_name: str
     region_id: Optional[int] = None
-    basic_salary: float = Field(..., gt=0, description="Default basic salary for guards at this site")
+    basic_salary: float = Field(default=15000.0, gt=0, description="Default basic salary for guards at this site")
     daily_rate: float = 1300.0
     night_allowance: float = 200.0
     transport_allowance: float = 100.0

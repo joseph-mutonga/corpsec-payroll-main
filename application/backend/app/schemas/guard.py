@@ -32,9 +32,12 @@ class GuardCreate(BaseModel):
 
 class GuardUpdate(BaseModel):
     full_name: Optional[str] = None
+    national_id: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None
     gender: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    hire_date: Optional[date] = None
     site_id: Optional[int] = None
     shift_id: Optional[int] = None
     basic_salary: Optional[float] = None
@@ -59,6 +62,8 @@ class GuardResponse(BaseModel):
     national_id: str
     phone: str
     email: Optional[str] = None
+    gender: Optional[str] = "Male"
+    date_of_birth: Optional[date] = None
     site_id: Optional[int] = None
     shift_id: Optional[int] = None
     hire_date: date

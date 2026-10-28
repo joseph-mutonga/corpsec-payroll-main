@@ -120,6 +120,12 @@ def sync_db_schema():
             if "reliever_earnings" not in rec_cols:
                 cursor.execute("ALTER TABLE payroll_records ADD COLUMN reliever_earnings FLOAT DEFAULT 0.0;")
 
+        # 7. Supervisor feature: supervisor_id on guards
+        cursor.execute("PRAGMA table_info(guards);")
+        guard_cols_v2 = [c[1] for c in cursor.fetchall()]
+        if guard_cols_v2 and "supervisor_id" not in guard_cols_v2:
+            cursor.execute("ALTER TABLE guards ADD COLUMN supervisor_id INTEGER;")
+
         conn.commit()
         conn.close()
     except Exception as e:
