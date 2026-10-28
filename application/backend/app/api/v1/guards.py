@@ -171,6 +171,9 @@ def list_guards(
     """List and filter guards directory."""
     query = db.query(Guard).options(joinedload(Guard.site))
 
+    if current_user.role == UserRole.GUARD.value:
+        query = query.filter(Guard.id == current_user.guard_id)
+
     if status_filter:
         query = query.filter(Guard.status == status_filter.upper())
     if site_id:
@@ -202,6 +205,9 @@ def get_guard_detail(
 
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
+
+    if current_user.role == UserRole.GUARD.value and current_user.guard_id != guard_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view other guard profiles")
 
     return _format_guard_detail(guard)
 

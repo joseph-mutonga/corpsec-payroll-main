@@ -88,7 +88,11 @@ def list_off_day_allowances(
 ):
     """Fetch off-day allowances."""
     query = db.query(OffDayAllowance)
-    if guard_id:
+    if current_user.role == "GUARD":
+        if not current_user.guard_id:
+            return []
+        query = query.filter(OffDayAllowance.guard_id == current_user.guard_id)
+    elif guard_id:
         query = query.filter(OffDayAllowance.guard_id == guard_id)
     if year:
         query = query.filter(OffDayAllowance.year == year)

@@ -85,23 +85,3 @@ def require_admin_or_supervisor(current_user: User = Depends(get_current_user)) 
             detail="Admin or Supervisor privileges required."
         )
     return current_user
-
-
-def require_supervisor(current_user: User = Depends(get_current_user)) -> User:
-    """Allow supervisor or admin."""
-    if current_user.role not in [UserRole.SUPERVISOR.value, UserRole.ADMIN.value]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Supervisor or Admin role required."
-        )
-    return current_user
-
-
-def require_admin_or_supervisor(current_user: User = Depends(get_current_user)) -> User:
-    """Allow admin or supervisor."""
-    if current_user.role not in [UserRole.ADMIN.value, UserRole.SUPERVISOR.value]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or Supervisor privileges required."
-        )
-    return current_user

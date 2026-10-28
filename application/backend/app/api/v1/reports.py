@@ -37,8 +37,9 @@ def get_nssf_report(
         if not guard:
             continue
 
-        emp_nssf = rec.nssf_deduction
-        employer_nssf = emp_nssf  # Employer matches employee NSSF 1:1
+        emp_nssf = rec.nssf_deduction or 0.0
+        stored_employer = getattr(rec, "employer_nssf_deduction", None)
+        employer_nssf = emp_nssf if stored_employer is None else stored_employer
         tot_nssf = emp_nssf + employer_nssf
 
         total_employee_nssf += emp_nssf
@@ -160,8 +161,12 @@ def get_housing_levy_report(
         if not guard:
             continue
 
-        emp_levy = rec.housing_levy_deduction
-        employer_levy = emp_levy  # Employer matches 1.5% 1:1
+        emp_levy = rec.housing_levy_deduction or 0.0
+        stored_employer_levy = getattr(rec, "employer_housing_levy_deduction", None)
+        if stored_employer_levy is None:
+            employer_levy = emp_levy
+        else:
+            employer_levy = stored_employer_levy
         tot_levy = emp_levy + employer_levy
 
         total_employee_levy += emp_levy

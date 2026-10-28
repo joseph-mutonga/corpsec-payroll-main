@@ -34,4 +34,9 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
 
-    guard = relationship("Guard", back_populates="user_account", uselist=False)
+    guard = relationship(
+        "Guard",
+        back_populates="user_account",
+        uselist=False,
+        foreign_keys="[User.guard_id]",
+    )

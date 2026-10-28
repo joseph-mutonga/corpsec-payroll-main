@@ -38,6 +38,7 @@ class SupervisorResponse(BaseModel):
     role: str
     status: str
     assigned_guard_count: int = 0
+    temporary_password: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -123,7 +124,12 @@ def create_supervisor(
     if existing_phone:
         raise HTTPException(status_code=400, detail=f"Phone '{payload.phone}' already in use.")
 
-    auto_pw = payload.password or f"Sup#{secrets.randbelow(899999) + 100000}"
+    generated_password = None
+    if payload.password:
+        auto_pw = payload.password
+    else:
+        auto_pw = f"Sup#{secrets.randbelow(899999) + 100000}"
+        generated_password = auto_pw
     sup = User(
         email=payload.email,
         phone=payload.phone,
@@ -155,7 +161,8 @@ def create_supervisor(
         phone=sup.phone,
         role=sup.role,
         status=sup.status,
-        assigned_guard_count=0
+        assigned_guard_count=0,
+        temporary_password=generated_password,
     )
 
 
