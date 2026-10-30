@@ -22,7 +22,7 @@ class Guard(Base):
     hire_date = Column(Date, nullable=False)
     basic_salary = Column(Float, nullable=True)  # Nullable: null -> inherits site.basic_salary; set -> per-guard override
     is_reliever = Column(Boolean, default=False, nullable=False)
-    supervisor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    supervisor_id = Column(Integer, ForeignKey("users.id", use_alter=True, name="fk_guards_supervisor_id"), nullable=True)
     
     payment_method = Column(String(255), default="Bank Transfer", nullable=False)
     bank_name = Column(String(255), nullable=True)

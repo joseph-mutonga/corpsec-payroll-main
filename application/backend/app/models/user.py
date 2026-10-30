@@ -28,7 +28,7 @@ class User(Base):
     role = Column(String(255), default=UserRole.GUARD.value, nullable=False)
     status = Column(String(255), default=UserStatus.ACTIVE.value, nullable=False)
     
-    guard_id = Column(Integer, ForeignKey("guards.id"), nullable=True)
+    guard_id = Column(Integer, ForeignKey("guards.id", use_alter=True, name="fk_users_guard_id"), nullable=True)
     
     last_login = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)

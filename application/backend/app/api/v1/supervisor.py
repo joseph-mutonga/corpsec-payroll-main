@@ -6,7 +6,7 @@ Supervisor Portal API — allows supervisors (and admins) to:
 """
 from datetime import date, datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.orm import Session
 import secrets
@@ -80,6 +80,25 @@ class SupervisorGuardResponse(BaseModel):
     shift_name: Optional[str] = None
     status: str
     supervisor_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SupervisorAttendanceStatusResponse(BaseModel):
+    guard_id: int
+    employee_number: str
+    full_name: str
+    phone: str
+    site_id: Optional[int] = None
+    site_name: Optional[str] = None
+    shift_id: Optional[int] = None
+    shift_name: Optional[str] = None
+    supervisor_id: Optional[int] = None
+    attendance_id: Optional[int] = None
+    attendance_status: str = "NOT_MARKED"  # PRESENT, ABSENT, LATE, NOT_MARKED
+    actual_clock_in: Optional[datetime] = None
+    actual_clock_out: Optional[datetime] = None
+    notes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -216,6 +235,32 @@ def assign_guards_to_supervisor(
     return {"assigned": len(updated_names), "supervisor_id": supervisor_id, "guard_names": updated_names}
 
 
+# ── Supervisor: View my assigned guards (MUST be before /{supervisor_id}/guards) ──
+
+@router.get("/my-guards", response_model=List[SupervisorGuardResponse])
+def get_my_assigned_guards(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    """Supervisor view: list all guards assigned to the logged-in supervisor."""
+    guards = db.query(Guard).filter(Guard.supervisor_id == current_user.id).all()
+    result = []
+    for g in guards:
+        result.append(SupervisorGuardResponse(
+            id=g.id,
+            employee_number=g.employee_number,
+            full_name=g.full_name,
+            phone=g.phone,
+            site_id=g.primary_site_id,
+            site_name=g.site.site_name if g.site else None,
+            shift_id=g.shift_id,
+            shift_name=g.shift.name if g.shift else None,
+            status=g.status,
+            supervisor_id=g.supervisor_id
+        ))
+    return result
+
+
 # ── Admin: List guards assigned to a supervisor ───────────────────────────────
 
 @router.get("/{supervisor_id}/guards", response_model=List[SupervisorGuardResponse])
@@ -250,30 +295,55 @@ def list_supervisor_guards(
     return result
 
 
-# ── Supervisor: View my assigned guards ───────────────────────────────────────
+# ── Supervisor & Admin: Query Guards Attendance by Date ─────────────────────
 
-@router.get("/my-guards", response_model=List[SupervisorGuardResponse])
-def get_my_assigned_guards(
+@router.get("/attendance", response_model=List[SupervisorAttendanceStatusResponse])
+def get_supervisor_guards_attendance(
+    shift_date: Optional[date] = Query(None),
+    supervisor_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_supervisor)
 ):
-    """Supervisor view: list all guards assigned to the logged-in supervisor."""
-    guards = db.query(Guard).filter(Guard.supervisor_id == current_user.id).all()
-    result = []
+    """
+    Fetch attendance statuses for guards on a specific date.
+    - If user is SUPERVISOR: returns only guards assigned to this supervisor.
+    - If user is ADMIN: returns all guards, or guards filtered by supervisor_id if specified.
+    """
+    target_date = shift_date or date.today()
+    query = db.query(Guard).filter(Guard.status == "ACTIVE")
+    if current_user.role == UserRole.SUPERVISOR.value:
+        query = query.filter(Guard.supervisor_id == current_user.id)
+    elif supervisor_id:
+        query = query.filter(Guard.supervisor_id == supervisor_id)
+
+    guards = query.order_by(Guard.id.asc()).all()
+    results = []
     for g in guards:
-        result.append(SupervisorGuardResponse(
-            id=g.id,
+        att = db.query(Attendance).filter(
+            Attendance.guard_id == g.id,
+            Attendance.shift_date == target_date
+        ).first()
+
+        site_name = g.site.site_name if g.site else "Unassigned Site"
+        shift_name = g.shift.name if g.shift else "Day Shift"
+
+        results.append(SupervisorAttendanceStatusResponse(
+            guard_id=g.id,
             employee_number=g.employee_number,
             full_name=g.full_name,
             phone=g.phone,
             site_id=g.primary_site_id,
-            site_name=g.site.site_name if g.site else None,
+            site_name=site_name,
             shift_id=g.shift_id,
-            shift_name=g.shift.name if g.shift else None,
-            status=g.status,
-            supervisor_id=g.supervisor_id
+            shift_name=shift_name,
+            supervisor_id=g.supervisor_id,
+            attendance_id=att.id if att else None,
+            attendance_status=att.status if att else "NOT_MARKED",
+            actual_clock_in=att.actual_clock_in if att else None,
+            actual_clock_out=att.actual_clock_out if att else None,
+            notes=att.notes if att else None
         ))
-    return result
+    return results
 
 
 # ── Supervisor: Mark attendance for assigned guards ───────────────────────────
@@ -313,9 +383,16 @@ def supervisor_mark_attendance(
 
         # Resolve shift and site
         resolved_shift_id = record.shift_id or guard.shift_id
-        if not resolved_shift_id:
+        shift_duration = 12.0
+        if resolved_shift_id:
+            s_obj = db.query(Shift).filter(Shift.id == resolved_shift_id).first()
+            if s_obj and s_obj.duration_hours:
+                shift_duration = s_obj.duration_hours
+        else:
             first_shift = db.query(Shift).first()
             resolved_shift_id = first_shift.id if first_shift else 1
+            if first_shift and first_shift.duration_hours:
+                shift_duration = first_shift.duration_hours
 
         resolved_site_id = guard.primary_site_id or 1
         now = datetime.now()
@@ -329,8 +406,14 @@ def supervisor_mark_attendance(
         if att:
             att.status = att_status
             att.notes = record.notes or f"Marked {att_status} by supervisor {current_user.email}"
-            if att_status == "PRESENT" and not att.actual_clock_in:
-                att.actual_clock_in = now
+            if att_status == "PRESENT":
+                if not att.actual_clock_in:
+                    att.actual_clock_in = now
+                if att.regular_hours == 0.0:
+                    att.regular_hours = shift_duration
+            elif att_status == "ABSENT":
+                att.regular_hours = 0.0
+                att.overtime_hours = 0.0
         else:
             att = Attendance(
                 guard_id=guard.id,
@@ -339,7 +422,7 @@ def supervisor_mark_attendance(
                 shift_date=record.shift_date,
                 actual_clock_in=now if att_status == "PRESENT" else None,
                 status=att_status,
-                regular_hours=0.0,
+                regular_hours=shift_duration if att_status == "PRESENT" else 0.0,
                 overtime_hours=0.0,
                 notes=record.notes or f"Marked {att_status} by supervisor {current_user.email}"
             )

@@ -15,6 +15,7 @@ class GuardCreate(BaseModel):
     
     site_id: Optional[int] = None
     shift_id: Optional[int] = None
+    supervisor_id: Optional[int] = None
     
     hire_date: date
     basic_salary: Union[float, None] = None  # None -> inherits site basic salary; set -> per-guard override
@@ -40,6 +41,7 @@ class GuardUpdate(BaseModel):
     hire_date: Optional[date] = None
     site_id: Optional[int] = None
     shift_id: Optional[int] = None
+    supervisor_id: Optional[int] = None
     basic_salary: Optional[float] = None
     is_reliever: Optional[bool] = None
     payment_method: Optional[str] = None
@@ -66,6 +68,8 @@ class GuardResponse(BaseModel):
     date_of_birth: Optional[date] = None
     site_id: Optional[int] = None
     shift_id: Optional[int] = None
+    supervisor_id: Optional[int] = None
+    supervisor_email: Optional[str] = None
     hire_date: date
     basic_salary: Optional[float] = None
     resolved_basic_salary: Optional[float] = None

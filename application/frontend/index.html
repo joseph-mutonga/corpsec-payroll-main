@@ -216,130 +216,6 @@
 
     <div class="content-container">
 
-      <!-- Login Screen (Hidden if authenticated) -->
-      <div id="login-modal" class="modal-overlay" style="display:none;">
-        <div class="modal-content" style="text-align: center;">
-          <img src="/static/images/corpsec_logo_full.jpg" alt="CorpSec Investigations & Guarding Services" style="max-width: 220px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-          <h2 style="margin-bottom:16px; font-size:20px;">CorpSec Admin Sign In</h2>
-          <form onsubmit="handleLogin(event)">
-            <div style="margin-bottom:16px;">
-              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Email Address</label>
-              <input type="email" id="login-email" class="form-control" placeholder="e.g. admin@corpsec.co.ke" required>
-            </div>
-            <div style="margin-bottom:20px;">
-              <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Password</label>
-              <input type="password" id="login-password" class="form-control" placeholder="Enter password" required>
-            </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
-            <div style="margin-top:14px; font-size:12px; color:#64748B;">
-              🔑 Demo Admin: <span style="font-weight:700; color:#334155;">admin@corpsec.co.ke</span> / <span style="font-weight:700; color:#334155;">Admin@123456</span>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <!-- Search Modal Overlay -->
-      <div id="modal-search" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeSearchModal()">
-        <div class="modal-content" style="max-width: 600px; width: 90%;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="font-size:18px; font-weight:800;">🔍 System Search</h3>
-            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeSearchModal()">✕</button>
-          </div>
-          <div style="margin-bottom:16px; position:relative;">
-            <input type="text" id="global-search-input" class="form-control" placeholder="Search guards by name/ID, client sites, or shift records..." oninput="handleGlobalSearch(this.value)" autofocus style="padding-left:40px;">
-            <span style="position:absolute; left:14px; top:12px; font-size:16px;">🔍</span>
-          </div>
-          <div id="search-results-list" style="display:flex; flex-direction:column; gap:10px; max-height:340px; overflow-y:auto;">
-            <div style="text-align: center; color: #64748B; padding: 20px;">Type to search live across guards, sites, and shift rosters...</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Admin Profile Details Modal -->
-      <div id="modal-profile" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeProfileModal()">
-        <div class="modal-content" style="max-width: 460px; width: 90%;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid #F1F5F9; padding-bottom:12px;">
-            <h3 style="font-size:18px; font-weight:800;">👤 Admin Profile</h3>
-            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeProfileModal()">✕</button>
-          </div>
-          <div style="text-align:center; margin-bottom:20px;">
-            <img src="/static/images/corpsec_logo_badge.png" alt="Fiona Johnson" style="width:80px; height:80px; border-radius:50%; margin-bottom:12px; border:3px solid var(--color-primary);">
-            <h4 style="font-size:18px; font-weight:800; color:#0F172A;">Fiona Johnson</h4>
-            <span class="badge badge-active" style="margin-top:4px;">System Administrator</span>
-          </div>
-          <div style="background:#F8FAFC; border-radius:14px; padding:16px; margin-bottom:20px; display:flex; flex-direction:column; gap:10px; font-size:13px;">
-            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Email:</span><strong>fiona.johnson@corpsec.co.ke</strong></div>
-            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Employee ID:</span><strong>CS-ADM-001</strong></div>
-            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Access Level:</span><strong>Full Superuser Control</strong></div>
-            <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">Last Active:</span><strong>Today at 10:15 AM</strong></div>
-          </div>
-          <div style="display:flex; gap:10px;">
-            <button class="btn btn-secondary" style="flex:1;" onclick="closeProfileModal()">Close</button>
-            <button class="btn btn-primary" style="flex:1;" onclick="closeProfileModal(); switchTab('settings');">⚙️ Settings</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Run Payroll Confirmation Modal -->
-      <div id="modal-confirm-payroll" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeRunPayrollModal()">
-        <div class="modal-content" style="max-width: 480px; width: 90%;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="font-size:18px; font-weight:800;">▶ Execute Payroll Run</h3>
-            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeRunPayrollModal()">✕</button>
-          </div>
-          <div style="background:#F3E8FF; border-radius:14px; padding:16px; margin-bottom:20px; border:1px solid #E9D5FF;">
-            <div style="font-size:14px; font-weight:700; color:#581C87; margin-bottom:6px;">September 2026 Payroll Calculation</div>
-            <p style="font-size:13px; color:#475569;">Execute automated payroll calculation across active guards? This will compute gross pay, NSSF, SHIF, Housing Levy, and statutory PAYE taxes.</p>
-          </div>
-          <div style="display:flex; gap:12px;">
-            <button class="btn btn-secondary" style="flex:1;" onclick="closeRunPayrollModal()">Cancel</button>
-            <button class="btn btn-primary" id="btn-confirm-payroll-run" style="flex:1.5;" onclick="executePayrollRunConfirmed()">▶ Confirm & Run Payroll</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Import Shift Schedule CSV Modal -->
-      <div id="modal-import-csv" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeImportCsvModal()">
-        <div class="modal-content" style="max-width: 520px; width: 90%;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="font-size:18px; font-weight:800;">📥 Import Shift Schedule CSV</h3>
-            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeImportCsvModal()">✕</button>
-          </div>
-          <div class="file-dropzone" onclick="document.getElementById('csv-file-input').click()">
-            <div style="font-size:36px; margin-bottom:8px;">📄</div>
-            <div style="font-weight:700; font-size:14px; margin-bottom:4px;">Drag & Drop Shift CSV File</div>
-            <div style="font-size:12px; color:#64748B;">or click to browse local files (.csv format)</div>
-            <input type="file" id="csv-file-input" accept=".csv" style="display:none;" onchange="handleCsvFileSelected(event)">
-          </div>
-          <div id="csv-file-preview" style="display:none; margin-top:16px; padding:12px 14px; background:#F8FAFC; border-radius:12px; border:1px solid #E2E8F0;">
-            <div style="font-weight:700; font-size:13px; color:#0F172A;" id="csv-filename-label">roster_september.csv</div>
-            <div style="font-size:11px; color:#64748B;" id="csv-file-meta">14.2 KB — 42 Roster Rows</div>
-          </div>
-          <div style="display:flex; gap:12px; margin-top:20px;">
-            <button class="btn btn-secondary" style="flex:1;" onclick="closeImportCsvModal()">Cancel</button>
-            <button class="btn btn-primary" id="btn-submit-csv-import" style="flex:1.5;" onclick="executeShiftCsvImport()">📥 Import Roster</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Export Statutory Returns Modal -->
-      <div id="modal-export-returns" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeExportReturnsModal()">
-        <div class="modal-content" style="max-width: 500px; width: 90%;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 style="font-size:18px; font-weight:800;">📄 Statutory Returns Export Hub</h3>
-            <button class="toast-close-btn" style="color:#0F172A;" onclick="closeExportReturnsModal()">✕</button>
-          </div>
-          <p style="font-size:13px; color:#64748B; margin-bottom:16px;">Select statutory export format for Kenya revenue compliance:</p>
-          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
-            <a href="/api/v1/reports/nssf?export_format=csv" download class="btn btn-secondary" style="justify-content:space-between;"><span>📊 NSSF Monthly Schedule (CSV)</span><span>⬇️</span></a>
-            <a href="/api/v1/reports/shif?export_format=csv" download class="btn btn-secondary" style="justify-content:space-between;"><span>🏥 SHIF Monthly Return (CSV)</span><span>⬇️</span></a>
-            <a href="/api/v1/reports/housing-levy?export_format=csv" download class="btn btn-secondary" style="justify-content:space-between;"><span>🏠 Housing Levy Return (CSV)</span><span>⬇️</span></a>
-            <a href="/api/v1/reports/kra-p9/1/pdf" download class="btn btn-secondary" style="justify-content:space-between;"><span>📜 KRA P9 Certificate (PDF)</span><span>⬇️</span></a>
-          </div>
-          <button class="btn btn-primary" style="width:100%;" onclick="closeExportReturnsModal()">Done</button>
-        </div>
-      </div>
-
       <!-- Tab Panel 1: Dashboard -->
       <section id="panel-dashboard">
         <div class="metrics-grid">
@@ -490,37 +366,53 @@
       <!-- Tab Panel: Supervisor Management -->
       <section id="panel-supervisors" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h2 style="font-size:18px; font-weight:700; color:#0F172A;">👨‍💼 Supervisor Management</h2>
-          <button class="btn btn-primary" onclick="openAddSupervisorModal()">+ Add Supervisor</button>
+          <div>
+            <h2 style="font-size:18px; font-weight:700; color:#0F172A;">👨‍💼 Supervisor Management</h2>
+            <p style="font-size:13px; color:#64748B; margin-top:2px;">Manage field supervisors and allocate security personnel under their command</p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" onclick="loadSupervisors()">🔄 Refresh</button>
+            <button class="btn btn-primary" onclick="openAddSupervisorModal()">+ Add Supervisor</button>
+          </div>
         </div>
 
         <!-- Supervisor list table -->
         <div class="table-container" style="margin-bottom:24px;">
-          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0;">Supervisor Accounts</div>
+          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+            <span>Active Supervisors</span>
+            <span id="supervisors-count-badge" class="badge" style="background:#EEF2FF; color:#4338CA;">0 Supervisors</span>
+          </div>
           <table class="data-table">
             <thead>
               <tr>
-                <th>Email</th>
-                <th>Phone</th>
+                <th>ID</th>
+                <th>Supervisor Account</th>
+                <th>Phone Number</th>
                 <th>Status</th>
-                <th>Assigned Guards</th>
+                <th>Guards Assigned</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="supervisors-table-body">
-              <tr><td colspan="5" style="text-align:center; padding:24px; color:#64748B;">Loading supervisors...</td></tr>
+              <tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading supervisors...</td></tr>
             </tbody>
           </table>
         </div>
 
         <!-- Assign Guards sub-panel -->
-        <div class="table-container" id="supervisor-assign-panel" style="display:none;">
-          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
-            <span>🛡️ Guards assigned to: <strong id="supervisor-assign-name"></strong></span>
+        <div class="table-container" id="supervisor-assign-panel" style="display:none; margin-bottom:24px; border:2px solid #3B82F6;">
+          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; background:#EFF6FF;">
+            <span style="color:#1E40AF;">🛡️ Guard Allocation: <strong id="supervisor-assign-name"></strong></span>
             <button class="btn btn-secondary" onclick="closeSupervisorAssignPanel()">✕ Close</button>
           </div>
           <div style="padding:20px;">
-            <p style="font-size:13px; color:#475569; margin-bottom:14px;">Check guards to assign them to this supervisor. Uncheck to remove assignment.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <p style="font-size:13px; color:#475569; margin:0;">Check guards to allocate them to this supervisor. Uncheck to remove assignment.</p>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-secondary" style="font-size:12px; padding:4px 10px;" onclick="selectAllSupervisorGuards(true)">Select All</button>
+                <button type="button" class="btn btn-secondary" style="font-size:12px; padding:4px 10px;" onclick="selectAllSupervisorGuards(false)">Deselect All</button>
+              </div>
+            </div>
             <div id="supervisor-assign-guards-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:10px; max-height:380px; overflow-y:auto; padding:4px;"></div>
             <div style="margin-top:18px; display:flex; gap:10px;">
               <button class="btn btn-primary" onclick="saveGuardAssignments()">💾 Save Assignments</button>
@@ -528,47 +420,37 @@
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- Tab Panel: Supervisor Management -->
-      <section id="panel-supervisors" style="display:none;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h2 style="font-size:16px; font-weight:700;">👨‍💼 Supervisor Management</h2>
-          <button class="btn btn-primary" onclick="openAddSupervisorModal()">+ Add Supervisor</button>
-        </div>
-
-        <!-- Supervisor list table -->
-        <div class="table-container" style="margin-bottom:24px;">
-          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0;">Supervisor Accounts</div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Status</th>
-                <th>Assigned Guards</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="supervisors-table-body">
-              <tr><td colspan="5" style="text-align:center; padding:16px; color:#64748B;">Loading supervisors...</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Assign Guards sub-panel -->
-        <div class="table-container" id="supervisor-assign-panel" style="display:none;">
-          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
-            <span>🛡️ Guards under: <strong id="supervisor-assign-name"></strong></span>
-            <button class="btn btn-secondary" onclick="closeSupervisorAssignPanel()">✕ Close</button>
-          </div>
-          <div style="padding:16px 20px;">
-            <p style="font-size:13px; color:#475569; margin-bottom:12px;">Select guards below to assign them to this supervisor. Uncheck to remove.</p>
-            <div id="supervisor-assign-guards-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:10px; max-height:360px; overflow-y:auto; padding:4px;"></div>
-            <div style="margin-top:16px; display:flex; gap:10px;">
-              <button class="btn btn-primary" onclick="saveGuardAssignments()">💾 Save Assignments</button>
-              <button class="btn btn-secondary" onclick="closeSupervisorAssignPanel()">Cancel</button>
+        <!-- Field Roll Call & Daily Attendance Monitor -->
+        <div class="table-container">
+          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span>📋 Daily Field Roll Call (Present / Absent / Late)</span>
             </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <label style="font-size:12px; font-weight:600; color:#475569;">Shift Date:</label>
+              <input type="date" id="supervisor-attendance-date" class="form-control" style="max-width:160px; padding:4px 10px;" onchange="loadSupervisorAttendanceRoll()">
+              <button class="btn btn-secondary" style="padding:4px 12px; font-size:12px;" onclick="loadSupervisorAttendanceRoll()">Load Roll</button>
+              <button class="btn btn-primary" style="padding:4px 14px; font-size:12px;" onclick="saveSupervisorAttendanceRoll()">💾 Submit Roll Call</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Guard Name</th>
+                  <th>Emp No</th>
+                  <th>Assigned Site</th>
+                  <th>Shift</th>
+                  <th>Roll Call Status</th>
+                  <th>Clock In Time</th>
+                  <th>Supervisor Notes</th>
+                </tr>
+              </thead>
+              <tbody id="supervisor-attendance-table-body">
+                <tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Select date or click 'Load Roll' to view guard attendance.</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1538,7 +1420,7 @@
 
   <!-- Modal 6: Add New Guard Modal -->
   <div id="modal-add-guard" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeAddGuardModal()">
-    <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-content" style="max-width: 540px; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
         <h3 style="font-size:18px; font-weight:800;">🛡️ Add New Security Guard</h3>
         <button onclick="closeAddGuardModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
@@ -1591,6 +1473,41 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="closeAddGuardModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">+ Register Guard</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Supervisor -->
+  <div id="modal-add-supervisor" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeAddSupervisorModal()">
+    <div class="modal-content" style="max-width:480px; width:100%; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">👨‍💼 Create Supervisor Account</h3>
+        <button type="button" onclick="closeAddSupervisorModal()" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <form onsubmit="submitAddSupervisor(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Full Name *</label>
+            <input type="text" id="new-sup-name" class="form-control" required placeholder="e.g. John Kamau">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Email Address *</label>
+            <input type="email" id="new-sup-email" class="form-control" required placeholder="e.g. jkamau@corpsec.co.ke">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Phone Number *</label>
+            <input type="tel" id="new-sup-phone" class="form-control" required placeholder="e.g. 0722000000">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Password (Leave blank for default: password123)</label>
+            <input type="password" id="new-sup-password" class="form-control" placeholder="Optional custom password">
+          </div>
+          <div id="new-sup-error" style="color:#DC2626; font-size:13px; display:none; background:#FEF2F2; padding:8px 12px; border-radius:6px; border:1px solid #FECACA;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeAddSupervisorModal()">Cancel</button>
+          <button type="submit" id="btn-submit-new-sup" class="btn btn-primary">+ Create Supervisor</button>
         </div>
       </form>
     </div>

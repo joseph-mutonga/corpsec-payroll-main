@@ -199,8 +199,23 @@ function updateUserProfileDisplay(userData) {
   });
   const avatarRoles = document.querySelectorAll('.avatar-role');
   avatarRoles.forEach(el => {
-    if (userData.role) el.innerText = userData.role === 'ADMIN' ? 'System Admin' : userData.role;
+    if (userData.role) {
+      el.innerText = userData.role === 'ADMIN' ? 'System Admin' : (userData.role === 'SUPERVISOR' ? 'Field Supervisor' : userData.role);
+    }
   });
+
+  // Adjust sidebar tabs and badges for SUPERVISOR role
+  if (userData.role === 'SUPERVISOR') {
+    // Hide payroll and system tools from supervisors, keep operational tabs
+    const adminOnlyTabs = ['payroll', 'payments', 'statutory', 'settings', 'audit'];
+    adminOnlyTabs.forEach(tab => {
+      const navItem = document.querySelector(`.nav-item[onclick="switchTab('${tab}')"]`);
+      if (navItem) navItem.style.display = 'none';
+    });
+    // Ensure Supervisors tab is clearly highlighted as Field Operations
+    const supNav = document.querySelector(`.nav-item[onclick="switchTab('supervisors')"]`);
+    if (supNav) supNav.innerHTML = '🛡️ My Guard Team & Attendance';
+  }
 }
 
 function logout() {
@@ -242,7 +257,8 @@ function switchTab(tabId) {
     'statutory': 'Tax & Statutory Parameters Management',
     'reports': 'Statutory Tax Returns & P9 Forms',
     'audit': 'System Audit Trail',
-    'settings': 'Statutory Parameters & System Settings'
+    'settings': 'Statutory Parameters & System Settings',
+    'supervisors': 'Supervisor Management & Guard Assignments'
   };
 
   document.getElementById('current-page-title').innerText = titles[tabId] || 'Dashboard';
@@ -271,6 +287,7 @@ function switchTab(tabId) {
   if (tabId === 'statutory') loadStatutoryRates();
   if (tabId === 'audit') loadAuditLogs();
   if (tabId === 'settings') loadSettings();
+  if (tabId === 'supervisors') loadSupervisors();
   if (tabId === 'reports') {
     loadGuards();
     loadSites();
@@ -361,34 +378,25 @@ function calculateGuardAge(dob) {
 function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shiftsList = []) {
   const site = g.site || sitesList.find(s => s.id === (g.site_id || g.primary_site_id)) || null;
   const shift = g.shift || shiftsList.find(s => s.id === g.shift_id) || null;
-  const siteName = site ? site.site_name : 'Form 2 Winners';
-  const shiftName = shift ? (shift.shift_name || shift.name || 'Regular') : '';
-  const siteLocation = site ? (site.location || 'Kitengela') : 'Kitengela';
+  const siteName = site ? site.site_name : 'Unassigned';
+  const shiftName = shift ? (shift.shift_name || shift.name || 'Day Shift') : 'Day Shift';
+  const siteLocation = site ? (site.location || '—') : '—';
 
-  // Hire date formatted (Date of Admission)
-  const hireDate = g.hire_date ? String(g.hire_date).substring(0, 10) : '2024-01-11';
-  const formattedHireDate = hireDate;
-
-  // DOB and Age
-  const dob = g.date_of_birth ? String(g.date_of_birth).substring(0, 10) : '2010-10-28';
+  const hireDate = g.hire_date ? String(g.hire_date).substring(0, 10) : '—';
+  const dob = g.date_of_birth ? String(g.date_of_birth).substring(0, 10) : '—';
   const age = calculateGuardAge(dob);
 
-  // Performance calculation
-  const now = new Date();
-  const currentYear = now.getFullYear();
+  // Attendance summary
   let presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
+  let absentCount = attendanceRecords.filter(a => a.status === 'ABSENT').length;
+  let lateCount = attendanceRecords.filter(a => a.status === 'LATE').length;
   let totalCount = attendanceRecords.length;
-  let attendancePct = totalCount > 0 ? ((presentCount / totalCount) * 100).toFixed(2) : '23.00';
+  let attendancePct = totalCount > 0 ? ((presentCount / totalCount) * 100).toFixed(1) : '—';
 
-  const termPerformance = [
-    { period: `${currentYear} - Term 1`, average: `${attendancePct}%` }
-  ];
-
-  const parentName = g.parent_name || ('Parent ' + (g.employee_number ? g.employee_number.replace(/\D/g, '') || '10' : '10'));
-  const parentEmail = g.email || (g.employee_number ? `parent${g.employee_number.replace(/\D/g, '') || '10'}@example.com` : 'parent10@example.com');
-  const parentPhone = g.phone || '0710000000';
-  const kcpeMarks = g.kcpe_marks || (g.employee_number && g.employee_number.includes('10') ? '407' : (g.resolved_basic_salary ? `KES ${Number(g.resolved_basic_salary).toLocaleString()}` : '407'));
-  const birthCertNo = g.birth_cert_no || (g.national_id ? (g.national_id.startsWith('BCN') ? g.national_id : `BCN${g.national_id}`) : 'BCN1010');
+  // Academic qualification & emergency contact (show from field if available, else placeholder)
+  const educationLevel = g.education_level || 'Not Recorded';
+  const emergencyName = g.emergency_contact_name || 'Not Recorded';
+  const emergencyPhone = g.emergency_contact_phone || 'Not Recorded';
 
   return `
     <div class="guard-file-top-bar" style="margin-bottom: 20px;">
@@ -396,45 +404,48 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
-        Back to Guard List
+        Back to Guard Directory
       </button>
       <div class="guard-status-badge ${g.status === 'ACTIVE' ? 'status-active' : 'status-inactive'}">
         STATUS: ${g.status || 'ACTIVE'}
       </div>
     </div>
 
-    <!-- Student / Guard Details Card (Exact Match to Reference Screenshot) -->
+    <!-- Card 1: Security Guard Personnel File -->
     <div class="profile-card">
       <div class="profile-card-header">
-        <h2 class="profile-card-title">Student Details</h2>
+        <h2 class="profile-card-title">🛡️ Security Guard Personnel File</h2>
         <button type="button" class="btn-amend-file" onclick="openAmendGuardModal(${g.id})">
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
-          Amend Student File
+          Amend Guard File
         </button>
       </div>
-
       <div class="profile-details-grid">
         <div class="detail-field">
-          <label>Name:</label>
+          <label>Full Name:</label>
           <span class="value-lg">${g.full_name}</span>
         </div>
         <div class="detail-field">
-          <label>Admission No:</label>
+          <label>Employee Number:</label>
           <span class="value">${g.employee_number}</span>
         </div>
         <div class="detail-field">
-          <label>Date of Admission:</label>
-          <span class="value-blue">${formattedHireDate}</span>
+          <label>National ID:</label>
+          <span class="value">${g.national_id || '—'}</span>
         </div>
         <div class="detail-field">
-          <label>Class:</label>
-          <span class="value">${siteName}${shiftName ? ' ' + shiftName : ''}</span>
+          <label>Phone Number:</label>
+          <span class="value">${g.phone || '—'}</span>
+        </div>
+        <div class="detail-field">
+          <label>Email Address:</label>
+          <span class="value">${g.email || '—'}</span>
         </div>
         <div class="detail-field">
           <label>Gender:</label>
-          <span class="value">${g.gender || 'Male'}</span>
+          <span class="value">${g.gender || '—'}</span>
         </div>
         <div class="detail-field">
           <label>Date of Birth:</label>
@@ -445,96 +456,119 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
           <span class="value">${age} years</span>
         </div>
         <div class="detail-field">
-          <label>Birth Cert No:</label>
-          <span class="value">${birthCertNo}</span>
+          <label>Hire Date:</label>
+          <span class="value-blue">${hireDate}</span>
         </div>
         <div class="detail-field">
-          <label>KCPE Marks:</label>
-          <span class="value-bold">${kcpeMarks}</span>
+          <label>Guard Type:</label>
+          <span class="value">${g.is_reliever ? '🔄 Reliever (Floating)' : '🏢 Permanent Post'}</span>
         </div>
         <div class="detail-field">
-          <label>Location:</label>
+          <label>Deployment Site:</label>
+          <span class="value">${siteName}</span>
+        </div>
+        <div class="detail-field">
+          <label>Site Location:</label>
           <span class="value">${siteLocation}</span>
         </div>
         <div class="detail-field">
-          <label>Parent Name:</label>
-          <span class="value">${parentName}</span>
+          <label>Assigned Shift:</label>
+          <span class="value">${shiftName}</span>
         </div>
         <div class="detail-field">
-          <label>Parent's Phone:</label>
-          <span class="value">${parentPhone}</span>
-        </div>
-        <div class="detail-field">
-          <label>Parent's Email:</label>
-          <span class="value">${parentEmail}</span>
+          <label>Supervisor:</label>
+          <span class="value">${g.supervisor_email || 'Unassigned'}</span>
         </div>
       </div>
     </div>
 
-    <!-- Middle Row: Academic Performance & Library History -->
+    <!-- Card Row 2: Academic Qualification & Emergency Contact -->
     <div class="profile-cards-row">
-      <!-- Card 2: Academic Performance -->
+      <!-- Academic Qualification -->
       <div class="profile-card" style="margin-bottom:0;">
         <div class="profile-card-header">
-          <h2 class="profile-card-title">Academic Performance</h2>
+          <h2 class="profile-card-title">🎓 Academic Qualification</h2>
         </div>
-        ${termPerformance.length > 0 ? `
-          <div style="overflow-y:auto; max-height:240px;">
-            <table class="profile-sub-table">
-              <thead>
-                <tr>
-                  <th>Year &amp; Term</th>
-                  <th>Average Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${termPerformance.map(p => `
-                  <tr>
-                    <td style="font-weight:500;">${p.period}</td>
-                    <td style="font-weight:700;">${p.average}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div class="detail-field">
+            <label>Highest Education Level:</label>
+            <span class="value-bold">${educationLevel}</span>
           </div>
-        ` : `
-          <p class="profile-empty-text">No grade records found.</p>
-        `}
+          <div style="background:#F0F9FF; border:1px solid #BAE6FD; border-radius:8px; padding:12px; font-size:13px; color:#0369A1;">
+            ℹ️ Academic qualifications can be updated by amending the guard personnel file.
+          </div>
+        </div>
       </div>
 
-      <!-- Card 3: Library History -->
+      <!-- Emergency Contact -->
       <div class="profile-card" style="margin-bottom:0;">
         <div class="profile-card-header">
-          <h2 class="profile-card-title">Library History</h2>
+          <h2 class="profile-card-title">🆘 Emergency Contact</h2>
         </div>
-        <p class="profile-empty-text">No library transaction records found.</p>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div class="detail-field">
+            <label>Contact Name:</label>
+            <span class="value">${emergencyName}</span>
+          </div>
+          <div class="detail-field">
+            <label>Contact Phone:</label>
+            <span class="value">${emergencyPhone}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Card 4: CBC Performance Summary -->
-    <div class="profile-card" style="margin-top:24px;">
+    <!-- Card 3: Shift Attendance Record -->
+    <div class="profile-card" style="margin-top:24px; margin-bottom:24px;">
       <div class="profile-card-header">
-        <h2 class="profile-card-title">CBC Performance Summary</h2>
+        <h2 class="profile-card-title">📋 Shift Attendance Record</h2>
       </div>
-      <p class="profile-empty-text">No CBC assessment records found for this student.</p>
-      
-      <!-- Statutory & Compensation Detail Summary -->
-      <div style="margin-top:20px; padding-top:16px; border-top:1px solid #F1F5F9; display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; font-size:13px;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom:16px;">
+        <div style="background:#DCFCE7; border:1px solid #BBF7D0; padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#166534;">${presentCount}</div>
+          <div style="font-size:11px; font-weight:700; color:#166534; text-transform:uppercase;">Present</div>
+        </div>
+        <div style="background:#FEE2E2; border:1px solid #FECACA; padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#991B1B;">${absentCount}</div>
+          <div style="font-size:11px; font-weight:700; color:#991B1B; text-transform:uppercase;">Absent</div>
+        </div>
+        <div style="background:#FEF3C7; border:1px solid #FDE68A; padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#92400E;">${lateCount}</div>
+          <div style="font-size:11px; font-weight:700; color:#92400E; text-transform:uppercase;">Late</div>
+        </div>
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#0F172A;">${totalCount}</div>
+          <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Total Shifts</div>
+        </div>
+        <div style="background:#EFF6FF; border:1px solid #BFDBFE; padding:12px; border-radius:8px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#1D4ED8;">${attendancePct}${attendancePct !== '—' ? '%' : ''}</div>
+          <div style="font-size:11px; font-weight:700; color:#1D4ED8; text-transform:uppercase;">Attendance Rate</div>
+        </div>
+      </div>
+      ${totalCount === 0 ? `<p class="profile-empty-text">No shift attendance records found for this guard.</p>` : ''}
+    </div>
+
+    <!-- Card 4: Compensation & Statutory Compliance -->
+    <div class="profile-card">
+      <div class="profile-card-header">
+        <h2 class="profile-card-title">💰 Compensation & Statutory Compliance</h2>
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; font-size:13px;">
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
           <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Basic Salary</span>
           <span style="font-size:15px; font-weight:800; color:#0F172A;">KES ${(g.resolved_basic_salary || g.basic_salary || 15000).toLocaleString()}</span>
-          <span style="font-size:11px; color:#64748B; display:block;">${g.is_reliever ? '🔄 Reliever Guard' : 'Permanent Post'}</span>
+          <span style="font-size:11px; color:#64748B; display:block;">${g.basic_salary ? 'Guard-specific rate' : 'Inherited from site default'}</span>
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
-          <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Statutory Tax PINs</span>
-          <span style="font-size:12px; color:#0F172A; display:block;"><b>KRA:</b> ${g.kra_pin || 'Pending'}</span>
-          <span style="font-size:12px; color:#0F172A; display:block;"><b>NSSF:</b> ${g.nssf_number || 'Pending'}</span>
-          <span style="font-size:12px; color:#0F172A; display:block;"><b>SHIF:</b> ${g.shif_number || 'Pending'}</span>
+          <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Statutory Registrations</span>
+          <span style="font-size:12px; color:#0F172A; display:block;"><b>KRA PIN:</b> ${g.kra_pin || 'Pending'}</span>
+          <span style="font-size:12px; color:#0F172A; display:block;"><b>NSSF No:</b> ${g.nssf_number || 'Pending'}</span>
+          <span style="font-size:12px; color:#0F172A; display:block;"><b>SHIF No:</b> ${g.shif_number || 'Pending'}</span>
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
           <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Payment Method</span>
-          <span style="font-size:13px; font-weight:700; color:#0F172A; display:block;">${g.payment_method}</span>
-          <span style="font-size:12px; color:#64748B; display:block;">${g.payment_method === 'M-Pesa' ? (g.mpesa_number || 'No M-Pesa') : `${g.bank_name || 'Bank'} · ${g.bank_account || '—'}`}</span>
+          <span style="font-size:13px; font-weight:700; color:#0F172A; display:block;">${g.payment_method || '—'}</span>
+          <span style="font-size:12px; color:#64748B; display:block;">${g.payment_method === 'M-Pesa' ? (g.mpesa_number || 'No M-Pesa number') : `${g.bank_name || 'Bank'} · ${g.bank_account || '—'}`}</span>
         </div>
       </div>
     </div>
@@ -3768,3 +3802,417 @@ window.handleAmendGuardSubmit = handleAmendGuardSubmit;
 
 
 
+
+/* ==================== SUPERVISOR MANAGEMENT ==================== */
+let supervisorsCache = [];
+let activeSupervisorId = null;
+
+async function loadSupervisors() {
+  const tbody = document.getElementById('supervisors-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading supervisors...</td></tr>';
+  try {
+    const res = await apiFetch('/supervisors');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to load supervisors');
+    supervisorsCache = data;
+    renderSupervisorsTable();
+    loadSupervisorAttendanceRoll();
+  } catch (e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#EF4444;">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderSupervisorsTable() {
+  const tbody = document.getElementById('supervisors-table-body');
+  const countBadge = document.getElementById('supervisors-count-badge');
+  if (countBadge) countBadge.innerText = `${supervisorsCache.length} Supervisor${supervisorsCache.length === 1 ? '' : 's'}`;
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (supervisorsCache.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">No supervisors configured yet. Click "+ Add Supervisor" to register one.</td></tr>';
+    return;
+  }
+  supervisorsCache.forEach(sup => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>#${sup.id}</b></td>
+      <td>
+        <div style="font-weight:700; color:#0F172A;">${sup.email}</div>
+        <div style="font-size:11px; color:#64748B;">Field Area Operations Supervisor</div>
+      </td>
+      <td>${sup.phone || '<span style="color:#94A3B8;">None</span>'}</td>
+      <td><span class="badge ${sup.status === 'ACTIVE' ? 'badge-active' : 'badge-inactive'}">${sup.status}</span></td>
+      <td>
+        <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">
+          🛡️ ${sup.assigned_guard_count || 0} Guards
+        </span>
+      </td>
+      <td style="display:flex; gap:8px;">
+        <button class="btn btn-primary" style="padding:4px 10px; font-size:12px;" onclick="openSupervisorAssignPanel(${sup.id}, '${sup.email}')">
+          Assign Guards
+        </button>
+        <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="filterSupervisorRollCall(${sup.id}, '${sup.email}')">
+          View Roll
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openAddSupervisorModal() {
+  const modal = document.getElementById('modal-add-supervisor');
+  if (modal) {
+    modal.style.display = 'flex';
+    // Focus the first input field
+    setTimeout(() => {
+      const nameInput = document.getElementById('new-sup-name');
+      if (nameInput) nameInput.focus();
+    }, 50);
+  }
+}
+function closeAddSupervisorModal() {
+  const modal = document.getElementById('modal-add-supervisor');
+  if (modal) modal.style.display = 'none';
+  // clear fields
+  ['new-sup-name','new-sup-email','new-sup-phone','new-sup-password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const err = document.getElementById('new-sup-error');
+  if (err) err.style.display = 'none';
+  const btn = document.getElementById('btn-submit-new-sup');
+  if (btn) {
+    btn.disabled = false;
+    btn.innerText = '+ Create Supervisor';
+  }
+}
+
+async function submitAddSupervisor(event) {
+  if (event) event.preventDefault();
+  const name = document.getElementById('new-sup-name')?.value?.trim();
+  const email = document.getElementById('new-sup-email')?.value?.trim();
+  const phone = document.getElementById('new-sup-phone')?.value?.trim();
+  const password = document.getElementById('new-sup-password')?.value;
+  const errorEl = document.getElementById('new-sup-error');
+  const btn = document.getElementById('btn-submit-new-sup');
+
+  if (!email || !phone) {
+    if (errorEl) {
+      errorEl.innerText = 'Email and phone number are required.';
+      errorEl.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Creating Account...';
+  }
+
+  try {
+    const payload = { full_name: name || email.split('@')[0], email, phone, password: password || undefined };
+    const res = await apiFetch('/supervisors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to create supervisor');
+    
+    alert(`✅ Supervisor account created successfully for ${email}!`);
+    closeAddSupervisorModal();
+    loadSupervisors();
+  } catch (e) {
+    if (errorEl) {
+      errorEl.innerText = e.message;
+      errorEl.style.display = 'block';
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '+ Create Supervisor';
+    }
+  }
+}
+
+async function openSupervisorAssignPanel(supId, supEmail) {
+  activeSupervisorId = supId;
+  const titleEl = document.getElementById('supervisor-assign-name');
+  if (titleEl) titleEl.innerText = supEmail;
+  try {
+    const res = await apiFetch('/guards');
+    const guards = await res.json();
+    if (!res.ok) throw new Error('Failed to load guards directory');
+    const container = document.getElementById('supervisor-assign-guards-list');
+    if (!container) return;
+    container.innerHTML = '';
+    guards.forEach(g => {
+      const checked = g.supervisor_id === supId;
+      const otherSup = g.supervisor_id && g.supervisor_id !== supId ? ` (Under Sup #${g.supervisor_id})` : '';
+      const div = document.createElement('div');
+      div.className = 'assign-guard-item';
+      div.style.padding = '10px 12px';
+      div.style.background = checked ? '#EFF6FF' : '#F8FAFC';
+      div.style.borderRadius = '8px';
+      div.style.border = checked ? '1.5px solid #3B82F6' : '1px solid #E2E8F0';
+      div.style.display = 'flex';
+      div.style.alignItems = 'center';
+      div.style.gap = '10px';
+      div.innerHTML = `
+        <input type="checkbox" data-guard-id="${g.id}" ${checked ? 'checked' : ''} style="cursor:pointer; width:16px; height:16px;" onchange="this.parentElement.style.background=this.checked?'#EFF6FF':'#F8FAFC'; this.parentElement.style.border=this.checked?'1.5px solid #3B82F6':'1px solid #E2E8F0';">
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700; color:#0F172A;">${g.full_name}</div>
+          <div style="font-size:11px; color:#64748B;">${g.employee_number} | ${g.site_name || 'No Site'}${otherSup}</div>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+    const panel = document.getElementById('supervisor-assign-panel');
+    if (panel) {
+      panel.style.display = 'block';
+      panel.scrollIntoView({ behavior: 'smooth' });
+    }
+  } catch (e) {
+    alert('Error opening assign panel: ' + e.message);
+  }
+}
+
+function selectAllSupervisorGuards(select) {
+  const checkBoxes = document.querySelectorAll('#supervisor-assign-guards-list input[type="checkbox"]');
+  checkBoxes.forEach(cb => {
+    cb.checked = select;
+    cb.dispatchEvent(new Event('change'));
+  });
+}
+
+function closeSupervisorAssignPanel() {
+  const panel = document.getElementById('supervisor-assign-panel');
+  if (panel) panel.style.display = 'none';
+  activeSupervisorId = null;
+}
+
+async function saveGuardAssignments() {
+  if (!activeSupervisorId) return;
+  const checkedBoxes = document.querySelectorAll('#supervisor-assign-guards-list input[type="checkbox"]');
+  const selectedIds = [];
+  checkedBoxes.forEach(cb => {
+    if (cb.checked) selectedIds.push(parseInt(cb.getAttribute('data-guard-id')));
+  });
+  try {
+    const res = await apiFetch(`/supervisors/${activeSupervisorId}/assign-guards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guard_ids: selectedIds })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to assign guards');
+    alert(`✅ Successfully assigned ${data.assigned} security guard(s) to supervisor!`);
+    closeSupervisorAssignPanel();
+    loadSupervisors();
+    loadGuards();
+  } catch (e) {
+    alert('Error saving assignments: ' + e.message);
+  }
+}
+
+/* SUPERVISOR ROLL CALL & ATTENDANCE */
+let currentRollCallSupervisorFilter = null;
+
+function filterSupervisorRollCall(supId, supEmail) {
+  currentRollCallSupervisorFilter = supId;
+  const tbody = document.getElementById('supervisor-attendance-table-body');
+  if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:16px; color:#3B82F6;">Filtering roll call for ${supEmail}...</td></tr>`;
+  loadSupervisorAttendanceRoll();
+}
+
+async function loadSupervisorAttendanceRoll() {
+  const dateInput = document.getElementById('supervisor-attendance-date');
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().split('T')[0];
+  }
+  const shiftDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+  const tbody = document.getElementById('supervisor-attendance-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748B;">Loading roll call attendance...</td></tr>';
+
+  try {
+    let url = `/supervisors/attendance?shift_date=${shiftDate}`;
+    if (currentRollCallSupervisorFilter) {
+      url += `&supervisor_id=${currentRollCallSupervisorFilter}`;
+    }
+    const res = await apiFetch(url);
+    const records = await res.json();
+    if (!res.ok) throw new Error(records.detail || 'Failed to fetch attendance roll');
+
+    if (!records || records.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No guards assigned to this supervisor on this date. Use "Assign Guards" above to allocate guards.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    records.forEach(r => {
+      const tr = document.createElement('tr');
+      const st = r.attendance_status || 'NOT_MARKED';
+      const clockIn = r.actual_clock_in ? new Date(r.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '<span style="color:#94A3B8;">Pending</span>';
+
+      tr.innerHTML = `
+        <td><b>${r.full_name}</b></td>
+        <td>${r.employee_number}</td>
+        <td>${r.site_name || 'Unassigned Site'}</td>
+        <td>${r.shift_name || 'Day Shift'}</td>
+        <td>
+          <select class="form-control supervisor-roll-status" data-guard-id="${r.guard_id}" data-shift-id="${r.shift_id || ''}" style="max-width:140px; padding:4px 8px; font-weight:700; ${st==='PRESENT'?'color:#166534; background:#DCFCE7;':st==='ABSENT'?'color:#991B1B; background:#FEE2E2;':st==='LATE'?'color:#92400E; background:#FEF3C7;':''}">
+            <option value="PRESENT" ${st==='PRESENT'?'selected':''}>✅ PRESENT</option>
+            <option value="ABSENT" ${st==='ABSENT'?'selected':''}>❌ ABSENT</option>
+            <option value="LATE" ${st==='LATE'?'selected':''}>⚠️ LATE</option>
+            <option value="NOT_MARKED" ${st==='NOT_MARKED'?'selected':''}>⏳ NOT MARKED</option>
+          </select>
+        </td>
+        <td>${clockIn}</td>
+        <td>
+          <input type="text" class="form-control supervisor-roll-notes" data-guard-id="${r.guard_id}" placeholder="e.g. On-site inspection ok" value="${r.notes || ''}" style="font-size:12px; padding:4px 8px;">
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
+  }
+}
+
+async function saveSupervisorAttendanceRoll() {
+  const dateInput = document.getElementById('supervisor-attendance-date');
+  const shiftDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+  const rows = document.querySelectorAll('#supervisor-attendance-table-body tr');
+  const marks = [];
+
+  rows.forEach(tr => {
+    const sel = tr.querySelector('.supervisor-roll-status');
+    const notesInput = tr.querySelector('.supervisor-roll-notes');
+    if (sel) {
+      const gid = parseInt(sel.getAttribute('data-guard-id'));
+      const shiftId = sel.getAttribute('data-shift-id') ? parseInt(sel.getAttribute('data-shift-id')) : null;
+      const statusVal = sel.value;
+      if (statusVal !== 'NOT_MARKED') {
+        marks.push({
+          guard_id: gid,
+          shift_date: shiftDate,
+          attendance_status: statusVal,
+          shift_id: shiftId,
+          notes: notesInput ? notesInput.value.trim() : null
+        });
+      }
+    }
+  });
+
+  if (marks.length === 0) {
+    alert('Please select attendance status (PRESENT, ABSENT, or LATE) for at least one guard before submitting.');
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/supervisors/mark-attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records: marks })
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.detail || 'Failed to submit attendance roll');
+    alert(`✅ Attendance successfully marked for ${marks.length} guard(s)!`);
+    loadSupervisorAttendanceRoll();
+    loadAttendance(); // sync global attendance tab
+  } catch (err) {
+    alert('Error saving roll call attendance: ' + err.message);
+  }
+}
+
+/* SETTINGS PANEL HELPERS */
+async function loadSettings() {
+  try {
+    const res = await apiFetch('/settings');
+    const settings = await res.json();
+    if (!res.ok) throw new Error('Failed to load settings');
+    // map known keys to inputs
+    const map = {
+      nssf_rate: 'set-nssf-rate',
+      shif_rate: 'set-shif-rate',
+      shif_floor: 'set-shif-floor',
+      housing_levy_rate: 'set-housing-rate',
+      personal_relief: 'set-relief',
+      overtime_multiplier_normal: 'set-ot-normal',
+      overtime_multiplier_holiday: 'set-ot-holiday',
+      company_name: 'set-company-name',
+      company_kra_pin: 'set-company-kra',
+      company_nssf_code: 'set-company-nssf',
+      company_shif_code: 'set-company-shif'
+    };
+    settings.forEach(s => {
+      const el = document.getElementById(map[s.key]);
+      if (el) el.value = s.value;
+    });
+  } catch (e) {
+    alert('Error loading settings: ' + e.message);
+  }
+}
+
+async function handleSaveSettings(event) {
+  event.preventDefault();
+  const payload = { settings: {} };
+  const fields = {
+    nssf_rate: 'set-nssf-rate',
+    shif_rate: 'set-shif-rate',
+    shif_floor: 'set-shif-floor',
+    housing_levy_rate: 'set-housing-rate',
+    personal_relief: 'set-relief',
+    overtime_multiplier_normal: 'set-ot-normal',
+    overtime_multiplier_holiday: 'set-ot-holiday',
+    company_name: 'set-company-name',
+    company_kra_pin: 'set-company-kra',
+    company_nssf_code: 'set-company-nssf',
+    company_shif_code: 'set-company-shif'
+  };
+  for (const [key, id] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    if (el) payload.settings[key] = el.value.trim();
+  }
+  try {
+    const res = await apiFetch('/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to save settings');
+    alert('Settings saved successfully');
+    // optionally refresh UI
+    loadSettings();
+  } catch (e) {
+    alert('Error saving settings: ' + e.message);
+  }
+}
+
+/* GUARD LIST FILTER */
+function filterGuardsTable(searchTerm) {
+  const term = searchTerm.toLowerCase();
+  const rows = document.querySelectorAll('#guards-table-body tr');
+  rows.forEach(row => {
+    const txt = row.innerText.toLowerCase();
+    row.style.display = txt.includes(term) ? '' : 'none';
+  });
+}
+
+// expose globals for HTML onclick attributes
+window.loadSupervisors = loadSupervisors;
+window.renderSupervisorsTable = renderSupervisorsTable;
+window.openAddSupervisorModal = openAddSupervisorModal;
+window.closeAddSupervisorModal = closeAddSupervisorModal;
+window.submitAddSupervisor = submitAddSupervisor;
+window.openSupervisorAssignPanel = openSupervisorAssignPanel;
+window.closeSupervisorAssignPanel = closeSupervisorAssignPanel;
+window.saveGuardAssignments = saveGuardAssignments;
+window.selectAllSupervisorGuards = selectAllSupervisorGuards;
+window.filterSupervisorRollCall = filterSupervisorRollCall;
+window.loadSupervisorAttendanceRoll = loadSupervisorAttendanceRoll;
+window.saveSupervisorAttendanceRoll = saveSupervisorAttendanceRoll;
+window.handleSaveSettings = handleSaveSettings;
+window.filterGuardsTable = filterGuardsTable;
+
+/* Ensure new tab case */
+// (switchTab already checks titles; we add case handling earlier in code if needed)
