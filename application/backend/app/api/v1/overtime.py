@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from application.backend.app.api.deps import get_db, require_admin, get_current_user
 from application.backend.app.models.attendance import Attendance, OvertimeClaim
+from application.backend.app.models.guard import Guard
 from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.schemas.attendance import OvertimeClaimResponse
@@ -26,6 +27,9 @@ def list_overtime_claims(
 
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(OvertimeClaim.guard_id == current_user.guard_id)
+    elif current_user.role == UserRole.SUPERVISOR.value:
+        assigned_guard_ids = db.query(Guard.id).filter(Guard.supervisor_id == current_user.id).subquery()
+        query = query.filter(OvertimeClaim.guard_id.in_(assigned_guard_ids))
 
     if status_filter:
         query = query.filter(OvertimeClaim.status == status_filter.upper())

@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr
 from application.backend.app.models.payroll import PayrollPeriod
 from application.backend.app.models.user import User
 from application.backend.app.models.audit import AuditLog
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/payments", tags=["Payment Schedules"])
 def get_payment_reconciliation(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """
     Financial Reconciliation Endpoint matching Phase 11 Requirements.
@@ -49,7 +49,7 @@ def get_payment_reconciliation(
 def get_bank_schedule(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Retrieve Bank Payment Schedule data matching Screen 14 & Phase 11 requirements."""
     period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()
@@ -73,7 +73,7 @@ def get_bank_schedule(
 def export_bank_schedule_excel(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Export Bank Payment Schedule as CorpSec formatted Excel workbook (.xlsx)."""
     period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()
@@ -109,7 +109,7 @@ def export_bank_schedule_excel(
 def get_mpesa_schedule(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Retrieve M-Pesa Payment Schedule data matching Screen 15 & Phase 11 requirements."""
     period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()
@@ -133,7 +133,7 @@ def get_mpesa_schedule(
 def export_mpesa_schedule_excel(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Export M-Pesa Payment Schedule as CorpSec formatted Excel workbook (.xlsx)."""
     period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()

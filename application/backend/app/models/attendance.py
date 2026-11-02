@@ -28,6 +28,18 @@ class Attendance(Base):
     shift = relationship("Shift")
     site = relationship("Site")
 
+    @property
+    def guard_name(self):
+        return self.guard.full_name if self.guard else None
+
+    @property
+    def guard_employee_number(self):
+        return self.guard.employee_number if self.guard else None
+
+    @property
+    def site_name(self):
+        return self.site.site_name if self.site else None
+
 
 class OvertimeClaim(Base):
     __tablename__ = "overtime_claims"

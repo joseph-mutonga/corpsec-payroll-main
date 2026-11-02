@@ -176,6 +176,8 @@ def list_guards(
 
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(Guard.id == current_user.guard_id)
+    elif current_user.role == UserRole.SUPERVISOR.value:
+        query = query.filter(Guard.supervisor_id == current_user.id)
 
     if status_filter:
         query = query.filter(Guard.status == status_filter.upper())
@@ -211,6 +213,8 @@ def get_guard_detail(
 
     if current_user.role == UserRole.GUARD.value and current_user.guard_id != guard_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view other guard profiles")
+    if current_user.role == UserRole.SUPERVISOR.value and guard.supervisor_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view profiles of guards not assigned to you")
 
     return _format_guard_detail(guard)
 
@@ -231,6 +235,10 @@ def update_guard_profile(
     
     if "site_id" in update_data:
         update_data["primary_site_id"] = update_data.pop("site_id")
+        if ("supervisor_id" not in update_data or not update_data["supervisor_id"]) and update_data["primary_site_id"]:
+            target_site = db.query(Site).filter(Site.id == update_data["primary_site_id"]).first()
+            if target_site and target_site.supervisor_id:
+                update_data["supervisor_id"] = target_site.supervisor_id
 
     for key, value in update_data.items():
         setattr(guard, key, value)

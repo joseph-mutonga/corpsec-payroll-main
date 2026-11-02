@@ -18,12 +18,14 @@ class Site(Base):
     night_allowance = Column(Float, default=200.0, nullable=False)
     transport_allowance = Column(Float, default=100.0, nullable=False)
     housing_allowance = Column(Float, default=150.0, nullable=False)
+    supervisor_id = Column(Integer, ForeignKey("users.id", use_alter=True, name="fk_sites_supervisor_id"), nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
 
     region = relationship("Region", back_populates="sites")
     guards = relationship("Guard", back_populates="site")
+    supervisor = relationship("User", foreign_keys=[supervisor_id], backref="assigned_sites")
 
     @property
     def guard_count(self) -> int:

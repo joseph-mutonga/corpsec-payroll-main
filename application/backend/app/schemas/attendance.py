@@ -41,7 +41,10 @@ class AnomalyResponse(BaseModel):
 class AttendanceResponse(BaseModel):
     id: int
     guard_id: int
+    guard_name: Optional[str] = None
+    guard_employee_number: Optional[str] = None
     site_id: Optional[int] = None
+    site_name: Optional[str] = None
     shift_id: Optional[int] = None
     shift_date: date
     actual_clock_in: Optional[datetime] = None

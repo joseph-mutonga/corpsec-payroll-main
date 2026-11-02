@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin, require_guard, get_current_user
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, require_guard, get_current_user
 from application.backend.app.models.payroll import PayrollPeriod, PayrollRecord, Payslip
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
@@ -244,7 +244,7 @@ def bulk_generate_payslips(
     period_id: int,
     only_active: bool = Query(True),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Bulk generate PDF payslips for a period archived into a single ZIP file (matching Screen 13)."""
     period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()

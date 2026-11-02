@@ -5,12 +5,12 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from application.backend.app.core.database import get_db
-from application.backend.app.models.user import User
+from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.leave import LeaveRequest
 from application.backend.app.models.audit import AuditLog
-from application.backend.app.api.deps import require_admin
+from application.backend.app.api.deps import require_admin, require_admin_or_supervisor, require_admin_or_hr
 
 router = APIRouter()
 
@@ -44,10 +44,15 @@ class UpdateLeaveStatusRequest(BaseModel):
 @router.get("/leave-requests", response_model=List[LeaveAdminResponse])
 def list_admin_leave_requests(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin)
+    admin_user: User = Depends(require_admin_or_supervisor)
 ):
     """Fetch all guard leave requests for Admin management screen."""
-    requests = db.query(LeaveRequest).order_by(LeaveRequest.id.desc()).all()
+    query = db.query(LeaveRequest)
+    if admin_user.role == UserRole.SUPERVISOR.value:
+        assigned_guard_ids = [g[0] for g in db.query(Guard.id).filter(Guard.supervisor_id == admin_user.id).all()]
+        query = query.filter(LeaveRequest.guard_id.in_(assigned_guard_ids))
+
+    requests = query.order_by(LeaveRequest.id.desc()).all()
     results = []
 
     for req in requests:
@@ -119,12 +124,19 @@ def update_leave_request_status(
     leave_id: int,
     payload: UpdateLeaveStatusRequest,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin)
+    admin_user: User = Depends(require_admin_or_supervisor)
 ):
     """Approve or Reject a guard's leave request."""
     req = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).first()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave request not found.")
+
+    guard = db.query(Guard).filter(Guard.id == req.guard_id).first()
+    if admin_user.role == UserRole.SUPERVISOR.value and guard and guard.supervisor_id != admin_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: This leave request belongs to a guard not assigned to you."
+        )
 
     new_status = payload.status.upper().strip()
     if new_status not in ["APPROVED", "REJECTED", "PENDING"]:
@@ -215,7 +227,7 @@ def update_leave_request_status(
 @router.get("/unpaid-leave-deductions", response_model=List[UnpaidLeaveDeductionResponse])
 def list_unpaid_leave_deductions(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin)
+    admin_user: User = Depends(require_admin_or_hr)
 ):
     """Fetch all unpaid leave deduction records for Admin review."""
     deductions = db.query(UnpaidLeaveDeduction).order_by(UnpaidLeaveDeduction.id.desc()).all()
@@ -255,7 +267,7 @@ def list_unpaid_leave_deductions(
 def apply_unpaid_leave_deduction(
     deduction_id: int,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin)
+    admin_user: User = Depends(require_admin_or_hr)
 ):
     """Approve/apply an unpaid leave deduction for inclusion in the next payroll calculation."""
     ded = db.query(UnpaidLeaveDeduction).filter(UnpaidLeaveDeduction.id == deduction_id).first()
@@ -316,7 +328,7 @@ def dismiss_unpaid_leave_deduction(
     deduction_id: int,
     payload: DismissDeductionRequest,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin)
+    admin_user: User = Depends(require_admin_or_hr)
 ):
     """Dismiss/reject an unpaid leave deduction so it is excluded from payroll."""
     if not payload.reason or len(payload.reason.strip()) < 3:

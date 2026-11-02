@@ -31,10 +31,10 @@ def test_login_rate_limiting(client):
     from application.backend.app.core.limiter import limiter
     limiter.enabled = True
     try:
-        for _ in range(5):
+        for _ in range(60):
             client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
         
-        # 6th attempt should be blocked with 429
+        # 61st attempt should be blocked with 429
         blocked_resp = client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
         assert blocked_resp.status_code == 429
         assert "Too many login attempts" in blocked_resp.json()["detail"]

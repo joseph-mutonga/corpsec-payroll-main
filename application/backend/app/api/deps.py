@@ -1,5 +1,5 @@
-from typing import Generator
-from fastapi import Depends, HTTPException, status
+from typing import Generator, Optional
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -20,17 +20,19 @@ def get_db() -> Generator:
 
 def get_current_user(
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    token: Optional[str] = Depends(oauth2_scheme),
+    token_query: Optional[str] = Query(None, alias="token")
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if not token:
+    effective_token = token or token_query
+    if not effective_token:
         raise credentials_exception
 
-    payload = decode_access_token(token)
+    payload = decode_access_token(effective_token)
     if payload is None:
         raise credentials_exception
 
@@ -79,9 +81,18 @@ def require_supervisor(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_admin_or_supervisor(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in [UserRole.ADMIN.value, UserRole.SUPERVISOR.value]:
+    if current_user.role not in [UserRole.ADMIN.value, UserRole.HR.value, UserRole.SUPERVISOR.value]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or Supervisor privileges required."
+            detail="Admin, HR or Supervisor privileges required."
+        )
+    return current_user
+
+
+def require_admin_or_hr(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in [UserRole.ADMIN.value, UserRole.HR.value]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative privileges required (Admin or HR)."
         )
     return current_user

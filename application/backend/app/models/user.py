@@ -7,6 +7,7 @@ from application.backend.app.core.database import Base
 
 class UserRole(str, PyEnum):
     ADMIN = "ADMIN"
+    HR = "HR"
     SUPERVISOR = "SUPERVISOR"
     GUARD = "GUARD"
 
@@ -21,6 +22,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String(255), nullable=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     phone = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)

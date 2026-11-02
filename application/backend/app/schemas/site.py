@@ -8,6 +8,7 @@ class SiteCreate(BaseModel):
     location: str
     client_name: str
     region_id: Optional[int] = None
+    supervisor_id: Optional[int] = None
     basic_salary: float = Field(default=15000.0, gt=0, description="Default basic salary for guards at this site")
     daily_rate: float = 1300.0
     night_allowance: float = 200.0
@@ -20,6 +21,7 @@ class SiteUpdate(BaseModel):
     location: Optional[str] = None
     client_name: Optional[str] = None
     region_id: Optional[int] = None
+    supervisor_id: Optional[int] = None
     basic_salary: Optional[float] = None
     daily_rate: Optional[float] = None
     night_allowance: Optional[float] = None
@@ -55,6 +57,9 @@ class SiteResponse(BaseModel):
     client_name: str
     region_id: Optional[int] = None
     region_name: Optional[str] = None
+    supervisor_id: Optional[int] = None
+    supervisor_name: Optional[str] = None
+    supervisor_email: Optional[str] = None
     basic_salary: float = 15000.0
     daily_rate: float
     night_allowance: float

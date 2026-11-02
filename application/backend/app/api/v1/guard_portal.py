@@ -196,7 +196,12 @@ def report_site_incident(
     guard = db.query(Guard).filter(Guard.id == guard_user.guard_id).first()
     site_id = getattr(payload, 'site_id', None) or (guard.primary_site_id if guard and guard.primary_site_id else 1)
 
-    ref_num = f"INC-{int(datetime.now().timestamp()) % 10000:04d}"
+    now = datetime.now()
+    count_inc = db.query(Incident).count() + 1
+    ref_num = f"INC-{now.year}-{count_inc:04d}"
+    while db.query(Incident).filter(Incident.reference_number == ref_num).first():
+        count_inc += 1
+        ref_num = f"INC-{now.year}-{count_inc:04d}"
 
     inc_date = getattr(payload, 'incident_date', None) or date.today()
     inc_time = getattr(payload, 'incident_time', None) or datetime.now().strftime("%H:%M")

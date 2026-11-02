@@ -7,7 +7,7 @@ from application.backend.app.api.deps import get_db, require_admin, get_current_
 from application.backend.app.models.site import Site
 from application.backend.app.models.region import Region
 from application.backend.app.models.guard import Guard
-from application.backend.app.models.user import User
+from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.schemas.site import (
     SiteCreate, SiteUpdate, SiteResponse, BulkSalaryChangeRequest, BulkSalaryChangePreviewResponse
@@ -17,13 +17,22 @@ router = APIRouter(prefix="/sites", tags=["Client Sites & Billing Rates"])
 
 
 def _format_site(site: Site) -> dict:
+    sup_name = None
+    sup_email = None
+    if getattr(site, "supervisor", None):
+        sup_name = site.supervisor.full_name or site.supervisor.email
+        sup_email = site.supervisor.email
+
     return {
         "id": site.id,
         "site_name": site.site_name,
         "location": site.location,
         "client_name": site.client_name,
         "region_id": site.region_id,
-        "region_name": site.region.name if site.region else None,
+        "region_name": site.region.name if getattr(site, "region", None) else None,
+        "supervisor_id": site.supervisor_id,
+        "supervisor_name": sup_name,
+        "supervisor_email": sup_email,
         "basic_salary": site.basic_salary,
         "daily_rate": site.daily_rate,
         "night_allowance": site.night_allowance,
@@ -40,7 +49,7 @@ def create_client_site(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """Create a new Client Site with basic salary, daily rates & allowances."""
+    """Create a new Client Site with basic salary, daily rates, allowances, and assigned supervisor."""
     existing = db.query(Site).filter(Site.site_name == payload.site_name).first()
     if existing:
         raise HTTPException(
@@ -53,11 +62,17 @@ def create_client_site(
         if not region:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Region #{payload.region_id} not found")
 
+    if payload.supervisor_id:
+        sup_user = db.query(User).filter(User.id == payload.supervisor_id, User.role == UserRole.SUPERVISOR.value).first()
+        if not sup_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{payload.supervisor_id} not found")
+
     site = Site(
         site_name=payload.site_name,
         location=payload.location,
         client_name=payload.client_name,
         region_id=payload.region_id,
+        supervisor_id=payload.supervisor_id,
         basic_salary=payload.basic_salary,
         daily_rate=payload.daily_rate,
         night_allowance=payload.night_allowance,
@@ -75,7 +90,7 @@ def create_client_site(
         action="CREATE_SITE",
         target_entity="Site",
         target_id=str(site.id),
-        new_values=f"Created site '{site.site_name}' (Basic Salary: KES {site.basic_salary})",
+        new_values=f"Created site '{site.site_name}' (Basic Salary: KES {site.basic_salary}, Supervisor: {site.supervisor_id})",
         reason="Administrative onboarding"
     )
     db.add(audit_entry)
@@ -88,13 +103,16 @@ def create_client_site(
 def list_client_sites(
     search: Optional[str] = Query(None),
     region_id: Optional[int] = Query(None),
+    supervisor_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """List client sites."""
-    query = db.query(Site).options(joinedload(Site.region))
+    query = db.query(Site).options(joinedload(Site.region), joinedload(Site.supervisor))
     if region_id:
         query = query.filter(Site.region_id == region_id)
+    if supervisor_id:
+        query = query.filter(Site.supervisor_id == supervisor_id)
     if search:
         query = query.filter(
             (Site.site_name.ilike(f"%{search}%")) |
@@ -112,34 +130,64 @@ def get_site_details(
     current_user: User = Depends(get_current_user)
 ):
     """Get client site details."""
-    site = db.query(Site).options(joinedload(Site.region)).filter(Site.id == site_id).first()
+    site = db.query(Site).options(joinedload(Site.region), joinedload(Site.supervisor)).filter(Site.id == site_id).first()
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
     return _format_site(site)
 
 
 @router.put("/{site_id}", response_model=SiteResponse)
+@router.patch("/{site_id}", response_model=SiteResponse)
 def update_site_rates(
     site_id: int,
     payload: SiteUpdate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """Update site basic salary, billing rates & allowances."""
-    site = db.query(Site).options(joinedload(Site.region)).filter(Site.id == site_id).first()
+    """Update site details, basic salary, billing rates, allowances, and assigned supervisor."""
+    site = db.query(Site).options(joinedload(Site.region), joinedload(Site.supervisor)).filter(Site.id == site_id).first()
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "site_name" in update_data and update_data["site_name"]:
+        existing_dup = db.query(Site).filter(Site.site_name == update_data["site_name"], Site.id != site_id).first()
+        if existing_dup:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Another site with name '{update_data['site_name']}' already exists."
+            )
+
     if "region_id" in update_data and update_data["region_id"] is not None:
         region = db.query(Region).filter(Region.id == update_data["region_id"]).first()
         if not region:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Region #{update_data['region_id']} not found")
 
+    old_supervisor_id = site.supervisor_id
+    new_supervisor_id = update_data.get("supervisor_id") if "supervisor_id" in update_data else old_supervisor_id
+
+    if "supervisor_id" in update_data and new_supervisor_id is not None:
+        sup_user = db.query(User).filter(User.id == new_supervisor_id, User.role == UserRole.SUPERVISOR.value).first()
+        if not sup_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{new_supervisor_id} not found")
+
     for key, value in update_data.items():
         setattr(site, key, value)
 
     site.updated_at = datetime.now()
+
+    # Synchronize guards deployed at this site if supervisor was updated
+    if "supervisor_id" in update_data and new_supervisor_id != old_supervisor_id:
+        if new_supervisor_id is not None:
+            db.query(Guard).filter(Guard.primary_site_id == site.id, Guard.status == "ACTIVE").update(
+                {Guard.supervisor_id: new_supervisor_id},
+                synchronize_session=False
+            )
+        else:
+            db.query(Guard).filter(Guard.primary_site_id == site.id, Guard.supervisor_id == old_supervisor_id).update(
+                {Guard.supervisor_id: None},
+                synchronize_session=False
+            )
 
     audit_entry = AuditLog(
         user_id=admin.id,
@@ -149,7 +197,7 @@ def update_site_rates(
         target_entity="Site",
         target_id=str(site.id),
         new_values=str(update_data),
-        reason="Updated site basic salary / billing rates"
+        reason="Updated site details / supervisor / billing rates"
     )
     db.add(audit_entry)
     db.commit()
@@ -202,5 +250,5 @@ def execute_bulk_salary_change(
         new_daily_rate=new_daily,
         new_night_allowance=new_night,
         applied=not payload.is_preview,
-        effective_date=str(payload.effective_date)
+        effective_date=payload.effective_date
     )

@@ -69,6 +69,8 @@ def sync_db_schema():
                 cursor.execute("ALTER TABLE sites ADD COLUMN region_id INTEGER;")
             if "basic_salary" not in site_cols:
                 cursor.execute("ALTER TABLE sites ADD COLUMN basic_salary FLOAT DEFAULT 15000.0;")
+            if "supervisor_id" not in site_cols:
+                cursor.execute("ALTER TABLE sites ADD COLUMN supervisor_id INTEGER;")
 
         # Guards additional columns check
         if guard_cols:
@@ -125,6 +127,24 @@ def sync_db_schema():
         guard_cols_v2 = [c[1] for c in cursor.fetchall()]
         if guard_cols_v2 and "supervisor_id" not in guard_cols_v2:
             cursor.execute("ALTER TABLE guards ADD COLUMN supervisor_id INTEGER;")
+
+        # 8. Asset allocations columns check
+        cursor.execute("PRAGMA table_info(asset_allocations);")
+        alloc_cols = [c[1] for c in cursor.fetchall()]
+        if alloc_cols and "staff_id" not in alloc_cols:
+            cursor.execute("ALTER TABLE asset_allocations ADD COLUMN staff_id INTEGER;")
+
+        # 9. Assets columns check
+        cursor.execute("PRAGMA table_info(assets);")
+        asset_cols = [c[1] for c in cursor.fetchall()]
+        if asset_cols and "assigned_to_staff_id" not in asset_cols:
+            cursor.execute("ALTER TABLE assets ADD COLUMN assigned_to_staff_id INTEGER;")
+
+        # 10. Inventory transactions columns check
+        cursor.execute("PRAGMA table_info(inventory_transactions);")
+        inv_cols = [c[1] for c in cursor.fetchall()]
+        if inv_cols and "issued_to_staff_id" not in inv_cols:
+            cursor.execute("ALTER TABLE inventory_transactions ADD COLUMN issued_to_staff_id INTEGER;")
 
         conn.commit()
         conn.close()

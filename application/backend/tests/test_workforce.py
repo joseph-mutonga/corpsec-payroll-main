@@ -156,3 +156,103 @@ def test_list_and_create_shifts(client):
     create_resp = client.post("/api/v1/shifts", json=new_shift_payload, headers=headers)
     assert create_resp.status_code == 201
     assert create_resp.json()["name"] == "Special Event Shift"
+
+
+def test_update_site_rates_and_supervisor_assignment(client, db):
+    headers = get_admin_headers(client)
+
+    # 1. Create a supervisor
+    sup_payload = {
+        "full_name": "Site Ops Supervisor",
+        "email": "siteops.sup@corpsec.co.ke",
+        "phone": "0733112233",
+        "password": "password123"
+    }
+    sup_resp = client.post("/api/v1/supervisors", json=sup_payload, headers=headers)
+    assert sup_resp.status_code == 201
+    sup_id = sup_resp.json()["id"]
+
+    # 2. Get Nairobi Hospital site
+    sites = client.get("/api/v1/sites", headers=headers).json()
+    site = next(s for s in sites if s["site_name"] == "Nairobi Hospital")
+    site_id = site["id"]
+
+    # 3. Update site with new rates and assign supervisor
+    update_payload = {
+        "daily_rate": 1550.0,
+        "basic_salary": 17500.0,
+        "night_allowance": 250.0,
+        "supervisor_id": sup_id
+    }
+    update_resp = client.put(f"/api/v1/sites/{site_id}", json=update_payload, headers=headers)
+    assert update_resp.status_code == 200
+    updated_site = update_resp.json()
+    assert updated_site["daily_rate"] == 1550.0
+    assert updated_site["basic_salary"] == 17500.0
+    assert updated_site["supervisor_id"] == sup_id
+    assert updated_site["supervisor_name"] == "Site Ops Supervisor"
+
+    # Verify guards deployed at Nairobi Hospital were synced with this supervisor
+    guards = client.get(f"/api/v1/guards?site_id={site_id}", headers=headers).json()
+    assert len(guards) > 0
+    for g in guards:
+        assert g["supervisor_id"] == sup_id
+
+
+def test_supervisor_site_allocation_flow(client, db):
+    headers = get_admin_headers(client)
+
+    # 1. Create another supervisor
+    sup_payload = {
+        "full_name": "Sector Lead Supervisor",
+        "email": "sector.lead@corpsec.co.ke",
+        "phone": "0744556677",
+        "password": "password123"
+    }
+    sup_resp = client.post("/api/v1/supervisors", json=sup_payload, headers=headers)
+    assert sup_resp.status_code == 201
+    sup_id = sup_resp.json()["id"]
+
+    # 2. Get two sites
+    sites = client.get("/api/v1/sites", headers=headers).json()
+    assert len(sites) >= 2
+    site_ids = [sites[0]["id"], sites[1]["id"]]
+
+    # 3. Assign sites to supervisor
+    assign_resp = client.post(
+        f"/api/v1/supervisors/{sup_id}/assign-sites",
+        json={"site_ids": site_ids},
+        headers=headers
+    )
+    assert assign_resp.status_code == 200
+    data = assign_resp.json()
+    assert data["assigned_sites"] == 2
+
+    # 4. Query supervisor sites
+    list_sites_resp = client.get(f"/api/v1/supervisors/{sup_id}/sites", headers=headers)
+    assert list_sites_resp.status_code == 200
+    assigned_sites = list_sites_resp.json()
+    assert len(assigned_sites) == 2
+
+    # 5. Check supervisor list reflects site count
+    sups_resp = client.get("/api/v1/supervisors", headers=headers)
+    sups = sups_resp.json()
+    lead_sup = next(s for s in sups if s["id"] == sup_id)
+    assert lead_sup["assigned_site_count"] == 2
+
+    # 6. Login as supervisor and verify my-guards includes site guards
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": "sector.lead@corpsec.co.ke", "password": "password123"}
+    )
+    assert login_resp.status_code == 200
+    sup_token = login_resp.json()["access_token"]
+    sup_headers = {"Authorization": f"Bearer {sup_token}"}
+
+    my_guards_resp = client.get("/api/v1/supervisors/my-guards", headers=sup_headers)
+    assert my_guards_resp.status_code == 200
+    my_guards = my_guards_resp.json()
+    # Should include guards from the 2 assigned sites
+    assert len(my_guards) >= 1
+    assert any(g["site_id"] in site_ids for g in my_guards)
+

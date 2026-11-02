@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from application.backend.app.api.deps import get_db, require_admin, get_current_user
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, get_current_user
 from application.backend.app.models.payroll import (
     PayrollPeriod, PayrollRecord, PayrollError, Payslip, BankPaymentSchedule, BankPaymentItem, UnpaidLeaveDeduction
 )
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/payroll", tags=["Payroll Calculation Engine"])
 def create_payroll_period(
     payload: PayrollPeriodCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Create a new payroll period (Screen 11)."""
     existing = db.query(PayrollPeriod).filter(
@@ -72,7 +72,7 @@ def create_payroll_period(
 @router.get("/periods", response_model=List[PayrollPeriodResponse])
 def list_payroll_periods(
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Fetch all payroll periods."""
     return db.query(PayrollPeriod).order_by(PayrollPeriod.year.desc(), PayrollPeriod.month.desc()).all()
@@ -82,7 +82,7 @@ def list_payroll_periods(
 def execute_payroll_calculation(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """
     Guided Payroll Engine Step: Execute calculations (Screen 11).
@@ -329,7 +329,7 @@ def execute_payroll_calculation(
 def get_payroll_records(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Gross-to-Net Payroll Review Table (Screen 11)."""
     import json
@@ -400,7 +400,7 @@ def get_payroll_records(
 def get_payroll_validation_errors(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Pre-payroll Error Table matching Screen 11."""
     errors = db.query(PayrollError).options(
@@ -429,7 +429,7 @@ def resolve_payroll_validation_error(
     error_id: int,
     payload: ResolveErrorRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Resolve or Ignore Pre-Payroll Error with mandatory audit trail (Screen 11)."""
     err = db.query(PayrollError).filter(PayrollError.id == error_id).first()
@@ -462,7 +462,7 @@ def ignore_payroll_validation_error(
     error_id: int,
     payload: ResolveErrorRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Ignore Pre-Payroll Error with mandatory audit trail (Screen 11)."""
     payload.status = "IGNORED"
@@ -473,7 +473,7 @@ def ignore_payroll_validation_error(
 def confirm_and_lock_payroll(
     period_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """
     Lock & Confirm Payroll Period (Screen 11).

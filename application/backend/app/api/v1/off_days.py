@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin, get_current_user
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_supervisor, get_current_user
 from application.backend.app.models.off_day import OffDayAllowance, OffDayRequest, RelieverAssignment
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
@@ -146,7 +146,8 @@ def submit_off_day_request(
         OffDayAllowance.month == req_month
     ).first()
 
-    allowed_count = allowance.days_allowed if allowance else 0
+    # Default statutory off-day allowance is 4 days per calendar month
+    allowed_count = allowance.days_allowed if allowance else 4
 
     # Calculate already used/pending off days for this month
     existing_requests = db.query(OffDayRequest).filter(
@@ -192,6 +193,9 @@ def list_off_day_requests(
     query = db.query(OffDayRequest)
     if current_user.role == "GUARD":
         query = query.filter(OffDayRequest.guard_id == current_user.guard_id)
+    elif current_user.role == "SUPERVISOR":
+        assigned_guard_ids = db.query(Guard.id).filter(Guard.supervisor_id == current_user.id).subquery()
+        query = query.filter(OffDayRequest.guard_id.in_(assigned_guard_ids))
     elif guard_id:
         query = query.filter(OffDayRequest.guard_id == guard_id)
 
@@ -207,7 +211,7 @@ def approve_off_day_request(
     request_id: int,
     payload: OffDayRequestApprovePayload,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_supervisor)
 ):
     """
     Approve an off-day request.
@@ -216,6 +220,13 @@ def approve_off_day_request(
     req = db.query(OffDayRequest).filter(OffDayRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Off-day request not found")
+
+    guard = db.query(Guard).filter(Guard.id == req.guard_id).first()
+    if admin.role == "SUPERVISOR" and guard and guard.supervisor_id != admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: This guard is not assigned to you."
+        )
 
     if req.status != "PENDING_REVIEW":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Request is already {req.status}")
@@ -297,12 +308,19 @@ def reject_off_day_request(
     request_id: int,
     payload: OffDayRequestRejectPayload,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_supervisor)
 ):
     """Reject an off-day request."""
     req = db.query(OffDayRequest).filter(OffDayRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Off-day request not found")
+
+    guard = db.query(Guard).filter(Guard.id == req.guard_id).first()
+    if admin.role == "SUPERVISOR" and guard and guard.supervisor_id != admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: This guard is not assigned to you."
+        )
 
     if req.status != "PENDING_REVIEW":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Request is already {req.status}")

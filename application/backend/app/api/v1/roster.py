@@ -3,7 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr
 from application.backend.app.models.roster import RosterPattern, RosterAssignment
 from application.backend.app.models.user import User
 from application.backend.app.models.audit import AuditLog
@@ -24,7 +24,7 @@ def get_roster_grid_matrix(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Retrieve monthly shift roster grid matrix for Admin UI."""
     today = date.today()
@@ -41,7 +41,7 @@ def get_roster_grid_matrix(
 def set_guard_recurring_pattern(
     payload: RosterPatternCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Set or update a guard's recurring shift roster pattern."""
     pattern = create_or_update_pattern(db, payload)
@@ -66,7 +66,7 @@ def set_guard_recurring_pattern(
 def set_guard_single_day_override(
     payload: RosterOverrideCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Set a single-date shift roster override for a guard."""
     assignment = create_or_update_override(db, payload)
@@ -97,7 +97,7 @@ def set_guard_single_day_override(
 def delete_roster_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Delete a roster assignment or override."""
     assignment = db.query(RosterAssignment).filter(RosterAssignment.id == assignment_id).first()

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication & Access Control"])
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("5/15minutes")
+@limiter.limit("60/15minutes")
 def login_for_access_token(
     request: Request,
     payload: LoginRequest,
@@ -105,7 +105,7 @@ def login_for_access_token(
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("5/15minutes")
+@limiter.limit("60/15minutes")
 def guard_login(
     request: Request,
     payload: GuardLoginRequest,

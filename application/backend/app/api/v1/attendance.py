@@ -279,10 +279,13 @@ def list_attendance_records(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch attendance records matching Screen 9."""
-    query = db.query(Attendance)
+    query = db.query(Attendance).options(joinedload(Attendance.guard), joinedload(Attendance.site))
 
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(Attendance.guard_id == current_user.guard_id)
+    elif current_user.role == UserRole.SUPERVISOR.value:
+        assigned_guard_ids = [g[0] for g in db.query(Guard.id).filter(Guard.supervisor_id == current_user.id).all()]
+        query = query.filter(Attendance.guard_id.in_(assigned_guard_ids))
     elif guard_id:
         query = query.filter(Attendance.guard_id == guard_id)
 

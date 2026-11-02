@@ -183,21 +183,33 @@ body.portal-logged-in .install-app-banner {
   text-decoration: none;
   font-size: 11px;
   font-weight: 600;
-  gap: 4px;
-  width: 20%;
-  height: 100%;
+  gap: 3px;
+  width: 19%;
+  height: calc(100% - 12px);
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-tab:hover {
+  background: #F8FAFC;
+  color: #0F172A;
 }
 
 .nav-tab.active {
   color: #7C3AED;
-  font-weight: 700;
+  font-weight: 800;
+  background: #F3E8FF;
 }
 
 .nav-tab-icon {
   font-size: 20px;
   line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.nav-tab.active .nav-tab-icon {
+  transform: scale(1.15);
 }
 
 /* Cards & Section Panels — Floating Pastel Cards */
@@ -289,39 +301,104 @@ body.portal-logged-in .install-app-banner {
   background-color: #DC2626;
 }
 
-/* Quick Action Tiles */
+/* Quick Action Tiles — Modern Pastel Floating Cards */
 .action-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-top: 12px;
+  gap: 14px;
+  margin-top: 14px;
 }
 
 .action-tile {
-  background: #F8FAFC;
+  background: #FFFFFF;
   border: 1px solid #E2E8F0;
-  border-radius: 16px;
-  padding: 18px;
+  border-radius: 18px;
+  padding: 18px 14px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
 }
 
 .action-tile:hover {
-  background: #F3E8FF;
-  border-color: #7C3AED;
-  transform: translateY(-2px);
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.08);
 }
 
-.action-icon {
-  font-size: 26px;
-  margin-bottom: 6px;
+.action-tile:active {
+  transform: translateY(-1px);
+}
+
+.action-icon-bubble {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 10px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.action-tile:hover .action-icon-bubble {
+  transform: scale(1.1);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.bubble-peach {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  border: 1.5px solid #FED7AA;
+  color: #EA580C;
+}
+
+.bubble-rose {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
+  border: 1.5px solid #FECDD3;
+  color: #E11D48;
+}
+
+.bubble-blue {
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  border: 1.5px solid #BFDBFE;
+  color: #2563EB;
+}
+
+.bubble-purple {
+  background: linear-gradient(135deg, #FAF5FF 0%, #F3E8FF 100%);
+  border: 1.5px solid #E9D5FF;
+  color: #7C3AED;
+}
+
+.bubble-emerald {
+  background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+  border: 1.5px solid #A7F3D0;
+  color: #059669;
+}
+
+.bubble-cyan {
+  background: linear-gradient(135deg, #ECFEFF 0%, #CFFAFE 100%);
+  border: 1.5px solid #BAE6FD;
+  color: #0891B2;
 }
 
 .action-label {
   font-size: 13px;
-  font-weight: 700;
-  color: #1E293B;
+  font-weight: 800;
+  color: #0F172A;
+  margin-bottom: 2px;
+}
+
+.action-subtext {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 500;
 }
 
 /* Forms */

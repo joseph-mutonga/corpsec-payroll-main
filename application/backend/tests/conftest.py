@@ -23,10 +23,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from application.backend.app.core.database import Base, get_db, engine
+import application.backend.app.models  # Ensure all SQLAlchemy models are registered
 from application.backend.app.services.seed_service import seed_initial_data
 from application.backend.app.main import app
 
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
 
 
 @pytest.fixture(scope="function")
