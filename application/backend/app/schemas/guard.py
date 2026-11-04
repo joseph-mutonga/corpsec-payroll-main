@@ -20,6 +20,7 @@ class GuardCreate(BaseModel):
     hire_date: date
     basic_salary: Union[float, None] = None  # None -> inherits site basic salary; set -> per-guard override
     is_reliever: bool = False
+    is_super_guard: bool = False
     
     payment_method: str = "Bank Transfer"  # Bank Transfer or M-Pesa
     bank_name: Optional[str] = None
@@ -29,6 +30,12 @@ class GuardCreate(BaseModel):
     nssf_number: Optional[str] = None
     shif_number: Optional[str] = None
     kra_pin: Optional[str] = None
+
+    education_level: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    blood_group: Optional[str] = None
+    next_of_kin: Optional[str] = None
 
 
 class GuardUpdate(BaseModel):
@@ -44,6 +51,7 @@ class GuardUpdate(BaseModel):
     supervisor_id: Optional[int] = None
     basic_salary: Optional[float] = None
     is_reliever: Optional[bool] = None
+    is_super_guard: Optional[bool] = None
     payment_method: Optional[str] = None
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
@@ -51,6 +59,11 @@ class GuardUpdate(BaseModel):
     nssf_number: Optional[str] = None
     shif_number: Optional[str] = None
     kra_pin: Optional[str] = None
+    education_level: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    blood_group: Optional[str] = None
+    next_of_kin: Optional[str] = None
 
 
 class GuardDeactivateRequest(BaseModel):
@@ -74,6 +87,7 @@ class GuardResponse(BaseModel):
     basic_salary: Optional[float] = None
     resolved_basic_salary: Optional[float] = None
     is_reliever: bool = False
+    is_super_guard: bool = False
     payment_method: str
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
@@ -83,6 +97,11 @@ class GuardResponse(BaseModel):
     kra_pin: Optional[str] = None
     status: str
     deactivation_reason: Optional[str] = None
+    education_level: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    blood_group: Optional[str] = None
+    next_of_kin: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

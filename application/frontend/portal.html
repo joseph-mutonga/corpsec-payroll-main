@@ -135,54 +135,39 @@
 
 
         <!-- Clock In/Out Large Action Button -->
-
         <div class="clock-container">
-
           <button id="btn-clock-action" class="btn-clock clock-in" disabled>
-
             ⏳ Loading clock status...
-
           </button>
-
         </div>
 
-      </div>
-
-
-
-      <!-- Latest Payslip Tile -->
-
-      <div class="portal-card">
-
-        <div class="card-title">
-
-          <span>💵 Latest Payslip Summary</span>
-
-          <span style="font-size:12px; color:#64748B;" id="dash-pay-period">--</span>
-
-        </div>
-
-        <div style="display:flex; align-items:center; justify-content:space-between; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:14px;">
-
-          <div>
-
-            <div style="font-size:12px; color:#1E40AF; font-weight:600;">Net Monthly Salary</div>
-
-            <div style="font-size:20px; font-weight:800; color:#1E3A8A;" id="dash-net-pay">KES 0.00</div>
-
+        <!-- 200m Geofence Perimeter Verification Notice -->
+        <div id="site-geofence-banner" style="margin-top:14px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:10px 14px; display:flex; align-items:flex-start; gap:10px;">
+          <div style="font-size:18px; line-height:1;">📍</div>
+          <div style="flex:1;">
+            <div style="font-size:12px; font-weight:700; color:#0F172A;" id="geo-perimeter-heading">Site Geofence Radius Verification</div>
+            <div id="geo-perimeter-status" style="font-size:11px; color:#64748B; margin-top:2px;">
+              Guards must be within 200m of the site coordinates to clock in. GPS location is acquired automatically on tap.
+            </div>
           </div>
-
-          <button class="btn-submit" style="width:auto; padding:8px 14px; font-size:12px;" onclick="downloadLatestPayslip()">📄 Download PDF</button>
-
         </div>
 
       </div>
 
-
+      <!-- Super Guard Site Announcement Banner (visible if logged in as Super Guard) -->
+      <div id="super-guard-notice-card" class="portal-card" style="display:none; background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color:#FFFFFF; border:1px solid #334155;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:11px; font-weight:800; color:#38BDF8; letter-spacing:0.5px; text-transform:uppercase;">Super Guard Mandate</span>
+          <span class="status-badge" style="background:#0284C7; color:#FFFFFF;">SITE MANDATE</span>
+        </div>
+        <div style="font-size:14px; font-weight:700; color:#F8FAFC; margin-bottom:4px;" id="sg-dash-banner-site">Assigned Site</div>
+        <p style="font-size:12px; color:#CBD5E1; margin:0 0 10px 0; line-height:1.4;">
+          You hold the operational authorization to clock in and clock out guards stationed at this site who do not have a smartphone.
+        </p>
+        <button class="btn-submit" style="width:100%; background:#0284C7; font-size:12px; padding:8px 12px;" onclick="switchPortalTab('super-guard')">🛡️ Open Super Guard Register</button>
+      </div>
 
       <!-- Quick Action Tiles -->
-
-            <!-- Quick Action Tiles -->
       <div class="portal-card">
         <div class="card-title">🚀 Quick Actions</div>
         <div class="action-grid">
@@ -196,10 +181,10 @@
             <div class="action-label">Report Incident</div>
             <div class="action-subtext">Safety & site alerts</div>
           </div>
-          <div class="action-tile" onclick="switchPortalTab('payslips')">
-            <div class="action-icon-bubble bubble-blue">📄</div>
-            <div class="action-label">My Payslips</div>
-            <div class="action-subtext">Salary slips & P9</div>
+          <div class="action-tile" id="qa-super-guard-tile" style="display:none;" onclick="switchPortalTab('super-guard')">
+            <div class="action-icon-bubble bubble-blue">🛡️</div>
+            <div class="action-label">Super Guard</div>
+            <div class="action-subtext">Clock in non-smartphone guards</div>
           </div>
           <div class="action-tile" onclick="switchPortalTab('profile')">
             <div class="action-icon-bubble bubble-purple">👤</div>
@@ -209,37 +194,7 @@
         </div>
       </div>
 
-          <div class="action-tile" onclick="switchPortalTab('incidents')">
-
-            <div class="action-icon">🚨</div>
-
-            <div class="action-label">Report Incident</div>
-
-          </div>
-
-          <div class="action-tile" onclick="switchPortalTab('payslips')">
-
-            <div class="action-icon">📄</div>
-
-            <div class="action-label">My Payslips</div>
-
-          </div>
-
-          <div class="action-tile" onclick="switchPortalTab('profile')">
-
-            <div class="action-icon">👤</div>
-
-            <div class="action-label">My Profile</div>
-
-          </div>
-
-        </div>
-
-      </div>
-
     </section>
-
-
 
     <!-- TAB 2: LEAVE & OFF DAYS -->
 
@@ -465,79 +420,35 @@
 
 
 
-    <!-- TAB 4: PAYSLIPS -->
-
-    <section id="section-payslips" style="display:none;">
-
-      <!-- Top Prominent Card: Current / Latest Payslip -->
-
-      <div id="latest-payslip-card" class="portal-card" style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); color: #FFFFFF; border: 1px solid #334155;">
-
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-
-          <div>
-
-            <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#94A3B8; font-weight:700;">Latest Payslip</span>
-
-            <h3 id="latest-payslip-period" style="margin:2px 0 0 0; font-size:20px; font-weight:800; color:#FFFFFF;">September 2026</h3>
-
-          </div>
-
-          <span class="status-badge active" style="background:#10B981; color:#FFF;">CONFIRMED</span>
-
+    <!-- TAB 4: SUPER GUARD SITE ATTENDANCE MANDATE -->
+    <section id="section-super-guard" style="display:none;">
+      <!-- Super Guard Authorization Badge Header -->
+      <div class="portal-card" style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color:#FFFFFF; border:1px solid #334155;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:11px; font-weight:800; color:#38BDF8; letter-spacing:0.5px; text-transform:uppercase;">Super Guard Mandate</span>
+          <span class="status-badge" style="background:#0284C7; color:#FFFFFF;">AUTHORIZED</span>
         </div>
-
-        
-
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:rgba(255,255,255,0.06); padding:14px; border-radius:12px; margin-bottom:16px;">
-
-          <div>
-
-            <div style="font-size:11px; color:#94A3B8;">Gross Earnings</div>
-
-            <div id="latest-payslip-gross" style="font-size:16px; font-weight:700; color:#E2E8F0;">KES 0.00</div>
-
-          </div>
-
-          <div>
-
-            <div style="font-size:11px; color:#94A3B8;">Take Home (Net)</div>
-
-            <div id="latest-payslip-net" style="font-size:18px; font-weight:800; color:#34D399;">KES 0.00</div>
-
-          </div>
-
-        </div>
-
-
-
-        <div style="display:flex; gap:10px;" id="latest-payslip-actions">
-
-          <button id="btn-view-latest-pdf" class="btn-submit" style="flex:1; background:#2563EB; font-size:13px; padding:10px 14px;" onclick="viewLatestPayslipPdf()">👁️ View PDF</button>
-
-          <button id="btn-download-latest-pdf" class="btn-submit" style="flex:1; background:#059669; font-size:13px; padding:10px 14px;" onclick="downloadLatestPayslipPdf()">⬇️ Download PDF</button>
-
-        </div>
-
+        <h3 id="sg-portal-site-name" style="margin:0 0 6px 0; font-size:18px; font-weight:800; color:#FFFFFF;">Assigned Site</h3>
+        <p style="font-size:12px; color:#CBD5E1; margin:0; line-height:1.4;">
+          You hold the operational mandate to clock in and clock out guards stationed at this site who do not possess a smartphone or have device connectivity issues.
+        </p>
       </div>
 
-
-
-      <!-- Payslip History List -->
-
+      <!-- Stationed Guards Duty Register -->
       <div class="portal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div>
+            <div class="card-title" style="margin:0;">🛡️ Stationed Guards Register</div>
+            <div style="font-size:11px; color:#64748B;" id="sg-guards-count-label">Loading site guards...</div>
+          </div>
+          <button class="btn-submit" style="width:auto; padding:6px 12px; font-size:12px; background:#F1F5F9; color:#0F172A; border:1px solid #CBD5E1;" onclick="loadSuperGuardPortal()">🔄 Refresh</button>
+        </div>
 
-        <div class="card-title">📜 Payslip History</div>
-
-        <p style="font-size:12px; color:#64748B; margin-bottom:12px;">All previous pay periods preserved for tax returns (KRA P9) and financial records.</p>
-
-        <div id="payslip-history-list" class="history-list"></div>
-
+        <div id="sg-guards-list" class="history-list">
+          <div style="text-align:center; padding:18px; color:#64748B;">Loading stationed guards roster...</div>
+        </div>
       </div>
-
     </section>
-
-
 
     <!-- TAB 5: PROFILE -->
 
@@ -657,12 +568,9 @@
 
     </div>
 
-    <div id="nav-tab-payslips" class="nav-tab" onclick="switchPortalTab('payslips')">
-
-      <span class="nav-tab-icon">📄</span>
-
-      <span>Payslips</span>
-
+    <div id="nav-tab-super-guard" class="nav-tab" style="display:none;" onclick="switchPortalTab('super-guard')">
+      <span class="nav-tab-icon">🛡️</span>
+      <span>Super Guard</span>
     </div>
 
     <div id="nav-tab-profile" class="nav-tab" onclick="switchPortalTab('profile')">

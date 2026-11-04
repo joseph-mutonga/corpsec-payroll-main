@@ -146,6 +146,24 @@ def sync_db_schema():
         if inv_cols and "issued_to_staff_id" not in inv_cols:
             cursor.execute("ALTER TABLE inventory_transactions ADD COLUMN issued_to_staff_id INTEGER;")
 
+        # 11. Super Guard & Geofencing columns
+        cursor.execute("PRAGMA table_info(guards);")
+        guard_cols_v3 = [c[1] for c in cursor.fetchall()]
+        if guard_cols_v3 and "is_super_guard" not in guard_cols_v3:
+            cursor.execute("ALTER TABLE guards ADD COLUMN is_super_guard BOOLEAN DEFAULT 0;")
+
+        cursor.execute("PRAGMA table_info(sites);")
+        site_cols_v2 = [c[1] for c in cursor.fetchall()]
+        if site_cols_v2:
+            if "latitude" not in site_cols_v2:
+                cursor.execute("ALTER TABLE sites ADD COLUMN latitude FLOAT;")
+            if "longitude" not in site_cols_v2:
+                cursor.execute("ALTER TABLE sites ADD COLUMN longitude FLOAT;")
+            if "geofence_radius" not in site_cols_v2:
+                cursor.execute("ALTER TABLE sites ADD COLUMN geofence_radius FLOAT DEFAULT 200.0;")
+            if "super_guard_id" not in site_cols_v2:
+                cursor.execute("ALTER TABLE sites ADD COLUMN super_guard_id INTEGER;")
+
         conn.commit()
         conn.close()
     except Exception as e:

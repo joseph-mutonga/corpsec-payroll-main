@@ -52,6 +52,7 @@ class PayrollRecord(Base):
     other_deductions = Column(Float, default=0.0, nullable=False)
     unpaid_leave_deduction = Column(Float, default=0.0, nullable=False)
     off_day_deduction = Column(Float, default=0.0, nullable=False)
+    salary_advance_deduction = Column(Float, default=0.0, nullable=False)
     reliever_earnings = Column(Float, default=0.0, nullable=False)
     
     total_deductions = Column(Float, default=0.0, nullable=False)

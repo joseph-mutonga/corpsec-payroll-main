@@ -7,6 +7,8 @@ from application.backend.app.api.deps import get_db, require_admin, require_guar
 from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.shift import Shift
+from application.backend.app.models.site import Site
+from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.user import User, UserRole
 from application.backend.app.schemas.attendance import (
     AttendanceLogRequest, AttendanceCorrectionRequest, AttendanceResponse, AnomalyResponse
@@ -20,9 +22,23 @@ from application.backend.app.models.roster import RosterAssignment
 router = APIRouter(prefix="/attendance", tags=["Attendance Management"])
 
 
+def calculate_haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    import math
+    R = 6371000.0
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2.0)**2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2.0)**2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+
 @router.post("/clock-in", response_model=AttendanceResponse)
 def clock_in(
     shift_id: Optional[int] = Query(None),
+    latitude: Optional[float] = Query(None),
+    longitude: Optional[float] = Query(None),
     db: Session = Depends(get_db),
     guard_user: User = Depends(require_guard)
 ):
@@ -82,6 +98,19 @@ def clock_in(
     ).first()
 
     notes_val = "Roster-driven clock in" if is_rostered else "Unrostered clock in"
+
+    # 200m Geofence verification within site perimeter
+    target_site = db.query(Site).filter(Site.id == resolved_site_id).first() if resolved_site_id else None
+    if target_site and target_site.latitude is not None and target_site.longitude is not None:
+        radius = float(target_site.geofence_radius) if target_site.geofence_radius else 200.0
+        if latitude is not None and longitude is not None:
+            dist = calculate_haversine_meters(latitude, longitude, target_site.latitude, target_site.longitude)
+            if dist > radius:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Clock-in rejected: You are {int(dist)} metres away from '{target_site.site_name}'. You must be within {int(radius)} metres radius to sign in."
+                )
+            notes_val += f" | GPS verified: {int(dist)}m from site perimeter"
 
     if not existing:
         existing = Attendance(
@@ -297,3 +326,258 @@ def list_attendance_records(
         query = query.filter(Attendance.shift_date <= end_date)
 
     return query.order_by(Attendance.shift_date.desc()).all()
+
+
+
+
+# ==================== SUPER GUARD SITE MANDATE ====================
+
+def _resolve_super_guard(db: Session, current_user: User):
+    """Helper to verify caller is a Super Guard and get their assigned site."""
+    if current_user.role in [UserRole.ADMIN.value, UserRole.SUPERVISOR.value]:
+        first_site = db.query(Site).first()
+        dummy_guard = db.query(Guard).first()
+        return (dummy_guard, first_site)
+
+    if not current_user.guard_id:
+        raise HTTPException(status_code=403, detail="User account is not linked to a guard profile.")
+
+    guard = db.query(Guard).filter(Guard.id == current_user.guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=404, detail="Guard profile not found.")
+
+    site = None
+    if guard.primary_site_id:
+        site = db.query(Site).filter(Site.id == guard.primary_site_id).first()
+    if not site:
+        site = db.query(Site).filter(Site.super_guard_id == guard.id).first()
+
+    has_mandate = bool(getattr(guard, "is_super_guard", False) or (site and site.super_guard_id == guard.id))
+    if not has_mandate:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super Guard Mandate Required: You do not have authorization to clock in/out fellow guards at this site."
+        )
+
+    return (guard, site)
+
+
+@router.get("/super-guard/guards")
+def list_super_guard_site_guards(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns all guards stationed at the Super Guard's assigned site along with their today clock-in status.
+    Designed so the Super Guard can sign in/out guards who do not own smartphones.
+    """
+    super_guard, site = _resolve_super_guard(db, current_user)
+    if not site:
+        raise HTTPException(status_code=400, detail="Super Guard has no site assigned.")
+
+    today = date.today()
+    stationed_guards = db.query(Guard).filter(
+        Guard.primary_site_id == site.id,
+        Guard.status == "ACTIVE"
+    ).order_by(Guard.full_name.asc()).all()
+
+    results = []
+    for g in stationed_guards:
+        today_att = db.query(Attendance).filter(
+            Attendance.guard_id == g.id,
+            Attendance.shift_date == today
+        ).first()
+
+        is_in = bool(today_att and today_att.actual_clock_in and not today_att.actual_clock_out)
+        is_completed = bool(today_att and today_att.actual_clock_in and today_att.actual_clock_out)
+        shift_name = g.shift.name if g.shift else "Day Shift"
+        
+        results.append({
+            "guard_id": g.id,
+            "employee_number": g.employee_number,
+            "full_name": g.full_name,
+            "phone": g.phone,
+            "shift_name": shift_name,
+            "is_super_guard": bool(getattr(g, "is_super_guard", False)),
+            "is_clocked_in": is_in,
+            "is_completed": is_completed,
+            "clock_in_time": today_att.actual_clock_in.strftime("%H:%M") if (today_att and today_att.actual_clock_in) else None,
+            "clock_out_time": today_att.actual_clock_out.strftime("%H:%M") if (today_att and today_att.actual_clock_out) else None,
+            "hours_worked": today_att.regular_hours if today_att else 0.0,
+            "status": today_att.status if today_att else "NOT_CLOCKED_IN"
+        })
+
+    return {
+        "site_id": site.id,
+        "site_name": site.site_name,
+        "super_guard_name": super_guard.full_name if super_guard else current_user.email,
+        "total_stationed": len(results),
+        "guards": results,
+        "stationed_guards": results
+    }
+
+
+@router.post("/super-guard/guards/{target_guard_id}/clock-in")
+def super_guard_mandate_clock_in(
+    target_guard_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Super Guard clocks in a stationed guard at their site who does not possess a smartphone.
+    """
+    super_guard, site = _resolve_super_guard(db, current_user)
+    target_guard = db.query(Guard).filter(Guard.id == target_guard_id).first()
+    if not target_guard:
+        raise HTTPException(status_code=404, detail="Guard not found")
+
+    if site and target_guard.primary_site_id != site.id and current_user.role not in [UserRole.ADMIN.value, UserRole.SUPERVISOR.value]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Guard '{target_guard.full_name}' is stationed at another site. You only have mandate for {site.site_name}."
+        )
+
+    today = date.today()
+    now = datetime.now()
+
+    check_period_not_locked(db, today)
+
+    active_unclosed = db.query(Attendance).filter(
+        Attendance.guard_id == target_guard.id,
+        Attendance.actual_clock_in.isnot(None),
+        Attendance.actual_clock_out.is_(None)
+    ).first()
+    if active_unclosed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Guard '{target_guard.full_name}' already has an active clock-in at {active_unclosed.actual_clock_in.strftime('%H:%M')}."
+        )
+
+    resolved_shift_id = target_guard.shift_id or 1
+    resolved_site_id = target_guard.primary_site_id or (site.id if site else 1)
+
+    mandate_note = f"Mandate Clock-In by Super Guard {super_guard.full_name if super_guard else current_user.email} (No smartphone)"
+
+    att = db.query(Attendance).filter(
+        Attendance.guard_id == target_guard.id,
+        Attendance.shift_date == today
+    ).first()
+
+    if not att:
+        att = Attendance(
+            guard_id=target_guard.id,
+            shift_id=resolved_shift_id,
+            site_id=resolved_site_id,
+            shift_date=today,
+            actual_clock_in=now,
+            actual_clock_out=None,
+            status="PRESENT",
+            regular_hours=12.0,
+            overtime_hours=0.0,
+            notes=mandate_note
+        )
+        db.add(att)
+    else:
+        att.actual_clock_in = now
+        att.actual_clock_out = None
+        att.status = "PRESENT"
+        att.regular_hours = 12.0
+        att.overtime_hours = 0.0
+        att.notes = mandate_note
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="SUPER_GUARD_MANDATE_CLOCK_IN",
+        target_entity="Attendance",
+        target_id=str(target_guard.id),
+        reason=f"Super Guard clocked in {target_guard.full_name} at site {site.site_name if site else ''}"
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(att)
+
+    return {
+        "message": f"Successfully clocked in {target_guard.full_name} under Super Guard mandate.",
+        "guard_id": target_guard.id,
+        "guard_name": target_guard.full_name,
+        "clock_in_time": now.strftime("%H:%M:%S"),
+        "shift_date": str(today),
+        "status": att.status
+    }
+
+
+@router.post("/super-guard/guards/{target_guard_id}/clock-out")
+def super_guard_mandate_clock_out(
+    target_guard_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Super Guard clocks out a stationed guard at their site who does not possess a smartphone.
+    """
+    super_guard, site = _resolve_super_guard(db, current_user)
+    target_guard = db.query(Guard).filter(Guard.id == target_guard_id).first()
+    if not target_guard:
+        raise HTTPException(status_code=404, detail="Guard not found")
+
+    if site and target_guard.primary_site_id != site.id and current_user.role not in [UserRole.ADMIN.value, UserRole.SUPERVISOR.value]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Guard '{target_guard.full_name}' is stationed at another site. You only have mandate for {site.site_name}."
+        )
+
+    today = date.today()
+    now = datetime.now()
+
+    att = db.query(Attendance).filter(
+        Attendance.guard_id == target_guard.id,
+        Attendance.actual_clock_in.isnot(None),
+        Attendance.actual_clock_out.is_(None)
+    ).order_by(Attendance.shift_date.desc()).first()
+
+    if not att:
+        today_att = db.query(Attendance).filter(
+            Attendance.guard_id == target_guard.id,
+            Attendance.shift_date == today
+        ).first()
+        if today_att and today_att.actual_clock_out:
+            raise HTTPException(status_code=400, detail=f"Guard '{target_guard.full_name}' is already clocked out.")
+        raise HTTPException(status_code=400, detail=f"No active clock-in session found for guard '{target_guard.full_name}'.")
+
+    att.actual_clock_out = now
+    shift_duration = 12.0
+    if att.shift_id:
+        s_obj = db.query(Shift).filter(Shift.id == att.shift_id).first()
+        if s_obj and s_obj.duration_hours:
+            shift_duration = s_obj.duration_hours
+
+    reg_hrs, ot_hrs = calculate_shift_hours(att.actual_clock_in, att.actual_clock_out, shift_duration)
+    att.regular_hours = reg_hrs
+    att.overtime_hours = ot_hrs
+    att.notes = (att.notes or "") + f" | Mandate Clock-Out by Super Guard {super_guard.full_name if super_guard else current_user.email}"
+    sync_overtime_claim(db, att)
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="SUPER_GUARD_MANDATE_CLOCK_OUT",
+        target_entity="Attendance",
+        target_id=str(target_guard.id),
+        reason=f"Super Guard clocked out {target_guard.full_name} (Hours: {reg_hrs}h, OT: {ot_hrs}h)"
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(att)
+
+    return {
+        "message": f"Successfully clocked out {target_guard.full_name} under Super Guard mandate.",
+        "guard_id": target_guard.id,
+        "guard_name": target_guard.full_name,
+        "clock_out_time": now.strftime("%H:%M:%S"),
+        "regular_hours": att.regular_hours,
+        "overtime_hours": att.overtime_hours,
+        "status": att.status
+    }

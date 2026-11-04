@@ -418,8 +418,11 @@ body {
   border-radius: 20px;
   border: 1px solid var(--color-border);
   box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04);
-  overflow: hidden;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   margin-bottom: 24px;
+  max-width: 100%;
 }
 
 .data-table {
@@ -435,12 +438,14 @@ body {
   font-weight: 700;
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
 .data-table td {
   padding: 14px 18px;
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-dark);
+  white-space: nowrap;
 }
 
 .data-table tr:hover {
@@ -1899,7 +1904,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, div[role="butto
 #panel-clients,
 #panel-assets,
 #panel-company-history,
-#panel-invoices {
+#panel-invoices,
+#panel-guards,
+#guard-file-view,
+.guard-file-wrapper {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
@@ -1953,4 +1961,116 @@ button:focus-visible, input:focus-visible, select:focus-visible, div[role="butto
 }
 .table-responsive::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
+}
+
+
+/* ============================================================
+   Guard Personnel File Complete Scroll Enhancements
+   ============================================================ */
+.guard-file-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 60px;
+}
+
+#guard-file-view {
+  width: 100%;
+  max-width: 100%;
+  overflow-y: visible;
+  overflow-x: hidden;
+  padding-bottom: 60px;
+}
+
+#modal-guard-file {
+  display: none !important;
+}
+
+#modal-guard-file .modal-content {
+  max-height: 92vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+#guard-file-body {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  max-height: calc(92vh - 130px) !important;
+  padding: 24px !important;
+  scroll-behavior: smooth;
+  flex: 1 1 auto;
+}
+
+#guard-file-body::-webkit-scrollbar,
+#guard-file-view::-webkit-scrollbar,
+.guard-file-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+#guard-file-body::-webkit-scrollbar-track,
+#guard-file-view::-webkit-scrollbar-track,
+.guard-file-wrapper::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+
+#guard-file-body::-webkit-scrollbar-thumb,
+#guard-file-view::-webkit-scrollbar-thumb,
+.guard-file-wrapper::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border-radius: 4px;
+}
+
+#guard-file-body::-webkit-scrollbar-thumb:hover,
+#guard-file-view::-webkit-scrollbar-thumb:hover,
+.guard-file-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+
+
+/* ==========================================================================
+   OFFICIAL CORPSEC LETTERHEAD INVOICE PRINT STYLES
+   ========================================================================== */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+  body > * {
+    display: none !important;
+  }
+  #modal-view-invoice {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    background: #FFFFFF !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: 99999 !important;
+  }
+  #modal-view-invoice * {
+    visibility: visible !important;
+  }
+  #modal-view-invoice .modal-content {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
 }

@@ -48,6 +48,7 @@ class PayrollRecordResponse(BaseModel):
     other_deductions: Optional[float] = 0.0
     unpaid_leave_deduction: Optional[float] = 0.0
     off_day_deduction: Optional[float] = 0.0
+    salary_advance_deduction: Optional[float] = 0.0
     reliever_earnings: Optional[float] = 0.0
     total_deductions: float
     net_pay: float
@@ -87,6 +88,7 @@ class PayrollCalculationSummary(BaseModel):
     total_employer_nssf: Optional[float] = 0.0
     total_employer_housing_levy: Optional[float] = 0.0
     total_employer_statutory: Optional[float] = 0.0
+    total_salary_advances: Optional[float] = 0.0
     error_count: int
     status: str = "CALCULATED"
 

@@ -23,6 +23,10 @@ def _format_site(site: Site) -> dict:
         sup_name = site.supervisor.full_name or site.supervisor.email
         sup_email = site.supervisor.email
 
+    sup_guard_name = None
+    if getattr(site, "super_guard", None):
+        sup_guard_name = f"{site.super_guard.full_name} ({site.super_guard.employee_number})"
+
     return {
         "id": site.id,
         "site_name": site.site_name,
@@ -33,6 +37,11 @@ def _format_site(site: Site) -> dict:
         "supervisor_id": site.supervisor_id,
         "supervisor_name": sup_name,
         "supervisor_email": sup_email,
+        "super_guard_id": site.super_guard_id,
+        "super_guard_name": sup_guard_name,
+        "latitude": site.latitude,
+        "longitude": site.longitude,
+        "geofence_radius": site.geofence_radius if site.geofence_radius is not None else 200.0,
         "basic_salary": site.basic_salary,
         "daily_rate": site.daily_rate,
         "night_allowance": site.night_allowance,
@@ -49,7 +58,7 @@ def create_client_site(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """Create a new Client Site with basic salary, daily rates, allowances, and assigned supervisor."""
+    """Create a new Client Site with basic salary, daily rates, allowances, geofence radius, and assigned supervisor."""
     existing = db.query(Site).filter(Site.site_name == payload.site_name).first()
     if existing:
         raise HTTPException(
@@ -67,12 +76,21 @@ def create_client_site(
         if not sup_user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{payload.supervisor_id} not found")
 
+    if payload.super_guard_id:
+        sg_guard = db.query(Guard).filter(Guard.id == payload.super_guard_id).first()
+        if sg_guard:
+            sg_guard.is_super_guard = True
+
     site = Site(
         site_name=payload.site_name,
         location=payload.location,
         client_name=payload.client_name,
         region_id=payload.region_id,
         supervisor_id=payload.supervisor_id,
+        super_guard_id=payload.super_guard_id,
+        latitude=payload.latitude if payload.latitude is not None else -1.286389,
+        longitude=payload.longitude if payload.longitude is not None else 36.817223,
+        geofence_radius=payload.geofence_radius if payload.geofence_radius is not None else 200.0,
         basic_salary=payload.basic_salary,
         daily_rate=payload.daily_rate,
         night_allowance=payload.night_allowance,
@@ -170,6 +188,11 @@ def update_site_rates(
         sup_user = db.query(User).filter(User.id == new_supervisor_id, User.role == UserRole.SUPERVISOR.value).first()
         if not sup_user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{new_supervisor_id} not found")
+
+    if "super_guard_id" in update_data and update_data["super_guard_id"] is not None:
+        sg_guard = db.query(Guard).filter(Guard.id == update_data["super_guard_id"]).first()
+        if sg_guard:
+            sg_guard.is_super_guard = True
 
     for key, value in update_data.items():
         setattr(site, key, value)

@@ -196,15 +196,24 @@ async function handleUnifiedLogin(e) {
   }
 }
 
-function quickFillCredentials(id, pass) {
+function quickFillCredentials(id, pass, autoSubmit = true) {
   const idInput = document.getElementById('unified-login-id');
   const passInput = document.getElementById('unified-login-password');
   if (idInput && passInput) {
     idInput.value = id;
     passInput.value = pass;
     idInput.focus();
+    if (autoSubmit) {
+      setTimeout(() => {
+        handleUnifiedLogin();
+      }, 60);
+    }
   }
 }
+
+window.quickFillCredentials = quickFillCredentials;
+window.handleUnifiedLogin = handleUnifiedLogin;
+window.togglePasswordVisibility = togglePasswordVisibility;
 
 function togglePasswordVisibility() {
   const passInput = document.getElementById('unified-login-password');
@@ -231,6 +240,8 @@ function updateUserProfileDisplay(userData) {
 
   // Reset all nav-items and supervisor sections
   document.querySelectorAll('.nav-item').forEach(el => el.style.display = '');
+  const promoCard = document.querySelector('.sidebar-promo-card');
+  if (promoCard) promoCard.style.display = 'block';
   const supNav = document.querySelector(`.nav-item[onclick="switchTab('supervisors')"]`);
   if (supNav) supNav.innerHTML = '🏢 Supervisors';
   const supAdminSec = document.getElementById('supervisor-admin-management-section');
@@ -262,13 +273,14 @@ function updateUserProfileDisplay(userData) {
 
   // Adjust for SUPERVISOR
   if (userData.role === 'SUPERVISOR') {
-    const adminOnlyTabs = ['payroll', 'payments', 'statutory', 'settings', 'audit', 'reports', 'documents', 'staff', 'sites', 'shifts', 'invoices', 'clients', 'assets', 'company-history'];
+    const adminOnlyTabs = ['payroll', 'payments', 'salary-advances', 'statutory', 'settings', 'audit', 'reports', 'documents', 'staff', 'sites', 'shifts', 'invoices', 'clients', 'assets', 'company-history'];
     adminOnlyTabs.forEach(tab => {
       const navItem = document.querySelector(`.nav-item[onclick="switchTab('${tab}')"]`);
       if (navItem) navItem.style.display = 'none';
     });
     if (supNav) supNav.innerHTML = '🛡️ My Guard Team & Attendance';
     if (supAdminSec) supAdminSec.style.display = 'none';
+    if (promoCard) promoCard.style.display = 'none';
     currentRollCallSupervisorFilter = userData.id;
 
     // Supervisor Dashboard customization
@@ -296,6 +308,7 @@ function updateUserProfileDisplay(userData) {
 function logout() {
   localStorage.removeItem('corpsec_token');
   localStorage.removeItem('corpsec_user');
+  sessionStorage.removeItem('company_documents_vault_unlocked');
   sessionStorage.removeItem('guard_auth_token');
   sessionStorage.removeItem('guard_user');
   authToken = '';
@@ -332,8 +345,8 @@ async function initApp() {
 
 function switchTab(tabId) {
   const user = getLoggedInUser();
-  if (user && user.role === 'SUPERVISOR' && (tabId === 'payroll' || tabId === 'payments' || tabId === 'statutory' || tabId === 'staff' || tabId === 'audit' || tabId === 'documents' || tabId === 'invoices' || tabId === 'clients' || tabId === 'assets' || tabId === 'company-history')) {
-    showToast('Access Denied: Payroll and company financial management is restricted to Admin & HR.', 'danger');
+  if (user && user.role === 'SUPERVISOR' && (tabId === 'payroll' || tabId === 'payments' || tabId === 'salary-advances' || tabId === 'reports' || tabId === 'statutory' || tabId === 'staff' || tabId === 'audit' || tabId === 'documents' || tabId === 'invoices' || tabId === 'clients' || tabId === 'assets' || tabId === 'company-history')) {
+    showToast('Access Denied: Analytics, statutory reports, payroll, and salary advance management are restricted to Admin & HR.', 'danger');
     tabId = 'dashboard';
   }
   const titles = {
@@ -356,8 +369,23 @@ function switchTab(tabId) {
     'invoices': 'Client Site Invoices & Billing Management',
     'clients': 'Client & Contract Management CRM',
     'assets': 'Company Assets & Inventory Management',
-    'company-history': 'Corporate History, Milestones & Governance'
+    'company-history': 'Corporate History, Milestones & Governance',
+    'salary-advances': 'Mid-Month Salary Advances & Automatic Payroll Deductions',
+    'expenses': 'Firm Expenses, Petty Cash & Recurring Expenditure',
+    'download-app': 'Download & Install Desktop Application in Your Machine'
   };
+
+  if (tabId === 'documents') {
+    if (!window.isAuthorizedForDocumentEntryOnce) {
+      openDocumentsVaultModal();
+      return;
+    }
+    // Strictly single-use authorization: immediately reset so leaving and re-entering requires password anytime
+    window.isAuthorizedForDocumentEntryOnce = false;
+  } else {
+    // Whenever navigating away from documents to any other section, reset authorization
+    window.isAuthorizedForDocumentEntryOnce = false;
+  }
 
   document.getElementById('current-page-title').innerText = titles[tabId] || 'Dashboard';
 
@@ -369,16 +397,32 @@ function switchTab(tabId) {
   const activeNav = document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
   if (activeNav) activeNav.classList.add('active');
 
+  window.currentActiveTab = tabId;
+
   if (tabId === 'dashboard') {
     loadDashboardData();
   }
+  if (tabId === 'expenses') {
+    loadExpenses();
+    loadExpensesSummary();
+  }
   if (tabId === 'incidents') loadAdminIncidents();
   if (tabId === 'leave') loadAdminLeave();
-  if (tabId === 'guards') loadGuards();
+  if (tabId === 'guards') {
+    const fileViewContainer = document.getElementById('guard-file-view');
+    const listViewContainer = document.getElementById('guards-list-view');
+    const modal = document.getElementById('modal-guard-file');
+    if (modal) modal.style.display = 'none';
+    if (fileViewContainer) fileViewContainer.style.display = 'none';
+    if (listViewContainer) listViewContainer.style.display = 'block';
+    window.guardFilePreviousTab = null;
+    loadGuards();
+  }
   if (tabId === 'sites') loadSites();
   if (tabId === 'shifts') loadShifts();
   if (tabId === 'attendance') loadAttendance();
   if (tabId === 'payroll') loadPayrollReview();
+  if (tabId === 'salary-advances') loadSalaryAdvances();
   if (tabId === 'payments') loadPayments();
   if (tabId === 'statutory') loadStatutoryRates();
   if (tabId === 'audit') loadAuditLogs();
@@ -390,6 +434,7 @@ function switchTab(tabId) {
   if (tabId === 'clients') loadClients();
   if (tabId === 'assets') loadAssets();
   if (tabId === 'company-history') loadCompanyHistory();
+  if (tabId === 'download-app') initDownloadAppSection();
   if (tabId === 'reports') {
     loadAnalyticsData();
     loadGuards();
@@ -477,18 +522,20 @@ async function loadDashboardData(forceReload = false) {
         apiFetch('/company/analytics').then(r => r.ok ? r.json() : null).catch(() => null),
         apiFetch('/assets/summary/kpis').then(r => r.ok ? r.json() : null).catch(() => null),
         apiFetch('/invoices').then(r => r.ok ? r.json() : null).catch(() => null),
-        apiFetch('/assets/inventory').then(r => r.ok ? r.json() : null).catch(() => null)
+        apiFetch('/assets/inventory').then(r => r.ok ? r.json() : null).catch(() => null),
+        apiFetch('/expenses/summary').then(r => r.ok ? r.json() : null).catch(() => null)
       ];
 
-      const [resAnalytics, resAssets, resInvoices, resInventory] = await Promise.allSettled(enterprisePromises);
+      const [resAnalytics, resAssets, resInvoices, resInventory, resExpenses] = await Promise.allSettled(enterprisePromises);
       analyticsData = resAnalytics.status === 'fulfilled' ? resAnalytics.value : null;
       assetKpis = resAssets.status === 'fulfilled' ? resAssets.value : null;
       invoicesList = (resInvoices.status === 'fulfilled' && Array.isArray(resInvoices.value)) ? resInvoices.value : [];
       inventoryItems = (resInventory.status === 'fulfilled' && Array.isArray(resInventory.value)) ? resInventory.value : [];
+      var expensesSummary = resExpenses.status === 'fulfilled' ? resExpenses.value : null;
     }
 
     // 4. Update KPI Card values & trend footers
-    renderDashboardKPIs({ analyticsData, assetKpis, invoicesList, isSupervisor, user });
+    renderDashboardKPIs({ analyticsData, assetKpis, invoicesList, expensesSummary: typeof expensesSummary !== 'undefined' ? expensesSummary : null, isSupervisor, user });
 
     // 5. Render Site Deployment & Coverage Table
     renderDashboardSiteDeployment();
@@ -505,7 +552,7 @@ async function loadDashboardData(forceReload = false) {
   }
 }
 
-function renderDashboardKPIs({ analyticsData, assetKpis, invoicesList, isSupervisor, user }) {
+function renderDashboardKPIs({ analyticsData, assetKpis, invoicesList, expensesSummary, isSupervisor, user }) {
   // 1. Guards
   const allGuards = cachedGuards || [];
   let displayGuards = allGuards.filter(g => g.status === 'ACTIVE');
@@ -609,6 +656,24 @@ function renderDashboardKPIs({ analyticsData, assetKpis, invoicesList, isSupervi
   const subLeave = document.getElementById('metric-leave-subtext');
   if (subLeave) {
     subLeave.innerText = pendingLeaves.length === 0 ? 'All Reviewed' : `${pendingLeaves.length} Awaiting Review`;
+  }
+
+  // 9. Expenses & Petty Cash (Admin/HR)
+  const cardExpenses = document.getElementById('dash-card-expenses');
+  if (cardExpenses) {
+    if (isSupervisor) {
+      cardExpenses.style.display = 'none';
+    } else {
+      cardExpenses.style.display = 'flex';
+      const totalMonth = expensesSummary ? (expensesSummary.total_expenses_this_month !== undefined ? expensesSummary.total_expenses_this_month : (expensesSummary.total_expenses_month || 0)) : 0;
+      const floatBal = expensesSummary ? (expensesSummary.petty_cash_float_balance || 0) : 0;
+      const mExpenses = document.getElementById('metric-dashboard-expenses');
+      if (mExpenses) mExpenses.innerText = 'KES ' + Math.round(totalMonth).toLocaleString();
+      const subExpenses = document.getElementById('metric-dashboard-expenses-subtext');
+      if (subExpenses) {
+        subExpenses.innerText = 'Float: KES ' + Math.round(floatBal).toLocaleString() + ' • Rec: KES ' + Math.round(expensesSummary ? (expensesSummary.monthly_recurring_commitments || 0) : 0).toLocaleString();
+      }
+    }
   }
 }
 
@@ -877,7 +942,91 @@ function calculateGuardAge(dob) {
   }
 }
 
-function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shiftsList = [], allocations = [], inventoryTx = []) {
+function renderGuardAttendanceHistoryRows(records) {
+  if (!records || records.length === 0) {
+    return '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">No shift attendance records logged in the database yet.</td></tr>';
+  }
+  return records.slice(0, 30).map(a => {
+    const shiftDate = a.shift_date ? String(a.shift_date).substring(0, 10) : '—';
+    const clockIn = a.actual_clock_in ? String(a.actual_clock_in).substring(11, 16) : (a.status === 'PRESENT' ? '06:00' : '—');
+    const clockOut = a.actual_clock_out ? String(a.actual_clock_out).substring(11, 16) : (a.status === 'PRESENT' ? '18:00' : '—');
+    let badgeBg = '#DCFCE7'; let badgeColor = '#166534';
+    if (a.status === 'ABSENT') { badgeBg = '#FEE2E2'; badgeColor = '#991B1B'; }
+    else if (a.status === 'LATE') { badgeBg = '#FEF3C7'; badgeColor = '#92400E'; }
+    else if (a.status === 'OFF') { badgeBg = '#EFF6FF'; badgeColor = '#1D4ED8'; }
+    else if (a.status === 'OVERTIME') { badgeBg = '#FEF3C7'; badgeColor = '#B45309'; }
+
+    return `
+      <tr>
+        <td style="font-weight:700; color:#0F172A;">${escapeHtml(shiftDate)}</td>
+        <td>${escapeHtml(a.site_name || 'Standard Site')}</td>
+        <td>${escapeHtml(clockIn)}</td>
+        <td>${escapeHtml(clockOut)}</td>
+        <td style="font-weight:600;">${a.regular_hours || 0} hrs</td>
+        <td style="font-weight:600; color:${(a.overtime_hours > 0 ? '#B45309' : '#64748B')};">${a.overtime_hours || 0} hrs</td>
+        <td>
+          <span class="badge" style="background:${badgeBg}; color:${badgeColor}; font-weight:700; padding:3px 8px; border-radius:12px; font-size:11px;">
+            ${escapeHtml(a.status || 'PRESENT')}
+          </span>
+        </td>
+        <td style="font-size:11px; color:#64748B;">${escapeHtml(a.notes || '—')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderGuardPayrollHistoryRows(records) {
+  if (!records || records.length === 0) {
+    return '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">No payroll records generated for this guard in the database yet.</td></tr>';
+  }
+  return records.map(p => {
+    return `
+      <tr>
+        <td style="font-weight:800; color:#0F172A;">Payroll Period #${p.payroll_period_id}</td>
+        <td style="font-weight:700; color:#2563EB;">${p.days_worked || 0} Days</td>
+        <td style="font-weight:700;">KES ${(p.basic_pay || 0).toLocaleString()}</td>
+        <td style="font-weight:700; color:#0F172A;">KES ${(p.gross_pay || 0).toLocaleString()}</td>
+        <td style="font-weight:600; color:#DC2626;">KES ${(p.total_deductions || 0).toLocaleString()}</td>
+        <td style="font-weight:800; color:#166534; font-size:13px;">KES ${(p.net_pay || 0).toLocaleString()}</td>
+        <td><span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700; padding:2px 8px; border-radius:12px; font-size:11px;">CONFIRMED</span></td>
+        <td style="text-align:right;">
+          <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px; font-weight:700;" onclick="window.open('/api/v1/payslips/pdf/${p.id}', '_blank')">
+            📄 Payslip PDF
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderGuardLeaveHistoryRows(records) {
+  if (!records || records.length === 0) {
+    return '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">No leave or off-day requests recorded in the database.</td></tr>';
+  }
+  return records.map(l => {
+    const start = l.start_date ? String(l.start_date).substring(0, 10) : '—';
+    const end = l.end_date ? String(l.end_date).substring(0, 10) : start;
+    let badgeBg = '#FEF3C7'; let badgeColor = '#92400E';
+    if (l.status === 'APPROVED') { badgeBg = '#DCFCE7'; badgeColor = '#166534'; }
+    else if (l.status === 'REJECTED') { badgeBg = '#FEE2E2'; badgeColor = '#991B1B'; }
+    return `
+      <tr>
+        <td style="font-weight:700; color:#0F172A;">${escapeHtml(l.leave_type || 'Annual Leave')}</td>
+        <td>${escapeHtml(start)}</td>
+        <td>${escapeHtml(end)}</td>
+        <td style="font-weight:700;">${l.duration_days || 1} day${(l.duration_days > 1 ? 's' : '')}</td>
+        <td>
+          <span class="badge" style="background:${badgeBg}; color:${badgeColor}; font-weight:700; padding:3px 8px; border-radius:12px; font-size:11px;">
+            ${escapeHtml(l.status || 'PENDING')}
+          </span>
+        </td>
+        <td style="color:#64748B;">${escapeHtml(l.comments || l.reason || '—')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shiftsList = [], allocations = [], inventoryTx = [], guardAdvances = [], payrollRecords = [], leaveRecords = []) {
   const site = g.site || sitesList.find(s => s.id === (g.site_id || g.primary_site_id)) || null;
   const shift = g.shift || shiftsList.find(s => s.id === g.shift_id) || null;
   const siteName = site ? site.site_name : 'Unassigned';
@@ -889,17 +1038,21 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
   const age = calculateGuardAge(dob);
 
   // Attendance summary
-  let presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
+  let presentCount = attendanceRecords.filter(a => a.status === 'PRESENT' || a.status === 'OVERTIME').length;
   let absentCount = attendanceRecords.filter(a => a.status === 'ABSENT').length;
   let lateCount = attendanceRecords.filter(a => a.status === 'LATE').length;
   let totalCount = attendanceRecords.length;
   let attendancePct = totalCount > 0 ? ((presentCount / totalCount) * 100).toFixed(1) : '—';
 
-  // Academic qualification & emergency contact (show from field if available, else placeholder)
-  const educationLevel = g.education_level || 'Not Recorded';
+  // Academic qualification & emergency contact from database
+  const educationLevel = g.education_level || 'KCSE / Secondary School Certificate';
   const emergencyName = g.emergency_contact_name || 'Not Recorded';
   const emergencyPhone = g.emergency_contact_phone || 'Not Recorded';
+  const bloodGroup = g.blood_group || '—';
+  const nextOfKin = g.next_of_kin || '—';
 
+  const currentUser = getLoggedInUser();
+  const isSupervisor = currentUser && currentUser.role === 'SUPERVISOR';
   const isInactive = g.status === 'INACTIVE';
   const safeName = (g.full_name || '').replace(/'/g, "\\'");
   const safeEmp = (g.employee_number || '').replace(/'/g, "\\'");
@@ -936,10 +1089,10 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
             <span class="badge" style="background:#DC2626; color:#FFF; font-size:11px; padding:3px 8px;">INACTIVE</span>
           </div>
           <div style="font-size:13px; color:#7F1D1D; margin-top:6px;">
-            <strong>Reason for Deactivation:</strong> ${g.deactivation_reason || 'Administrative deactivation recorded.'}
+            <strong>Reason for Deactivation:</strong> ${escapeHtml(g.deactivation_reason || 'Administrative deactivation recorded.')}
           </div>
           <div style="font-size:12px; color:#991B1B; margin-top:2px;">
-            All past shift attendance records, statutory data, emergency contacts, and personal qualifications are safely preserved in this archive.
+            All past shift attendance records, statutory data, emergency contacts, and personal qualifications are safely preserved in this database archive.
           </div>
         </div>
         <button type="button" class="btn" style="background:#16A34A; color:#FFFFFF; font-weight:700; padding:8px 16px; font-size:13px; border-radius:6px; border:none; cursor:pointer;" onclick="openReactivateGuardModal(${g.id}, '${safeName}', '${safeEmp}')">
@@ -962,27 +1115,27 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
       <div class="profile-details-grid">
         <div class="detail-field">
           <label>Full Name:</label>
-          <span class="value-lg">${g.full_name}</span>
+          <span class="value-lg">${escapeHtml(g.full_name)}</span>
         </div>
         <div class="detail-field">
           <label>Employee Number:</label>
-          <span class="value">${g.employee_number}</span>
+          <span class="value">${escapeHtml(g.employee_number)}</span>
         </div>
         <div class="detail-field">
           <label>National ID:</label>
-          <span class="value">${g.national_id || '—'}</span>
+          <span class="value">${escapeHtml(g.national_id || '—')}</span>
         </div>
         <div class="detail-field">
           <label>Phone Number:</label>
-          <span class="value">${g.phone || '—'}</span>
+          <span class="value">${escapeHtml(g.phone || '—')}</span>
         </div>
         <div class="detail-field">
           <label>Email Address:</label>
-          <span class="value">${g.email || '—'}</span>
+          <span class="value">${escapeHtml(g.email || '—')}</span>
         </div>
         <div class="detail-field">
           <label>Gender:</label>
-          <span class="value">${g.gender || '—'}</span>
+          <span class="value">${escapeHtml(g.gender || '—')}</span>
         </div>
         <div class="detail-field">
           <label>Date of Birth:</label>
@@ -1002,19 +1155,27 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </div>
         <div class="detail-field">
           <label>Deployment Site:</label>
-          <span class="value">${siteName}</span>
+          <span class="value">${escapeHtml(siteName)}</span>
         </div>
         <div class="detail-field">
           <label>Site Location:</label>
-          <span class="value">${siteLocation}</span>
+          <span class="value">${escapeHtml(siteLocation)}</span>
         </div>
         <div class="detail-field">
           <label>Assigned Shift:</label>
-          <span class="value">${shiftName}</span>
+          <span class="value">${escapeHtml(shiftName)}</span>
         </div>
         <div class="detail-field">
           <label>Supervisor:</label>
-          <span class="value">${g.supervisor_email || 'Unassigned'}</span>
+          <span class="value">${escapeHtml(g.supervisor_email || 'Unassigned')}</span>
+        </div>
+        <div class="detail-field">
+          <label>Blood Group:</label>
+          <span class="value">${escapeHtml(bloodGroup)}</span>
+        </div>
+        <div class="detail-field">
+          <label>Next of Kin:</label>
+          <span class="value">${escapeHtml(nextOfKin)}</span>
         </div>
       </div>
     </div>
@@ -1028,11 +1189,11 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </div>
         <div style="display:flex; flex-direction:column; gap:12px;">
           <div class="detail-field">
-            <label>Highest Education Level:</label>
-            <span class="value-bold">${educationLevel}</span>
+            <label>Highest Education Level (Database Record):</label>
+            <span class="value-bold" style="color:#0F172A; font-size:14px;">${escapeHtml(educationLevel)}</span>
           </div>
           <div style="background:#F0F9FF; border:1px solid #BAE6FD; border-radius:8px; padding:12px; font-size:13px; color:#0369A1;">
-            ℹ️ Academic qualifications can be updated by amending the guard personnel file.
+            ℹ️ Academic qualifications are safely saved in the company database and can be amended anytime.
           </div>
         </div>
       </div>
@@ -1040,25 +1201,32 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
       <!-- Emergency Contact -->
       <div class="profile-card" style="margin-bottom:0;">
         <div class="profile-card-header">
-          <h2 class="profile-card-title">🆘 Emergency Contact</h2>
+          <h2 class="profile-card-title">🆘 Emergency Contact & Next of Kin</h2>
         </div>
         <div style="display:flex; flex-direction:column; gap:12px;">
           <div class="detail-field">
-            <label>Contact Name:</label>
-            <span class="value">${emergencyName}</span>
+            <label>Emergency Contact Person:</label>
+            <span class="value" style="font-weight:700; color:#0F172A;">${escapeHtml(emergencyName)}</span>
           </div>
           <div class="detail-field">
-            <label>Contact Phone:</label>
-            <span class="value">${emergencyPhone}</span>
+            <label>Emergency Phone Number:</label>
+            <span class="value" style="font-weight:700; color:#1D4ED8;">${escapeHtml(emergencyPhone)}</span>
+          </div>
+          <div class="detail-field">
+            <label>Next of Kin / Relative:</label>
+            <span class="value">${escapeHtml(nextOfKin)}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Card 3: Shift Attendance Record -->
+    <!-- Card 3: Shift Attendance Record & Database Log -->
     <div class="profile-card" style="margin-top:24px; margin-bottom:24px;">
-      <div class="profile-card-header">
-        <h2 class="profile-card-title">📋 Shift Attendance Record</h2>
+      <div class="profile-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2 class="profile-card-title">📋 Shift Attendance Record & Database Log</h2>
+          <div style="font-size:12px; color:#64748B; margin-top:3px;">Real-time shift attendance entries retrieved directly from the attendance database table.</div>
+        </div>
       </div>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom:16px;">
         <div style="background:#DCFCE7; border:1px solid #BBF7D0; padding:12px; border-radius:8px; text-align:center;">
@@ -1075,22 +1243,41 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px; text-align:center;">
           <div style="font-size:22px; font-weight:800; color:#0F172A;">${totalCount}</div>
-          <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Total Shifts</div>
+          <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Total Shifts Logged</div>
         </div>
         <div style="background:#EFF6FF; border:1px solid #BFDBFE; padding:12px; border-radius:8px; text-align:center;">
           <div style="font-size:22px; font-weight:800; color:#1D4ED8;">${attendancePct}${attendancePct !== '—' ? '%' : ''}</div>
           <div style="font-size:11px; font-weight:700; color:#1D4ED8; text-transform:uppercase;">Attendance Rate</div>
         </div>
       </div>
-      ${totalCount === 0 ? `<p class="profile-empty-text">No shift attendance records found for this guard.</p>` : ''}
+
+      <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+        <table class="data-table" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th>SHIFT DATE</th>
+              <th>DEPLOYMENT SITE</th>
+              <th>CLOCK IN</th>
+              <th>CLOCK OUT</th>
+              <th>REGULAR HRS</th>
+              <th>OVERTIME</th>
+              <th>STATUS</th>
+              <th>SUPERVISOR NOTES</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderGuardAttendanceHistoryRows(attendanceRecords)}
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- Card 4: Compensation & Statutory Compliance -->
+    <!-- Card 4: Compensation & Statutory Compliance + Monthly Payroll History -->
     <div class="profile-card">
       <div class="profile-card-header">
         <h2 class="profile-card-title">💰 Compensation & Statutory Compliance</h2>
       </div>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; font-size:13px;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; font-size:13px; margin-bottom:16px;">
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
           <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Basic Salary</span>
           <span style="font-size:15px; font-weight:800; color:#0F172A;">KES ${(g.resolved_basic_salary || g.basic_salary || 15000).toLocaleString()}</span>
@@ -1098,31 +1285,104 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
           <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Statutory Registrations</span>
-          <span style="font-size:12px; color:#0F172A; display:block;"><b>KRA PIN:</b> ${g.kra_pin || 'Pending'}</span>
-          <span style="font-size:12px; color:#0F172A; display:block;"><b>NSSF No:</b> ${g.nssf_number || 'Pending'}</span>
-          <span style="font-size:12px; color:#0F172A; display:block;"><b>SHIF No:</b> ${g.shif_number || 'Pending'}</span>
+          <span style="font-size:12px; color:#0F172A; display:block;"><b>KRA PIN:</b> ${escapeHtml(g.kra_pin || 'Pending')}</span>
+          <span style="font-size:12px; color:#0F172A; display:block;"><b>NSSF No:</b> ${escapeHtml(g.nssf_number || 'Pending')}</span>
+          <span style="font-size:12px; color:#0F172A; display:block;"><b>SHIF No:</b> ${escapeHtml(g.shif_number || 'Pending')}</span>
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
           <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:4px;">Payment Method</span>
-          <span style="font-size:13px; font-weight:700; color:#0F172A; display:block;">${g.payment_method || '—'}</span>
-          <span style="font-size:12px; color:#64748B; display:block;">${g.payment_method === 'M-Pesa' ? (g.mpesa_number || 'No M-Pesa number') : `${g.bank_name || 'Bank'} · ${g.bank_account || '—'}`}</span>
+          <span style="font-size:13px; font-weight:700; color:#0F172A; display:block;">${escapeHtml(g.payment_method || '—')}</span>
+          <span style="font-size:12px; color:#64748B; display:block;">${g.payment_method === 'M-Pesa' ? escapeHtml(g.mpesa_number || 'No M-Pesa number') : `${escapeHtml(g.bank_name || 'Bank')} · ${escapeHtml(g.bank_account || '—')}`}</span>
         </div>
+      </div>
+
+      ${!isSupervisor ? `
+      <!-- Monthly Payroll & Payslip Records Table -->
+      <div style="border-top:1px solid #E2E8F0; padding-top:16px;">
+        <h4 style="font-size:14px; font-weight:800; color:#0F172A; margin:0 0 10px 0;">📑 Monthly Payroll Runs & Payslip History (Database)</h4>
+        <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>PERIOD</th>
+                <th>DAYS WORKED</th>
+                <th>BASIC PAY</th>
+                <th>GROSS PAY</th>
+                <th>DEDUCTIONS</th>
+                <th>NET SALARY</th>
+                <th>STATUS</th>
+                <th style="text-align:right;">PAYSLIP ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${renderGuardPayrollHistoryRows(payrollRecords)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      ` : ''}
+    </div>
+
+    <!-- Card 5: Leave & Off-Day Records -->
+    <div class="profile-card" style="margin-top:24px;">
+      <div class="profile-card-header">
+        <h2 class="profile-card-title">🏖️ Leave &amp; Off-Days History</h2>
+      </div>
+      <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+        <table class="data-table" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th>LEAVE TYPE</th>
+              <th>START DATE</th>
+              <th>END DATE</th>
+              <th>DURATION</th>
+              <th>STATUS</th>
+              <th>REMARKS / APPROVAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderGuardLeaveHistoryRows(leaveRecords)}
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Card 5: Company Property, Issued Supplies & Awards in Custody -->
-    <div class="profile-card" style="margin-top:24px;">
-      <div class="profile-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <!-- Card 6: Issued Equipment, Uniforms & Item Returns Log -->
+    <div class="profile-card" style="margin-top:24px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:22px;">
+      <div class="profile-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid #F1F5F9; padding-bottom:14px; margin-bottom:16px;">
         <div>
-          <h2 class="profile-card-title">🎖️ Company Property, Issued Supplies &amp; Awards in Custody</h2>
-          <div style="font-size:12px; color:#64748B; margin-top:2px;">Track all company equipment, uniforms, gear, and honor awards issued to this security guard, including return confirmations.</div>
+          <h2 class="profile-card-title" style="font-size:16px; font-weight:800; color:#0F172A; margin:0; display:flex; align-items:center; gap:8px;">
+            <span>🎖️</span> Issued Equipment, Uniforms &amp; Item Returns Log
+          </h2>
+          <div style="font-size:12px; color:#64748B; margin-top:3px;">Track all company equipment, uniforms, gear, and honor awards issued to this guard, and easily mark items as returned when surrendered back to stores.</div>
         </div>
-        <button type="button" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="openAwardItemModal('guard', ${g.id}, '${safeName}')">
-          + Award / Issue Item
-        </button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 14px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; font-weight:700;" onclick="openQuickReturnItemModal('guard', ${g.id}, '${safeName}')">
+            🔄 Mark Item as Returned
+          </button>
+          <button type="button" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="openAwardItemModal('guard', ${g.id}, '${safeName}')">
+            + Award / Issue Item
+          </button>
+        </div>
       </div>
 
-      <div class="table-responsive" style="margin-top:16px;">
+      <!-- Custody Status KPI Badges -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:16px;">
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">TOTAL ITEMS ISSUED</div>
+          <div style="font-size:16px; font-weight:800; color:#0F172A; margin-top:2px;">${(allocations || []).length + (inventoryTx || []).length} Items</div>
+        </div>
+        <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:11px; font-weight:700; color:#047857;">CURRENTLY IN CUSTODY</div>
+          <div style="font-size:16px; font-weight:800; color:#059669; margin-top:2px;">${(allocations || []).filter(a => a.status === 'ACTIVE').length + (inventoryTx || []).filter(t => t.transaction_type === 'ISSUED').length} Active (Pending Return)</div>
+        </div>
+        <div style="background:#F1F5F9; border:1px solid #CBD5E1; border-radius:8px; padding:10px 14px;">
+          <div style="font-size:11px; font-weight:700; color:#475569;">RETURNED TO STORES</div>
+          <div style="font-size:16px; font-weight:800; color:#334155; margin-top:2px;">${(allocations || []).filter(a => a.status === 'RETURNED').length + (inventoryTx || []).filter(t => t.transaction_type === 'RETURNED').length} Returned &amp; Cleared</div>
+        </div>
+      </div>
+
+      <div class="table-responsive" style="max-height: 320px; overflow-y: auto; overflow-x: auto;">
         <table class="data-table" style="font-size:12px;">
           <thead>
             <tr>
@@ -1132,7 +1392,7 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
               <th>DATE ISSUED / AWARDED</th>
               <th>HANDOVER COND.</th>
               <th>STATUS &amp; RETURN DETAILS</th>
-              <th style="text-align:right;">ACTION</th>
+              <th style="text-align:right;">ACTION / RETURN</th>
             </tr>
           </thead>
           <tbody>
@@ -1140,6 +1400,51 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
           </tbody>
         </table>
       </div>
+    </div>
+
+    ${!isSupervisor ? `
+    <!-- Guard Salary Advances Section -->
+    <div class="guard-file-card" style="margin-top:20px; padding:20px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">💵 Mid-Month Salary Advances</h4>
+          <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Record of mid-month salary advances disbursed to this guard with automatic monthly payroll deduction status.</p>
+        </div>
+        <button type="button" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="openIssueSalaryAdvanceModal('GUARD', ${g.id}, '${safeName}')">
+          + Issue Salary Advance
+        </button>
+      </div>
+
+      <div class="table-responsive" style="margin-top:16px; max-height: 260px; overflow-y: auto; overflow-x: auto;">
+        <table class="data-table" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th>REF #</th>
+              <th>AMOUNT</th>
+              <th>DISBURSEMENT DATE</th>
+              <th>METHOD &amp; TRX</th>
+              <th>REASON</th>
+              <th>STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderGuardAdvancesRows(guardAdvances)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
+
+    <div style="margin-top:24px; padding:16px 0; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #E2E8F0; flex-wrap:wrap; gap:12px;">
+      <button type="button" class="back-to-guards-btn" onclick="backToGuardsList()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to Guard Directory
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="window.scrollTo({top:0, behavior:'smooth'}); const mc = document.querySelector('.content-container'); if(mc) mc.scrollTo({top:0, behavior:'smooth'});">
+        ↑ Back to Top of File
+      </button>
     </div>
   `;
 }
@@ -1150,34 +1455,81 @@ async function viewGuardFile(guardId) {
   const modal = document.getElementById('modal-guard-file');
   const body = document.getElementById('guard-file-body');
 
+  const currentUser = getLoggedInUser();
+  const isSupervisor = currentUser && currentUser.role === 'SUPERVISOR';
+
+  // Ensure modal popup is permanently closed (no "small files" popups)
+  if (modal) modal.style.display = 'none';
+  if (body) body.innerHTML = '';
+
+  // Track previous tab for seamless return
+  if (window.currentActiveTab && window.currentActiveTab !== 'guards') {
+    window.guardFilePreviousTab = window.currentActiveTab;
+  } else if (!window.guardFilePreviousTab) {
+    window.guardFilePreviousTab = 'guards';
+  }
+  window.currentActiveTab = 'guards';
+
+  // Ensure Guards panel is active in main view
+  document.querySelectorAll('section[id^="panel-"]').forEach(sec => sec.style.display = 'none');
+  const guardsPanel = document.getElementById('panel-guards');
+  if (guardsPanel) guardsPanel.style.display = 'block';
+
+  // Highlight Guards tab in navigation
+  document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+  const guardsNav = document.querySelector(`.nav-item[onclick*="'guards'"]`);
+  if (guardsNav) guardsNav.classList.add('active');
+
+  // Set top header title
+  const titleEl = document.getElementById('current-page-title');
+  if (titleEl) titleEl.innerText = 'Guard Personnel File';
+
+  // Switch from list view to full page file view
   if (listViewContainer) listViewContainer.style.display = 'none';
   if (fileViewContainer) {
     fileViewContainer.style.display = 'block';
-    fileViewContainer.innerHTML = '<div style="text-align:center;padding:50px;color:#64748B;"><div style="font-size:24px;margin-bottom:8px;">⏳</div>Loading file details...</div>';
+    fileViewContainer.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#64748B;"><div style="font-size:32px;margin-bottom:12px;">🛡️</div><div style="font-size:16px;font-weight:700;color:#0F172A;margin-bottom:6px;">Loading Guard Personnel File...</div><div style="font-size:13px;">Retrieving profile, attendance, statutory records, custody and salary advances from database...</div></div>';
   }
-  if (body) {
-    body.innerHTML = '<div style="text-align:center;padding:50px;color:#64748B;"><div style="font-size:24px;margin-bottom:8px;">⏳</div>Loading file details...</div>';
+
+  // Smooth scroll to top of workspace
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const mainContainer = document.querySelector('.content-container');
+  if (mainContainer && mainContainer.scrollTo) {
+    mainContainer.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   try {
-    const [gRes, aRes, sRes, allocRes, txRes] = await Promise.all([
+    const [gRes, aRes, sRes, shRes, allocRes, txRes, advRes, payRes, leaveRes] = await Promise.all([
       apiFetch(`/guards/${guardId}`),
       apiFetch(`/attendance?guard_id=${guardId}`).catch(() => ({ ok: false })),
       apiFetch('/sites').catch(() => ({ ok: false })),
+      apiFetch('/shifts').catch(() => ({ ok: false })),
       apiFetch(`/assets/allocations?guard_id=${guardId}`).catch(() => ({ ok: false })),
-      apiFetch(`/assets/inventory/transactions?guard_id=${guardId}`).catch(() => ({ ok: false }))
+      apiFetch(`/assets/inventory/transactions?guard_id=${guardId}`).catch(() => ({ ok: false })),
+      isSupervisor ? Promise.resolve({ ok: false }) : apiFetch(`/salary-advances?advance_type=GUARD&guard_id=${guardId}`).catch(() => ({ ok: false })),
+      isSupervisor ? Promise.resolve({ ok: false }) : apiFetch(`/payroll/guard/${guardId}/records`).catch(() => ({ ok: false })),
+      apiFetch(`/leave?guard_id=${guardId}`).catch(() => ({ ok: false }))
     ]);
 
-    if (!gRes.ok) throw new Error('Guard record not found');
+    if (!gRes.ok) throw new Error('Guard record not found in database');
     const g = await gRes.json();
     currentViewedGuard = g;
 
     const attendance = (aRes && aRes.ok) ? await aRes.json() : [];
     const sites = (sRes && sRes.ok) ? await sRes.json() : (cachedSites || []);
+    const shifts = (shRes && shRes.ok) ? await shRes.json() : [];
     const allocations = (allocRes && allocRes.ok) ? await allocRes.json() : [];
     const inventoryTx = (txRes && txRes.ok) ? await txRes.json() : [];
+    const guardAdvances = (advRes && advRes.ok) ? await advRes.json() : [];
+    const payrollRecords = (payRes && payRes.ok) ? await payRes.json() : [];
+    const leaveRecords = (leaveRes && leaveRes.ok) ? await leaveRes.json() : [];
 
-    const html = generateGuardFileHTML(g, attendance, sites, [], allocations, inventoryTx);
+    currentGuardCustodyAllocations = allocations;
+    currentGuardCustodyInventory = inventoryTx;
+
+    const html = generateGuardFileHTML(
+      g, attendance, sites, shifts, allocations, inventoryTx, guardAdvances, payrollRecords, leaveRecords
+    );
 
     if (fileViewContainer) {
       fileViewContainer.innerHTML = html;
@@ -1194,8 +1546,8 @@ async function viewGuardFile(guardId) {
     console.error('viewGuardFile error:', err);
     const errHtml = `
       <div style="padding:40px; text-align:center;">
-        <div style="color:#EF4444; font-size:16px; font-weight:700; margin-bottom:12px;">Failed to load file</div>
-        <p style="color:#64748B; margin-bottom:16px;">${err.message}</p>
+        <div style="color:#EF4444; font-size:16px; font-weight:700; margin-bottom:12px;">Failed to load guard file from database</div>
+        <p style="color:#64748B; margin-bottom:16px;">${escapeHtml(err.message)}</p>
         <button class="btn btn-secondary" onclick="backToGuardsList()">← Back to Guard List</button>
       </div>
     `;
@@ -1204,21 +1556,43 @@ async function viewGuardFile(guardId) {
   }
 }
 
+
 function backToGuardsList() {
   const fileViewContainer = document.getElementById('guard-file-view');
   const listViewContainer = document.getElementById('guards-list-view');
+  const modal = document.getElementById('modal-guard-file');
+  if (modal) modal.style.display = 'none';
+
+  if (window.guardFilePreviousTab && window.guardFilePreviousTab !== 'guards') {
+    const prev = window.guardFilePreviousTab;
+    window.guardFilePreviousTab = null;
+    switchTab(prev);
+    return;
+  }
+
+  window.guardFilePreviousTab = null;
+  window.currentActiveTab = 'guards';
   if (fileViewContainer) fileViewContainer.style.display = 'none';
   if (listViewContainer) listViewContainer.style.display = 'block';
+  const titleEl = document.getElementById('current-page-title');
+  if (titleEl) titleEl.innerText = 'Guard Directory';
   loadGuards();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const mainContainer = document.querySelector('.content-container');
+  if (mainContainer && mainContainer.scrollTo) {
+    mainContainer.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 function openGuardFileModal(guardId) {
+  // Always open in full view, never small modal file
   viewGuardFile(guardId);
 }
 
 function closeGuardFileModal() {
   const modal = document.getElementById('modal-guard-file');
   if (modal) modal.style.display = 'none';
+  backToGuardsList();
 }
 
 function openAmendGuardModal(guardId) {
@@ -1286,6 +1660,11 @@ function openAmendGuardModal(guardId) {
   document.getElementById('amend-guard-kra').value = g.kra_pin || '';
   document.getElementById('amend-guard-nssf').value = g.nssf_number || '';
   document.getElementById('amend-guard-shif').value = g.shif_number || '';
+  if (document.getElementById('amend-guard-education')) document.getElementById('amend-guard-education').value = g.education_level || '';
+  if (document.getElementById('amend-guard-blood-group')) document.getElementById('amend-guard-blood-group').value = g.blood_group || '';
+  if (document.getElementById('amend-guard-em-name')) document.getElementById('amend-guard-em-name').value = g.emergency_contact_name || '';
+  if (document.getElementById('amend-guard-em-phone')) document.getElementById('amend-guard-em-phone').value = g.emergency_contact_phone || '';
+  if (document.getElementById('amend-guard-next-of-kin')) document.getElementById('amend-guard-next-of-kin').value = g.next_of_kin || '';
 
   toggleAmendPayFields();
 
@@ -1359,11 +1738,18 @@ async function handleAmendGuardSubmit(e) {
   const nssf_number = document.getElementById('amend-guard-nssf').value.trim() || null;
   const shif_number = document.getElementById('amend-guard-shif').value.trim() || null;
 
+  const education_level = document.getElementById('amend-guard-education')?.value.trim() || null;
+  const blood_group = document.getElementById('amend-guard-blood-group')?.value.trim() || null;
+  const emergency_contact_name = document.getElementById('amend-guard-em-name')?.value.trim() || null;
+  const emergency_contact_phone = document.getElementById('amend-guard-em-phone')?.value.trim() || null;
+  const next_of_kin = document.getElementById('amend-guard-next-of-kin')?.value.trim() || null;
+
   const payload = {
     full_name, national_id, phone, email, gender, date_of_birth, hire_date,
     site_id, shift_id, supervisor_id, basic_salary, is_reliever,
     payment_method, mpesa_number, bank_name, bank_account,
-    kra_pin, nssf_number, shif_number
+    kra_pin, nssf_number, shif_number,
+    education_level, blood_group, emergency_contact_name, emergency_contact_phone, next_of_kin
   };
 
   try {
@@ -1409,6 +1795,13 @@ async function loadSites() {
             ? `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:600;">👨‍💼 ${s.supervisor_name}</span>`
             : `<span style="font-size:11px; color:#94A3B8; font-style:italic;">Unassigned</span>`;
 
+          const geofenceBadge = (s.latitude && s.longitude)
+            ? `<span class="badge" style="background:#F0FDF4; color:#166534; font-weight:600;" title="Lat: ${s.latitude}, Lng: ${s.longitude}">📍 ${s.geofence_radius || 200}m (GPS Set)</span>`
+            : `<span class="badge" style="background:#F1F5F9; color:#64748B;">📍 ${s.geofence_radius || 200}m (No GPS)</span>`;
+          const superGuardBadge = s.super_guard_name
+            ? `<span class="badge" style="background:#E0F2FE; color:#0369A1; font-weight:700;">🛡️ ${s.super_guard_name}</span>`
+            : `<span style="font-size:11px; color:#94A3B8; font-style:italic;">None</span>`;
+
           tr.innerHTML = `
             <td><b>${s.site_name}</b></td>
             <td>${regName}</td>
@@ -1418,6 +1811,12 @@ async function loadSites() {
             <td>${basicSal}</td>
             <td>KES ${Number(s.daily_rate).toLocaleString()}</td>
             <td>KES ${Number(s.night_allowance || 0).toLocaleString()}</td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:3px;">
+                <div>${geofenceBadge}</div>
+                <div>${superGuardBadge}</div>
+              </div>
+            </td>
             <td>
               <button class="btn btn-primary" style="padding:4px 10px; font-size:12px;" onclick="openEditSiteModal(${s.id})">✏️ Edit Site</button>
               <button class="btn btn-secondary" style="padding:4px 10px; font-size:12px; margin-left:4px;" onclick="openGenerateInvoiceModal(${s.id})">🧾 Invoice Site</button>
@@ -2089,7 +2488,7 @@ async function loadPayrollReview(targetPeriodId = null) {
     const periods = await res.json();
     const tbody = document.getElementById('payroll-review-body');
     if (!periods.length) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found. Click 'Run Payroll' to calculate.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="16" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found. Click 'Run Payroll' to calculate.</td></tr>`;
       setPayrollMetricsZero();
       return;
     }
@@ -2115,7 +2514,7 @@ async function loadPayrollReview(targetPeriodId = null) {
     const records = await recRes.json();
     currentPayrollRecordsCache = records || [];
     if (!records || !records.length) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found for period #${periodId}. Click 'Run Payroll' to calculate.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="16" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found for period #${periodId}. Click 'Run Payroll' to calculate.</td></tr>`;
       setPayrollMetricsZero();
       return;
     }
@@ -2140,25 +2539,32 @@ async function loadPayrollReview(targetPeriodId = null) {
 
       if (tbody) {
         const tr = document.createElement('tr');
+        const daysW = r.days_worked !== undefined ? r.days_worked : 0;
+        const offDayDed = r.off_day_deduction || 0;
+        const salAdvDed = r.salary_advance_deduction || 0;
+        const unpLeaveDed = r.unpaid_leave_deduction || 0;
         tr.innerHTML = `
           <td><b>${r.employee_number}</b></td>
           <td>${r.guard_name}</td>
-          <td>KES ${r.basic_pay.toLocaleString()}</td>
-          <td>KES ${r.overtime_pay.toLocaleString()}</td>
-          <td>KES ${r.allowances.toLocaleString()}</td>
-          <td><b>KES ${r.gross_pay.toLocaleString()}</b></td>
-          <td>KES ${r.nssf_deduction.toLocaleString()}</td>
-          <td>KES ${r.shif_deduction.toLocaleString()}</td>
-          <td>KES ${r.housing_levy_deduction.toLocaleString()}</td>
+          <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700; padding:3px 8px; border-radius:6px;">${daysW} / 26 d</span></td>
+          <td>KES ${Number(r.basic_pay || 0).toLocaleString()}</td>
+          <td>KES ${Number(r.overtime_pay || 0).toLocaleString()}</td>
+          <td>KES ${Number(r.allowances || 0).toLocaleString()}</td>
+          <td><b>KES ${Number(r.gross_pay || 0).toLocaleString()}</b></td>
+          <td>KES ${Number(r.nssf_deduction || 0).toLocaleString()}</td>
+          <td>KES ${Number(r.shif_deduction || 0).toLocaleString()}</td>
+          <td>KES ${Number(r.housing_levy_deduction || 0).toLocaleString()}</td>
           <td>
             <div style="display:flex; align-items:center; gap:6px;">
-              <span>KES ${r.paye_deduction.toLocaleString()}</span>
+              <span>KES ${Number(r.paye_deduction || 0).toLocaleString()}</span>
               <button class="btn btn-secondary" style="padding:2px 6px; font-size:11px; height:auto;" title="View PAYE Tax Audit Breakdown" onclick="openPayeBreakdownModal(${idx})">ℹ️ View breakdown</button>
             </div>
           </td>
-          <td style="color:${(r.unpaid_leave_deduction || 0) > 0 ? '#DC2626' : '#64748B'}; font-weight:${(r.unpaid_leave_deduction || 0) > 0 ? '700' : '400'};">KES ${(r.unpaid_leave_deduction || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-          <td style="color:#3B5EDB; font-weight:700;">KES ${r.net_pay.toLocaleString()}</td>
-          <td><button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="downloadSinglePayslip(${r.id})">PDF</button></td>
+          <td style="color:${unpLeaveDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${unpLeaveDed > 0 ? '700' : '400'};">KES ${unpLeaveDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+          <td style="color:${offDayDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${offDayDed > 0 ? '700' : '400'};">KES ${offDayDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+          <td style="color:${salAdvDed > 0 ? '#D97706' : '#64748B'}; font-weight:${salAdvDed > 0 ? '700' : '400'};">KES ${salAdvDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+          <td style="color:#3B5EDB; font-weight:700;">KES ${Number(r.net_pay || 0).toLocaleString()}</td>
+          <td><button class="btn btn-secondary" style="padding:4px 10px; font-size:12px; white-space:nowrap;" onclick="downloadSinglePayslip(${r.id})">📄 Payslip</button></td>
         `;
         tbody.appendChild(tr);
       }
@@ -2619,6 +3025,8 @@ async function downloadSinglePayslip(recordId) {
 let analyticsCache = null;
 
 async function loadAnalyticsData(selectedPeriodId = null) {
+  const user = getLoggedInUser();
+  if (user && user.role === 'SUPERVISOR') return;
   const yearSelect = document.getElementById('reports-year-select');
   const year = yearSelect ? yearSelect.value : 2026;
 
@@ -4641,6 +5049,14 @@ async function openAddSiteModal() {
       (supervisorsCache || []).map(s => `<option value="${s.id}">👨‍💼 ${s.full_name || s.email} (${s.email})</option>`).join('');
   }
 
+  // Populate Super Guard select for new site
+  const sgSelect = document.getElementById('new-site-super-guard-select');
+  if (sgSelect) {
+    const guards = cachedGuards || [];
+    sgSelect.innerHTML = '<option value="">No Super Guard (Unassigned)</option>' +
+      guards.map(g => `<option value="${g.id}">🛡️ ${g.full_name} (${g.employee_number})</option>`).join('');
+  }
+
   const modal = document.getElementById('modal-add-site');
   if (modal) modal.style.display = 'flex';
 }
@@ -4662,6 +5078,15 @@ async function handleAddSiteSubmit(e) {
   const basic_salary = parseFloat(document.getElementById('new-site-basic-salary').value) || 15000;
   const daily_rate = parseFloat(document.getElementById('new-site-rate').value) || 1200;
 
+  const rawLat = parseFloat(document.getElementById('new-site-latitude')?.value);
+  const latitude = isNaN(rawLat) ? null : rawLat;
+  const rawLng = parseFloat(document.getElementById('new-site-longitude')?.value);
+  const longitude = isNaN(rawLng) ? null : rawLng;
+  const rawRadius = parseInt(document.getElementById('new-site-geofence-radius')?.value);
+  const geofence_radius = isNaN(rawRadius) ? 200 : rawRadius;
+  const rawSg = parseInt(document.getElementById('new-site-super-guard-select')?.value);
+  const super_guard_id = isNaN(rawSg) ? null : rawSg;
+
   try {
     const res = await apiFetch('/sites', {
       method: 'POST',
@@ -4676,7 +5101,11 @@ async function handleAddSiteSubmit(e) {
         daily_rate,
         night_allowance: 200.0,
         transport_allowance: 100.0,
-        housing_allowance: 150.0
+        housing_allowance: 150.0,
+        latitude,
+        longitude,
+        geofence_radius,
+        super_guard_id
       })
     });
     const data = await res.json();
@@ -4734,6 +5163,21 @@ async function openEditSiteModal(siteId) {
         (supervisorsCache || []).map(s => `<option value="${s.id}" ${site.supervisor_id === s.id ? 'selected' : ''}>👨‍💼 ${s.full_name || s.email} (${s.email})</option>`).join('');
     }
 
+    // Populate Geofence & Super Guard fields
+    const editLatEl = document.getElementById('edit-site-latitude');
+    if (editLatEl) editLatEl.value = (site.latitude !== null && site.latitude !== undefined) ? site.latitude : '';
+    const editLngEl = document.getElementById('edit-site-longitude');
+    if (editLngEl) editLngEl.value = (site.longitude !== null && site.longitude !== undefined) ? site.longitude : '';
+    const editRadiusEl = document.getElementById('edit-site-geofence-radius');
+    if (editRadiusEl) editRadiusEl.value = site.geofence_radius || 200;
+
+    const sgSelect = document.getElementById('edit-site-super-guard-select');
+    if (sgSelect) {
+      const guards = cachedGuards || [];
+      sgSelect.innerHTML = '<option value="">No Super Guard (Unassigned)</option>' +
+        guards.map(g => `<option value="${g.id}" ${site.super_guard_id === g.id ? 'selected' : ''}>🛡️ ${g.full_name} (${g.employee_number})</option>`).join('');
+    }
+
     const modal = document.getElementById('modal-edit-site');
     if (modal) modal.style.display = 'flex';
   } catch (err) {
@@ -4766,6 +5210,14 @@ async function handleEditSiteSubmit(e) {
   const transport_allowance = isNaN(rawTrans) ? 100 : rawTrans;
   const rawHouse = parseFloat(document.getElementById('edit-site-housing-allowance').value);
   const housing_allowance = isNaN(rawHouse) ? 150 : rawHouse;
+  const rawLat = parseFloat(document.getElementById('edit-site-latitude')?.value);
+  const latitude = isNaN(rawLat) ? null : rawLat;
+  const rawLng = parseFloat(document.getElementById('edit-site-longitude')?.value);
+  const longitude = isNaN(rawLng) ? null : rawLng;
+  const rawRadius = parseInt(document.getElementById('edit-site-geofence-radius')?.value);
+  const geofence_radius = isNaN(rawRadius) ? 200 : rawRadius;
+  const rawSg = parseInt(document.getElementById('edit-site-super-guard-select')?.value);
+  const super_guard_id = isNaN(rawSg) ? null : rawSg;
 
   try {
     const res = await apiFetch(`/sites/${siteId}`, {
@@ -4781,7 +5233,11 @@ async function handleEditSiteSubmit(e) {
         daily_rate,
         night_allowance,
         transport_allowance,
-        housing_allowance
+        housing_allowance,
+        latitude,
+        longitude,
+        geofence_radius,
+        super_guard_id
       })
     });
     const data = await res.json();
@@ -5735,9 +6191,15 @@ function renderCompanyDocumentsTable() {
     const sizeFormatted = doc.file_size_bytes ? (doc.file_size_bytes > 1048576 ? `${(doc.file_size_bytes/1048576).toFixed(1)} MB` : `${Math.round(doc.file_size_bytes/1024)} KB`) : '—';
     const dateFormatted = doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '—';
 
+    const safeTitle = (doc.title || '').replace(/'/g, "\\'");
+    const safeFile = (doc.file_name || '').replace(/'/g, "\\'");
+    const safeMime = (doc.mime_type || '').replace(/'/g, "\\'");
+
     tr.innerHTML = `
       <td>
-        <strong style="color:#0F172A; font-size:13px;">${doc.title}</strong>
+        <a href="javascript:void(0)" onclick="viewCompanyDocument(${doc.id})" style="font-size:13px; font-weight:700; color:#1D4ED8; text-decoration:none; cursor:pointer;" title="Click to view document">
+          📄 ${escapeHtml(doc.title)}
+        </a>
         ${doc.description ? `<div style="font-size:11px; color:#64748B; max-width:280px; line-height:1.3; margin-top:2px;">${doc.description}</div>` : ''}
       </td>
       <td><span class="badge" style="background:#F1F5F9; color:#334155; font-weight:600;">${doc.category}</span></td>
@@ -5752,9 +6214,12 @@ function renderCompanyDocumentsTable() {
       </td>
       <td style="font-size:12px; color:#64748B;">${dateFormatted}</td>
       <td>
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="downloadCompanyDocument(${doc.id}, '${doc.file_name}')" title="Download secure file">⬇️ Download</button>
-          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteCompanyDocumentRecord(${doc.id}, '${doc.title}')" title="Delete document">🗑️</button>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn-primary" style="padding:4px 10px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px;" onclick="viewCompanyDocument(${doc.id})" title="View and preview document inline">
+            👁️ View
+          </button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="downloadCompanyDocument(${doc.id}, '${safeFile}')" title="Download secure file">⬇️ Download</button>
+          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteCompanyDocumentRecord(${doc.id}, '${safeTitle}')" title="Delete document">🗑️</button>
         </div>
       </td>
     `;
@@ -5844,6 +6309,176 @@ async function deleteCompanyDocumentRecord(docId, title) {
   }
 }
 
+// ==================== COMPANY DOCUMENTS VAULT PASSWORD AUTH ====================
+function openDocumentsVaultModal() {
+  const modal = document.getElementById('modal-documents-vault-auth');
+  const input = document.getElementById('vault-password-input');
+  const errBox = document.getElementById('vault-auth-error');
+  if (errBox) { errBox.style.display = 'none'; errBox.innerText = ''; }
+  if (input) { input.value = ''; input.type = 'password'; }
+  if (modal) modal.style.display = 'flex';
+  setTimeout(() => { if (input) input.focus(); }, 150);
+}
+
+function closeDocumentsVaultModal() {
+  const modal = document.getElementById('modal-documents-vault-auth');
+  if (modal) modal.style.display = 'none';
+}
+
+function toggleVaultPasswordVisibility() {
+  const input = document.getElementById('vault-password-input');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function handleDocumentsVaultAuthSubmit(event) {
+  event.preventDefault();
+  const input = document.getElementById('vault-password-input');
+  const errBox = document.getElementById('vault-auth-error');
+  const btn = document.getElementById('btn-vault-unlock');
+  const password = input ? input.value : '';
+
+  if (!password) {
+    if (errBox) { errBox.innerText = 'Please enter your password.'; errBox.style.display = 'block'; }
+    return;
+  }
+
+  if (errBox) { errBox.style.display = 'none'; errBox.innerText = ''; }
+  if (btn) { btn.disabled = true; btn.innerText = 'Verifying...'; }
+
+  try {
+    const res = await apiFetch('/documents/verify-vault-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Incorrect password.');
+
+    // Grant one-time authorization to enter the documents section
+    window.isAuthorizedForDocumentEntryOnce = true;
+    closeDocumentsVaultModal();
+    showToast('🔓 Password verified. Access granted to Company Documents.', 'success');
+    switchTab('documents');
+    window.isAuthorizedForDocumentEntryOnce = false;
+  } catch (err) {
+    console.error('Vault auth error:', err);
+    if (errBox) {
+      errBox.innerText = err.message || 'Incorrect password. Access denied.';
+      errBox.style.display = 'block';
+    }
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '🔓 Unlock Vault'; }
+  }
+}
+
+function lockCompanyDocumentsVault() {
+  window.isAuthorizedForDocumentEntryOnce = false;
+  showToast('🔒 Company Documents Vault has been locked.', 'info');
+  switchTab('dashboard');
+}
+
+// ==================== COMPANY DOCUMENTS VIEWER & PREVIEW ====================
+function viewCompanyDocument(docId) {
+  const doc = allCompanyDocuments.find(d => d.id === docId);
+  if (!doc) {
+    showToast('Document not found in cache.', 'warning');
+    return;
+  }
+
+  const modal = document.getElementById('modal-view-document');
+  const titleEl = document.getElementById('viewer-doc-title');
+  const subEl = document.getElementById('viewer-doc-sub');
+  const metaBar = document.getElementById('viewer-meta-bar');
+  const contentBody = document.getElementById('viewer-content-body');
+  const fsBtn = document.getElementById('viewer-fullscreen-btn');
+  const dlBtn = document.getElementById('viewer-download-btn');
+
+  if (titleEl) titleEl.innerText = doc.title;
+  if (subEl) subEl.innerText = `${doc.category} • Confidentiality: ${doc.confidentiality_level}`;
+
+  const sizeFormatted = doc.file_size_bytes ? (doc.file_size_bytes > 1048576 ? `${(doc.file_size_bytes/1048576).toFixed(1)} MB` : `${Math.round(doc.file_size_bytes/1024)} KB`) : 'Unknown Size';
+  const dateFormatted = doc.created_at ? new Date(doc.created_at).toLocaleString() : '—';
+
+  let confBadge = '';
+  if (doc.confidentiality_level === 'RESTRICTED') {
+    confBadge = '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">🛡️ RESTRICTED</span>';
+  } else if (doc.confidentiality_level === 'CONFIDENTIAL') {
+    confBadge = '<span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">🔒 CONFIDENTIAL</span>';
+  } else {
+    confBadge = '<span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">🏢 INTERNAL</span>';
+  }
+
+  if (metaBar) {
+    metaBar.innerHTML = `
+      <div><strong>File Name:</strong> 📄 ${escapeHtml(doc.file_name)}</div>
+      <div><strong>Category:</strong> <span class="badge" style="background:#E2E8F0; color:#334155;">${escapeHtml(doc.category)}</span></div>
+      <div><strong>Level:</strong> ${confBadge}</div>
+      <div><strong>Size:</strong> ${sizeFormatted}</div>
+      <div><strong>Uploaded By:</strong> ${escapeHtml(doc.uploaded_by_name || 'System')}</div>
+      <div><strong>Date:</strong> ${dateFormatted}</div>
+      ${doc.description ? `<div style="width:100%; margin-top:4px; font-style:italic; color:#64748B;">Notes: ${escapeHtml(doc.description)}</div>` : ''}
+    `;
+  }
+
+  const viewUrl = `/api/v1/documents/${doc.id}/view?token=${encodeURIComponent(authToken || '')}`;
+  if (fsBtn) {
+    fsBtn.onclick = () => window.open(viewUrl, '_blank');
+  }
+  if (dlBtn) {
+    dlBtn.onclick = () => downloadCompanyDocument(doc.id, doc.file_name);
+  }
+
+  const fileNameLower = (doc.file_name || '').toLowerCase();
+  const mimeLower = (doc.mime_type || '').toLowerCase();
+
+  if (contentBody) {
+    if (fileNameLower.endsWith('.pdf') || mimeLower.includes('pdf')) {
+      contentBody.innerHTML = `
+        <iframe src="${viewUrl}" style="width:100%; height:100%; min-height:480px; border:none; display:block;" title="${escapeHtml(doc.title)}"></iframe>
+      `;
+    } else if (fileNameLower.endsWith('.png') || fileNameLower.endsWith('.jpg') || fileNameLower.endsWith('.jpeg') || fileNameLower.endsWith('.webp') || mimeLower.startsWith('image/')) {
+      contentBody.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:center; height:100%; padding:24px;">
+          <img src="${viewUrl}" alt="${escapeHtml(doc.title)}" style="max-width:100%; max-height:calc(94vh - 200px); object-fit:contain; border-radius:8px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); border:1px solid #CBD5E1;" />
+        </div>
+      `;
+    } else {
+      contentBody.innerHTML = `
+        <div style="text-align:center; padding:60px 20px; max-width:540px; margin:auto;">
+          <div style="font-size:56px; margin-bottom:16px;">📁</div>
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0 0 8px 0;">${escapeHtml(doc.title)}</h3>
+          <p style="font-size:13px; color:#64748B; margin-bottom:20px; line-height:1.5;">
+            <strong>${escapeHtml(doc.file_name)}</strong> (${sizeFormatted})<br>
+            This file type can be opened directly or downloaded securely to your computer.
+          </p>
+          <div style="display:flex; justify-content:center; gap:12px;">
+            <button class="btn btn-primary" style="padding:10px 22px; font-weight:700;" onclick="downloadCompanyDocument(${doc.id}, '${escapeHtml(doc.file_name)}')">
+              ⬇️ Download & Open File
+            </button>
+            <button class="btn btn-secondary" style="padding:10px 18px;" onclick="window.open('${viewUrl}', '_blank')">
+              ↗️ Open in New Tab
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeViewDocumentModal() {
+  const modal = document.getElementById('modal-view-document');
+  const contentBody = document.getElementById('viewer-content-body');
+  if (contentBody) contentBody.innerHTML = '';
+  if (modal) modal.style.display = 'none';
+}
+
 window.loadCompanyDocuments = loadCompanyDocuments;
 window.filterCompanyDocuments = filterCompanyDocuments;
 window.handleDocumentCategoryChange = handleDocumentCategoryChange;
@@ -5853,6 +6488,13 @@ window.closeUploadDocumentModal = closeUploadDocumentModal;
 window.handleUploadDocumentSubmit = handleUploadDocumentSubmit;
 window.downloadCompanyDocument = downloadCompanyDocument;
 window.deleteCompanyDocumentRecord = deleteCompanyDocumentRecord;
+window.openDocumentsVaultModal = openDocumentsVaultModal;
+window.closeDocumentsVaultModal = closeDocumentsVaultModal;
+window.toggleVaultPasswordVisibility = toggleVaultPasswordVisibility;
+window.handleDocumentsVaultAuthSubmit = handleDocumentsVaultAuthSubmit;
+window.lockCompanyDocumentsVault = lockCompanyDocumentsVault;
+window.viewCompanyDocument = viewCompanyDocument;
+window.closeViewDocumentModal = closeViewDocumentModal;
 
 
 /* ==========================================================================
@@ -6916,6 +7558,15 @@ async function viewInvoice(invoiceId) {
     document.getElementById('view-inv-period').innerText = `Billing Period: ${inv.billing_period || ''}`;
     document.getElementById('view-inv-issue-date').innerText = inv.issue_date || '';
     document.getElementById('view-inv-due-date').innerText = inv.due_date || '';
+
+    const invNum = inv.invoice_number || '';
+    const refNum = invNum.startsWith('INV-') ? `CSIL/INV/${invNum.replace('INV-', '')}` : `CSIL/INV/${invNum}`;
+    const refEl = document.getElementById('view-inv-ref');
+    if (refEl) refEl.innerText = refNum;
+    const paybillEl = document.getElementById('view-inv-paybill-acc');
+    if (paybillEl) paybillEl.innerText = invNum;
+    const sigDateEl = document.getElementById('view-inv-sig-date');
+    if (sigDateEl) sigDateEl.innerText = `Date: ${inv.issue_date || ''}`;
 
     const st = (inv.status || 'ISSUED').toUpperCase();
     const stBadge = document.getElementById('view-inv-status-badge');
@@ -8182,7 +8833,7 @@ let cachedMilestones = [];
 let cachedOwnershipRecords = [];
 
 function switchHistorySubtab(subTab) {
-  const tabs = ['profile', 'founding', 'milestones', 'governance', 'analytics'];
+  const tabs = ['profile', 'clients', 'recommendations', 'services', 'founding', 'milestones', 'governance', 'analytics'];
   tabs.forEach(t => {
     const el = document.getElementById(`subtab-history-${t}`);
     const btn = document.getElementById(`btn-subtab-history-${t}`);
@@ -8191,6 +8842,10 @@ function switchHistorySubtab(subTab) {
       btn.className = (t === subTab) ? 'btn btn-primary' : 'btn btn-secondary';
     }
   });
+
+  if (subTab === 'clients') loadCompanyClientsPortfolio();
+  if (subTab === 'recommendations') loadCompanyRecommendations();
+  if (subTab === 'services') loadCompanyServices();
 }
 
 async function loadCompanyHistory() {
@@ -9107,8 +9762,8 @@ function renderCustodyRows(allocations = [], inventoryTx = [], targetType = 'gua
       `;
     } else if (isReturned) {
       statusBadge = `
-        <span class="badge" style="background:#F1F5F9; color:#059669; font-weight:800; font-size:11px; border:1px solid #A7F3D0;">✅ RETURNED</span>
-        <div style="font-size:11px; color:#047857; margin-top:3px; font-weight:700;">Returned: <b>${al.return_date || '-'}</b></div>
+        <span class="badge" style="background:#F0FDF4; color:#15803D; font-weight:800; font-size:11px; border:1px solid #BBF7D0;">✅ RETURNED TO STORES</span>
+        <div style="font-size:11px; color:#15803D; margin-top:3px; font-weight:700;">Returned: <b>${al.return_date || '-'}</b></div>
         <div style="font-size:11px; color:#64748B;">Condition: <b>${escapeHtml(al.condition_on_return || 'GOOD')}</b></div>
         ${al.notes ? `<div style="font-size:11px; color:#475569; font-style:italic; margin-top:2px;">"${escapeHtml(al.notes)}"</div>` : ''}
       `;
@@ -9122,12 +9777,12 @@ function renderCustodyRows(allocations = [], inventoryTx = [], targetType = 'gua
     let actionBtn = '';
     if (isActive) {
       actionBtn = `
-        <button class="btn btn-secondary" style="font-size:11px; padding:4px 10px; font-weight:700; background:#F8FAFC; border:1px solid #CBD5E1;" onclick="openReturnCustodyModal(${al.id}, '${safeItemName}', '${safeTag}', '${targetType}', ${targetId})">
-          🔄 Return Item
+        <button class="btn btn-secondary" style="font-size:11px; padding:4px 10px; font-weight:700; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; border-radius:6px;" onclick="openReturnCustodyModal(${al.id}, '${safeItemName}', '${safeTag}', '${targetType}', ${targetId}, 'asset')">
+          🔄 Mark as Returned
         </button>
       `;
     } else if (isReturned) {
-      actionBtn = `<span style="color:#10B981; font-weight:800; font-size:11px;">✓ In Company Stores</span>`;
+      actionBtn = `<span style="color:#10B981; font-weight:800; font-size:11px;">✓ Cleared &amp; In Stores</span>`;
     } else {
       actionBtn = `<span style="color:#64748B; font-size:11px;">${al.status}</span>`;
     }
@@ -9165,7 +9820,7 @@ function renderCustodyRows(allocations = [], inventoryTx = [], targetType = 'gua
       `;
     } else if (isReturned) {
       statusBadge = `
-        <span class="badge" style="background:#F1F5F9; color:#059669; font-weight:800; font-size:11px; border:1px solid #A7F3D0;">✅ RETURNED TO STOCK</span>
+        <span class="badge" style="background:#F0FDF4; color:#15803D; font-weight:800; font-size:11px; border:1px solid #BBF7D0;">✅ RETURNED TO STOCK</span>
         ${tx.reason_notes ? `<div style="font-size:11px; color:#475569; margin-top:2px; font-style:italic;">"${escapeHtml(tx.reason_notes)}"</div>` : ''}
       `;
     } else {
@@ -9173,6 +9828,21 @@ function renderCustodyRows(allocations = [], inventoryTx = [], targetType = 'gua
     }
 
     const dateStr = tx.created_at ? String(tx.created_at).substring(0, 10) : '—';
+    const safeTxItemName = (tx.item_name || 'Supply Item').replace(/'/g, "\\'");
+    const safeTxItemCode = (tx.item_code || 'Supply').replace(/'/g, "\\'");
+
+    let invActionBtn = '';
+    if (isIssued) {
+      invActionBtn = `
+        <button class="btn btn-secondary" style="font-size:11px; padding:4px 10px; font-weight:700; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; border-radius:6px;" onclick="openReturnCustodyModal(${tx.id}, '${safeTxItemName}', '${safeTxItemCode}', '${targetType}', ${targetId}, 'inventory', ${tx.item_id}, ${tx.quantity})">
+          🔄 Mark as Returned
+        </button>
+      `;
+    } else if (isReturned) {
+      invActionBtn = `<span style="color:#10B981; font-weight:800; font-size:11px;">✓ Restocked in Store</span>`;
+    } else {
+      invActionBtn = `<span style="color:#64748B; font-size:11px;">${tx.transaction_type}</span>`;
+    }
 
     rows.push(`
       <tr>
@@ -9187,11 +9857,7 @@ function renderCustodyRows(allocations = [], inventoryTx = [], targetType = 'gua
         <td style="font-size:12px; color:#334155;">${dateStr}</td>
         <td style="font-size:12px;"><span class="badge" style="background:#F1F5F9; color:#475569;">NEW</span></td>
         <td>${statusBadge}</td>
-        <td style="text-align:right;">
-          <span style="font-size:11px; color:${isReturned ? '#10B981' : '#64748B'}; font-weight:600;">
-            ${isReturned ? '✓ In Stock' : 'Issued Supply'}
-          </span>
-        </td>
+        <td style="text-align:right;">${invActionBtn}</td>
       </tr>
     `);
   });
@@ -9203,19 +9869,105 @@ function renderCustodyRows(allocations = [], inventoryTx = [], targetType = 'gua
   return rows.join('');
 }
 
+let currentGuardCustodyAllocations = [];
+let currentGuardCustodyInventory = [];
+let currentQuickReturnItemsCache = [];
+
 // --- Return Custody Modal ---
-function openReturnCustodyModal(allocId, itemName, itemTag, targetType, targetId) {
-  document.getElementById('return-custody-alloc-id').value = allocId;
-  document.getElementById('return-custody-target-type').value = targetType;
-  document.getElementById('return-custody-target-id').value = targetId;
-  document.getElementById('return-custody-item-name').innerText = itemName || 'Company Asset';
-  document.getElementById('return-custody-item-tag').innerText = itemTag || '-';
+function openReturnCustodyModal(allocId, itemName, itemTag, targetType, targetId, itemKind = 'asset', itemId = null, qty = 1) {
+  document.getElementById('return-custody-alloc-id').value = allocId || '';
+  document.getElementById('return-custody-target-type').value = targetType || 'guard';
+  document.getElementById('return-custody-target-id').value = targetId || '';
+  document.getElementById('return-custody-item-kind').value = itemKind || 'asset';
+  document.getElementById('return-custody-item-id').value = itemId || '';
+  document.getElementById('return-custody-qty').value = qty || 1;
+
+  document.getElementById('return-custody-item-name').innerText = itemName || 'Company Property';
+  document.getElementById('return-custody-item-tag').innerText = `${itemTag || '-'} (${itemKind === 'asset' ? 'Capital Asset' : 'Uniform / Supply'})`;
   document.getElementById('return-custody-date').value = new Date().toISOString().substring(0, 10);
   document.getElementById('return-custody-condition').value = 'GOOD';
   document.getElementById('return-custody-notes').value = '';
 
+  const selectContainer = document.getElementById('return-custody-select-container');
+  if (selectContainer) selectContainer.style.display = 'none';
+  const infoBox = document.getElementById('return-custody-info-box');
+  if (infoBox) infoBox.style.display = 'block';
+
   const modal = document.getElementById('modal-return-custody-item');
   if (modal) modal.style.display = 'flex';
+}
+
+function openQuickReturnItemModal(targetType, targetId, targetName) {
+  const activeAssets = (currentGuardCustodyAllocations || []).filter(a => a.status === 'ACTIVE');
+  const activeInv = (currentGuardCustodyInventory || []).filter(t => t.transaction_type === 'ISSUED');
+
+  const combined = [];
+  activeAssets.forEach(a => {
+    combined.push({
+      kind: 'asset',
+      id: a.id,
+      itemId: a.asset_id,
+      name: a.asset_name || 'Asset',
+      tag: a.asset_tag || '',
+      qty: 1,
+      label: `[Asset] ${a.asset_name} (${a.asset_tag})`
+    });
+  });
+  activeInv.forEach(t => {
+    combined.push({
+      kind: 'inventory',
+      id: t.id,
+      itemId: t.item_id,
+      name: t.item_name || 'Supply Item',
+      tag: t.item_code || '',
+      qty: t.quantity || 1,
+      label: `[Supply] ${t.item_name} (${t.item_code}) - Qty: ${t.quantity}`
+    });
+  });
+
+  if (!combined.length) {
+    showToast(`All issued items for ${targetName || 'this personnel'} have already been returned to stores.`, 'info');
+    return;
+  }
+
+  currentQuickReturnItemsCache = combined;
+
+  const select = document.getElementById('return-custody-item-select');
+  if (select) {
+    select.innerHTML = combined.map((item, idx) => `<option value="${idx}">${escapeHtml(item.label)}</option>`).join('');
+  }
+
+  const selectContainer = document.getElementById('return-custody-select-container');
+  if (selectContainer) selectContainer.style.display = 'block';
+  const infoBox = document.getElementById('return-custody-info-box');
+  if (infoBox) infoBox.style.display = 'block';
+
+  document.getElementById('return-custody-target-type').value = targetType;
+  document.getElementById('return-custody-target-id').value = targetId;
+  document.getElementById('return-custody-date').value = new Date().toISOString().substring(0, 10);
+  document.getElementById('return-custody-condition').value = 'GOOD';
+  document.getElementById('return-custody-notes').value = '';
+
+  onReturnItemSelectChange();
+
+  const modal = document.getElementById('modal-return-custody-item');
+  if (modal) modal.style.display = 'flex';
+}
+
+function onReturnItemSelectChange() {
+  const select = document.getElementById('return-custody-item-select');
+  if (!select) return;
+  const idx = parseInt(select.value || '0');
+  const item = currentQuickReturnItemsCache[idx];
+  if (!item) return;
+
+  document.getElementById('return-custody-alloc-id').value = item.id;
+  document.getElementById('return-custody-item-kind').value = item.kind;
+  document.getElementById('return-custody-item-id').value = item.itemId;
+  document.getElementById('return-custody-qty').value = item.qty;
+
+  document.getElementById('return-custody-item-name').innerText = item.name;
+  document.getElementById('return-custody-item-tag').innerText = `${item.tag} (${item.kind === 'asset' ? 'Capital Asset' : 'Uniform / Supply'})`;
 }
 
 function closeReturnCustodyModal() {
@@ -9228,28 +9980,51 @@ async function handleReturnCustodySubmit(event) {
   const allocId = document.getElementById('return-custody-alloc-id').value;
   const targetType = document.getElementById('return-custody-target-type').value;
   const targetId = document.getElementById('return-custody-target-id').value;
+  const itemKind = document.getElementById('return-custody-item-kind').value || 'asset';
+  const itemId = document.getElementById('return-custody-item-id').value;
+  const qty = parseInt(document.getElementById('return-custody-qty').value || '1');
   const returnDate = document.getElementById('return-custody-date').value;
   const condition = document.getElementById('return-custody-condition').value;
   const notes = document.getElementById('return-custody-notes').value.trim();
   const btn = document.getElementById('btn-confirm-return-custody');
 
-  if (btn) btn.disabled = true;
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Processing Return...'; }
 
   try {
-    const res = await apiFetch(`/assets/allocations/${allocId}/return`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        return_date: returnDate,
-        condition_on_return: condition,
-        notes: notes
-      })
-    });
+    if (itemKind === 'asset') {
+      const res = await apiFetch(`/assets/allocations/${allocId}/return`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          return_date: returnDate,
+          condition_on_return: condition,
+          notes: notes
+        })
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to record item return');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to record asset return');
+    } else {
+      // Inventory item return
+      const res = await apiFetch('/assets/inventory/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: parseInt(itemId),
+          transaction_type: 'RETURNED',
+          quantity: qty,
+          guard_id: targetType === 'guard' ? parseInt(targetId) : null,
+          staff_id: targetType === 'staff' ? parseInt(targetId) : null,
+          reference_no: 'RET-' + (returnDate || '').replace(/-/g, ''),
+          reason_notes: notes ? `${notes} [Return Condition: ${condition}]` : `Item returned to stores [Condition: ${condition}]`
+        })
+      });
 
-    showToast('Item returned to company inventory and recorded in personnel file!', 'success');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to record inventory return');
+    }
+
+    showToast('✅ Item return recorded and inventory updated in personnel file!', 'success');
     closeReturnCustodyModal();
 
     if (targetType === 'guard') {
@@ -9259,9 +10034,10 @@ async function handleReturnCustodySubmit(event) {
     }
     if (typeof loadAssets === 'function') loadAssets();
   } catch (err) {
+    console.error('handleReturnCustodySubmit error:', err);
     showToast('Return failed: ' + err.message, 'danger');
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.innerText = 'Confirm Return to Store'; }
   }
 }
 
@@ -9444,13 +10220,15 @@ async function openStaffFileModal(staffId) {
   if (modal) modal.style.display = 'flex';
 
   try {
-    const [allocRes, txRes] = await Promise.all([
+    const [allocRes, txRes, advRes] = await Promise.all([
       apiFetch(`/assets/allocations?staff_id=${staffId}`).catch(() => ({ ok: false })),
-      apiFetch(`/assets/inventory/transactions?staff_id=${staffId}`).catch(() => ({ ok: false }))
+      apiFetch(`/assets/inventory/transactions?staff_id=${staffId}`).catch(() => ({ ok: false })),
+      apiFetch(`/salary-advances?advance_type=STAFF&staff_id=${staffId}`).catch(() => ({ ok: false }))
     ]);
 
     const allocations = (allocRes && allocRes.ok) ? await allocRes.json() : [];
     const inventoryTx = (txRes && txRes.ok) ? await txRes.json() : [];
+    const staffAdvances = (advRes && advRes.ok) ? await advRes.json() : [];
 
     const activeCount = allocations.filter(a => a.status === 'ACTIVE').length + inventoryTx.filter(t => t.transaction_type === 'ISSUED').length;
     const countEl = document.getElementById('staff-file-items-count');
@@ -9458,6 +10236,29 @@ async function openStaffFileModal(staffId) {
 
     if (tbody) {
       tbody.innerHTML = renderCustodyRows(allocations, inventoryTx, 'staff', staffId);
+    }
+
+    const advTbody = document.getElementById('staff-advances-table-body');
+    if (advTbody) {
+      if (!staffAdvances.length) {
+        advTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:18px; color:#64748B;">No salary advances recorded for this staff member.</td></tr>';
+      } else {
+        advTbody.innerHTML = staffAdvances.map(a => `
+          <tr>
+            <td><b>${a.advance_reference}</b></td>
+            <td><b>KES ${Number(a.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</b></td>
+            <td>${a.disbursement_date}</td>
+            <td>${a.payment_method}</td>
+            <td>${a.reference_number || '—'}</td>
+            <td>${escapeHtml(a.reason || '—')}</td>
+            <td>
+              ${a.status === 'DEDUCTED'
+                ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED VIA PAYROLL</span>'
+                : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>'}
+            </td>
+          </tr>
+        `).join('');
+      }
     }
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#EF4444;">Error loading custody records: ${err.message}</td></tr>`;
@@ -9472,6 +10273,8 @@ function closeStaffFileModal() {
 // Global exports
 window.renderCustodyRows = renderCustodyRows;
 window.openReturnCustodyModal = openReturnCustodyModal;
+window.openQuickReturnItemModal = openQuickReturnItemModal;
+window.onReturnItemSelectChange = onReturnItemSelectChange;
 window.closeReturnCustodyModal = closeReturnCustodyModal;
 window.handleReturnCustodySubmit = handleReturnCustodySubmit;
 window.openAwardItemModal = openAwardItemModal;
@@ -9481,3 +10284,1223 @@ window.toggleAwardIssuanceType = toggleAwardIssuanceType;
 window.handleAwardItemSubmit = handleAwardItemSubmit;
 window.openStaffFileModal = openStaffFileModal;
 window.closeStaffFileModal = closeStaffFileModal;
+
+
+// ===================================================================
+// SALARY ADVANCES MANAGEMENT SYSTEM
+// ===================================================================
+
+let allSalaryAdvancesCache = [];
+
+function renderGuardAdvancesRows(advances = []) {
+  if (!advances || !advances.length) {
+    return '<tr><td colspan="6" style="text-align:center; padding:18px; color:#64748B;">No salary advances recorded for this guard.</td></tr>';
+  }
+  return advances.map(a => `
+    <tr>
+      <td><b>${a.advance_reference}</b></td>
+      <td><b>KES ${Number(a.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</b></td>
+      <td>${a.disbursement_date}</td>
+      <td>${a.payment_method} ${a.reference_number ? `(${a.reference_number})` : ''}</td>
+      <td>${escapeHtml(a.reason || '—')}</td>
+      <td>
+        ${a.status === 'DEDUCTED'
+          ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED VIA PAYROLL</span>'
+          : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadSalaryAdvances() {
+  const user = getLoggedInUser();
+  if (user && user.role === 'SUPERVISOR') return;
+  const tbody = document.getElementById('salary-advances-table-body');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;"><div style="font-size:24px; margin-bottom:8px;">⏳</div>Loading salary advances...</td></tr>';
+  }
+
+  try {
+    const [advRes, kpiRes] = await Promise.all([
+      apiFetch('/salary-advances'),
+      apiFetch('/salary-advances/summary').catch(() => ({ ok: false }))
+    ]);
+
+    if (!advRes.ok) throw new Error('Failed to load salary advances');
+    const advances = await advRes.json();
+    allSalaryAdvancesCache = advances || [];
+
+    if (kpiRes && kpiRes.ok) {
+      const kpis = await kpiRes.json();
+      const elDisb = document.getElementById('adv-kpi-disbursed');
+      if (elDisb) elDisb.innerText = `KES ${Number(kpis.total_amount_disbursed || 0).toLocaleString(undefined, {minimumFractionDigits:2})}`;
+      const elDed = document.getElementById('adv-kpi-deducted');
+      if (elDed) elDed.innerText = `KES ${Number(kpis.total_amount_deducted || 0).toLocaleString(undefined, {minimumFractionDigits:2})}`;
+      const elPend = document.getElementById('adv-kpi-pending');
+      if (elPend) elPend.innerText = `KES ${Number(kpis.total_amount_pending || 0).toLocaleString(undefined, {minimumFractionDigits:2})}`;
+      const elCount = document.getElementById('adv-kpi-count');
+      if (elCount) elCount.innerText = String(kpis.total_advances_count || 0);
+    }
+
+    renderSalaryAdvancesTable(allSalaryAdvancesCache);
+  } catch (err) {
+    console.error('loadSalaryAdvances error:', err);
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#EF4444;">Failed to load advances: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+}
+
+function renderSalaryAdvancesTable(advances) {
+  const tbody = document.getElementById('salary-advances-table-body');
+  if (!tbody) return;
+
+  if (!advances || !advances.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;">No salary advance records match your filter criteria.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = advances.map(adv => {
+    const isGuard = adv.advance_type === 'GUARD';
+    const typeBadge = isGuard
+      ? '<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">🛡️ Guard</span>'
+      : '<span class="badge" style="background:#F5F3FF; color:#7C3AED; font-weight:700;">👔 Staff</span>';
+    
+    const statusBadge = adv.status === 'DEDUCTED'
+      ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED</span>'
+      : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>';
+
+    const safeRef = escapeHtml(adv.advance_reference);
+    const deleteBtn = adv.status !== 'DEDUCTED'
+      ? `<button class="btn btn-secondary" style="color:#DC2626; padding:3px 8px; font-size:11px;" onclick="deleteSalaryAdvance(${adv.id}, '${safeRef}')" title="Delete un-deducted advance">🗑️</button>`
+      : '<span style="color:#10B981; font-size:11px; font-weight:600;">Settled</span>';
+
+    return `
+      <tr>
+        <td><b>${adv.advance_reference}</b></td>
+        <td>${typeBadge}</td>
+        <td>
+          <b>${escapeHtml(adv.recipient_name || 'Unknown')}</b>
+          <br><small style="color:#64748B;">${escapeHtml(adv.recipient_number || '')}</small>
+        </td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(adv.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+        <td>${adv.disbursement_date}</td>
+        <td>
+          <b>${adv.payment_method}</b>
+          ${adv.reference_number ? `<br><small style="color:#64748B;">Ref: ${escapeHtml(adv.reference_number)}</small>` : ''}
+        </td>
+        <td><span style="font-size:12px; color:#334155;">${escapeHtml(adv.reason || '—')}</span></td>
+        <td>${statusBadge}</td>
+        <td style="text-align:right;">
+          ${deleteBtn}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterSalaryAdvances() {
+  const typeFilter = (document.getElementById('adv-filter-type')?.value || 'ALL').toUpperCase();
+  const statusFilter = (document.getElementById('adv-filter-status')?.value || 'ALL').toUpperCase();
+  const query = (document.getElementById('adv-filter-search')?.value || '').toLowerCase().trim();
+
+  const filtered = allSalaryAdvancesCache.filter(adv => {
+    if (typeFilter !== 'ALL' && adv.advance_type !== typeFilter) return false;
+    if (statusFilter !== 'ALL' && adv.status !== statusFilter) return false;
+    if (query) {
+      const matchName = (adv.recipient_name || '').toLowerCase().includes(query);
+      const matchNum = (adv.recipient_number || '').toLowerCase().includes(query);
+      const matchRef = (adv.advance_reference || '').toLowerCase().includes(query);
+      const matchTrx = (adv.reference_number || '').toLowerCase().includes(query);
+      const matchReason = (adv.reason || '').toLowerCase().includes(query);
+      if (!matchName && !matchNum && !matchRef && !matchTrx && !matchReason) return false;
+    }
+    return true;
+  });
+
+  renderSalaryAdvancesTable(filtered);
+}
+
+function toggleAdvanceRecipientType() {
+  const radios = document.getElementsByName('adv_recipient_type');
+  let selected = 'GUARD';
+  for (const r of radios) {
+    if (r.checked) { selected = r.value; break; }
+  }
+
+  const guardGroup = document.getElementById('adv-guard-select-group');
+  const staffGroup = document.getElementById('adv-staff-select-group');
+  const guardLabel = document.getElementById('label-adv-guard');
+  const staffLabel = document.getElementById('label-adv-staff');
+
+  if (selected === 'GUARD') {
+    if (guardGroup) guardGroup.style.display = 'block';
+    if (staffGroup) staffGroup.style.display = 'none';
+    if (guardLabel) guardLabel.style.borderColor = '#2563EB';
+    if (staffLabel) staffLabel.style.borderColor = '#CBD5E1';
+  } else {
+    if (guardGroup) guardGroup.style.display = 'none';
+    if (staffGroup) staffGroup.style.display = 'block';
+    if (guardLabel) guardLabel.style.borderColor = '#CBD5E1';
+    if (staffLabel) staffLabel.style.borderColor = '#7C3AED';
+  }
+}
+
+async function populateAdvanceModalDropdowns() {
+  // 1. Populate Guards
+  const guardSelect = document.getElementById('adv-guard-id');
+  if (guardSelect) {
+    if (!cachedGuards || !cachedGuards.length) {
+      try {
+        const gRes = await apiFetch('/guards');
+        if (gRes.ok) cachedGuards = await gRes.json();
+      } catch (e) {}
+    }
+    const activeGuards = (cachedGuards || []).filter(g => g.status === 'ACTIVE');
+    guardSelect.innerHTML = '<option value="">-- Choose Security Guard --</option>' +
+      activeGuards.map(g => `<option value="${g.id}">${escapeHtml(g.full_name)} (${g.employee_number})</option>`).join('');
+  }
+
+  // 2. Populate Staff
+  const staffSelect = document.getElementById('adv-staff-id');
+  if (staffSelect) {
+    if (!allStaffMembers || !allStaffMembers.length) {
+      try {
+        const sRes = await apiFetch('/staff');
+        if (sRes.ok) allStaffMembers = await sRes.json();
+      } catch (e) {}
+    }
+    const staffList = allStaffMembers || [];
+    staffSelect.innerHTML = '<option value="">-- Choose Corporate Staff (HR/Supervisor/Admin) --</option>' +
+      staffList.map(st => `<option value="${st.id}">${escapeHtml(st.full_name || st.email)} [${st.role}]</option>`).join('');
+  }
+
+  // 3. Populate Periods
+  const periodSelect = document.getElementById('adv-payroll-period-id');
+  if (periodSelect) {
+    try {
+      const pRes = await apiFetch('/payroll/periods');
+      if (pRes.ok) {
+        const periods = await pRes.json();
+        periodSelect.innerHTML = '<option value="">Auto-detect by Disbursement Date</option>' +
+          periods.map(p => `<option value="${p.id}">${escapeHtml(p.period_name)} (${p.status})</option>`).join('');
+      }
+    } catch (e) {}
+  }
+}
+
+async function openIssueSalaryAdvanceModal(preselectedType = 'GUARD', preselectedId = null, preselectedName = null) {
+  await populateAdvanceModalDropdowns();
+
+  const modal = document.getElementById('modal-issue-advance');
+  if (!modal) return;
+
+  const form = document.getElementById('form-issue-salary-advance');
+  if (form) form.reset();
+
+  // Set default disbursement date to today
+  const dateInput = document.getElementById('adv-date');
+  if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+  const radios = document.getElementsByName('adv_recipient_type');
+  for (const r of radios) {
+    r.checked = (r.value === preselectedType);
+  }
+  toggleAdvanceRecipientType();
+
+  if (preselectedType === 'GUARD' && preselectedId) {
+    const gSelect = document.getElementById('adv-guard-id');
+    if (gSelect) gSelect.value = String(preselectedId);
+  } else if (preselectedType === 'STAFF' && preselectedId) {
+    const stSelect = document.getElementById('adv-staff-id');
+    if (stSelect) stSelect.value = String(preselectedId);
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeIssueSalaryAdvanceModal() {
+  const modal = document.getElementById('modal-issue-advance');
+  if (modal) modal.style.display = 'none';
+}
+
+function openStaffIssueAdvanceModal() {
+  if (currentViewedStaff) {
+    openIssueSalaryAdvanceModal('STAFF', currentViewedStaff.id, currentViewedStaff.full_name || currentViewedStaff.email);
+  } else {
+    openIssueSalaryAdvanceModal('STAFF');
+  }
+}
+
+async function handleIssueSalaryAdvanceSubmit(e) {
+  e.preventDefault();
+
+  const btn = document.getElementById('btn-submit-salary-advance');
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Processing...'; }
+
+  try {
+    const radios = document.getElementsByName('adv_recipient_type');
+    let advance_type = 'GUARD';
+    for (const r of radios) {
+      if (r.checked) { advance_type = r.value; break; }
+    }
+
+    const guard_id = advance_type === 'GUARD' ? parseInt(document.getElementById('adv-guard-id')?.value || '0') : null;
+    const staff_id = advance_type === 'STAFF' ? parseInt(document.getElementById('adv-staff-id')?.value || '0') : null;
+
+    if (advance_type === 'GUARD' && (!guard_id || isNaN(guard_id))) {
+      throw new Error('Please select a security guard.');
+    }
+    if (advance_type === 'STAFF' && (!staff_id || isNaN(staff_id))) {
+      throw new Error('Please select a staff member.');
+    }
+
+    const amount = parseFloat(document.getElementById('adv-amount')?.value || '0');
+    if (amount <= 0 || isNaN(amount)) {
+      throw new Error('Please enter a valid advance amount greater than 0.');
+    }
+
+    const disbursement_date = document.getElementById('adv-date')?.value;
+    if (!disbursement_date) throw new Error('Please enter the disbursement date.');
+
+    const periodVal = document.getElementById('adv-payroll-period-id')?.value;
+    const payroll_period_id = periodVal ? parseInt(periodVal) : null;
+
+    const payment_method = document.getElementById('adv-payment-method')?.value || 'M-PESA';
+    const reference_number = document.getElementById('adv-ref-number')?.value.trim() || null;
+    const reason = document.getElementById('adv-reason')?.value.trim();
+    if (!reason) throw new Error('Please specify the reason / purpose for the advance.');
+
+    const notes = document.getElementById('adv-notes')?.value.trim() || null;
+
+    const payload = {
+      advance_type,
+      guard_id,
+      staff_id,
+      amount,
+      disbursement_date,
+      payroll_period_id,
+      payment_method,
+      reference_number,
+      reason,
+      notes
+    };
+
+    const res = await apiFetch('/salary-advances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Failed to issue salary advance');
+    }
+
+    const advData = await res.json();
+    showToast(`Salary advance ${advData.advance_reference} (KES ${Number(advData.amount).toLocaleString()}) approved successfully!`, 'success');
+
+    closeIssueSalaryAdvanceModal();
+
+    // Reload active tables
+    loadSalaryAdvances();
+
+    // If guard file is open, refresh it
+    if (currentViewedGuard && advance_type === 'GUARD' && currentViewedGuard.id === guard_id) {
+      viewGuardFile(guard_id);
+    }
+    // If staff file is open, refresh it
+    if (currentViewedStaff && advance_type === 'STAFF' && currentViewedStaff.id === staff_id) {
+      openStaffFileModal(staff_id);
+    }
+  } catch (err) {
+    console.error('handleIssueSalaryAdvanceSubmit error:', err);
+    showToast(err.message, 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '💾 Issue & Approve Advance'; }
+  }
+}
+
+async function deleteSalaryAdvance(advanceId, advanceRef) {
+  if (!confirm(`Are you sure you want to delete salary advance ${advanceRef}? This cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/salary-advances/${advanceId}`, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Failed to delete salary advance');
+    }
+
+    showToast(`Salary advance ${advanceRef} deleted successfully.`, 'success');
+    loadSalaryAdvances();
+  } catch (err) {
+    console.error('deleteSalaryAdvance error:', err);
+    showToast(err.message, 'danger');
+  }
+}
+
+// Window exports
+window.loadSalaryAdvances = loadSalaryAdvances;
+window.renderSalaryAdvancesTable = renderSalaryAdvancesTable;
+window.filterSalaryAdvances = filterSalaryAdvances;
+window.toggleAdvanceRecipientType = toggleAdvanceRecipientType;
+window.openIssueSalaryAdvanceModal = openIssueSalaryAdvanceModal;
+window.closeIssueSalaryAdvanceModal = closeIssueSalaryAdvanceModal;
+window.handleIssueSalaryAdvanceSubmit = handleIssueSalaryAdvanceSubmit;
+window.deleteSalaryAdvance = deleteSalaryAdvance;
+window.openStaffIssueAdvanceModal = openStaffIssueAdvanceModal;
+window.renderGuardAdvancesRows = renderGuardAdvancesRows;
+
+
+// ==================== DOWNLOAD & DESKTOP APPLICATION SECTION ====================
+
+let deferredDesktopAppPrompt = null;
+
+// Catch PWA beforeinstallprompt event for desktop installation
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredDesktopAppPrompt = e;
+  window.deferredDesktopAppPrompt = e;
+  const pwaBtn = document.getElementById('btn-pwa-install-app');
+  if (pwaBtn) {
+    pwaBtn.style.boxShadow = '0 0 15px rgba(13, 148, 136, 0.6)';
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  showToast('CorpSec Desktop App successfully installed on your machine!', 'success');
+  deferredDesktopAppPrompt = null;
+  window.deferredDesktopAppPrompt = null;
+});
+
+// Register service worker for app shell offline support and PWA readiness
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/portal-sw.js', { scope: '/' })
+      .then(reg => {
+        console.log('CorpSec PWA ServiceWorker registered with scope:', reg.scope);
+      })
+      .catch(err => {
+        console.log('CorpSec PWA ServiceWorker registration note:', err);
+      });
+  });
+}
+
+function initDownloadAppSection() {
+  const osElem = document.getElementById('detected-machine-os');
+  const browserElem = document.getElementById('detected-machine-browser');
+
+  const ua = navigator.userAgent;
+  let osName = 'Windows PC';
+  if (ua.indexOf('Win') !== -1) osName = 'Windows PC (10/11)';
+  else if (ua.indexOf('Mac') !== -1) osName = 'macOS';
+  else if (ua.indexOf('Linux') !== -1) osName = 'Linux';
+  else if (ua.indexOf('Android') !== -1) osName = 'Android Device';
+  else if (ua.indexOf('iPhone') !== -1 || ua.indexOf('iPad') !== -1) osName = 'iOS Device';
+
+  let browserName = 'Chrome / Edge';
+  if (ua.indexOf('Edg') !== -1) browserName = 'Microsoft Edge';
+  else if (ua.indexOf('Chrome') !== -1) browserName = 'Google Chrome';
+  else if (ua.indexOf('Safari') !== -1 && ua.indexOf('Chrome') === -1) browserName = 'Apple Safari';
+  else if (ua.indexOf('Firefox') !== -1) browserName = 'Mozilla Firefox';
+
+  if (osElem) osElem.innerText = `Your Machine: ${osName}`;
+  if (browserElem) browserElem.innerText = `Detected Browser: ${browserName} • Ready for Native Desktop App & Standalone Installation`;
+}
+
+function triggerPwaInstall() {
+  const promptEvent = deferredDesktopAppPrompt || window.deferredDesktopAppPrompt;
+  if (promptEvent) {
+    promptEvent.prompt();
+    promptEvent.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        showToast('CorpSec Desktop App installed on this machine!', 'success');
+      }
+      deferredDesktopAppPrompt = null;
+      window.deferredDesktopAppPrompt = null;
+    });
+  } else {
+    // Open the visual guidance modal
+    openPwaInstallHelpModal();
+  }
+}
+
+function openPwaInstallHelpModal() {
+  const m = document.getElementById('modal-pwa-install-guide');
+  if (m) m.style.display = 'flex';
+}
+
+function closePwaInstallHelpModal() {
+  const m = document.getElementById('modal-pwa-install-guide');
+  if (m) m.style.display = 'none';
+}
+
+function showQrModal() {
+  const m = document.getElementById('modal-mobile-qr');
+  if (m) m.style.display = 'flex';
+}
+
+function closeQrModal() {
+  const m = document.getElementById('modal-mobile-qr');
+  if (m) m.style.display = 'none';
+}
+
+function switchDownloadTab(tabName) {
+  const tabs = ['win', 'chrome', 'edge', 'mobile'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tab-btn-guide-${t}`);
+    const content = document.getElementById(`guide-content-${t}`);
+    if (btn) {
+      if (t === tabName) {
+        btn.className = 'btn btn-primary';
+      } else {
+        btn.className = 'btn btn-secondary';
+      }
+    }
+    if (content) {
+      content.style.display = (t === tabName) ? 'block' : 'none';
+    }
+  });
+}
+
+window.initDownloadAppSection = initDownloadAppSection;
+window.triggerPwaInstall = triggerPwaInstall;
+window.openPwaInstallHelpModal = openPwaInstallHelpModal;
+window.closePwaInstallHelpModal = closePwaInstallHelpModal;
+window.showQrModal = showQrModal;
+window.closeQrModal = closeQrModal;
+window.switchDownloadTab = switchDownloadTab;
+
+/* ==========================================================================
+   MODULE: FIRM EXPENSES, PETTY CASH IMPREST & RECURRING EXPENDITURES
+   ========================================================================== */
+let allFirmExpenses = [];
+let allPettyCashTransactions = [];
+let allRecurringExpenses = [];
+
+function switchExpenseSubtab(subtab) {
+  const tabs = ['all', 'petty', 'recurring', 'breakdown'];
+  tabs.forEach(t => {
+    const el = document.getElementById(`subtab-expense-${t}`);
+    const btn = document.getElementById(`btn-subtab-expense-${t}`);
+    if (el) el.style.display = (t === subtab) ? 'block' : 'none';
+    if (btn) {
+      btn.className = (t === subtab) ? 'btn btn-primary' : 'btn btn-secondary';
+    }
+  });
+
+  if (subtab === 'all') loadExpenses();
+  if (subtab === 'petty') loadPettyCashBook();
+  if (subtab === 'recurring') loadRecurringExpenses();
+  if (subtab === 'breakdown') loadExpensesSummary();
+}
+
+async function loadExpenses() {
+  const tbody = document.getElementById('expenses-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:24px; color:#64748B;">Loading firm expenses...</td></tr>';
+
+  try {
+    const category = document.getElementById('expense-filter-category')?.value || '';
+    const expenseType = document.getElementById('expense-filter-type')?.value || '';
+    const search = document.getElementById('expense-filter-search')?.value.trim() || '';
+
+    let url = '/expenses?limit=100';
+    if (category) url += `&category=${encodeURIComponent(category)}`;
+    if (expenseType) url += `&expense_type=${encodeURIComponent(expenseType)}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+
+    const res = await apiFetch(url);
+    if (!res.ok) throw new Error('Failed to load expenses');
+    allFirmExpenses = await res.json();
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (allFirmExpenses.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:32px; color:#64748B;">No expense records found matching criteria. Click "+ Record Firm Expense" to add.</td></tr>';
+      return;
+    }
+
+    allFirmExpenses.forEach(exp => {
+      const tr = document.createElement('tr');
+      const dateStr = exp.expense_date ? exp.expense_date.substring(0, 10) : '--';
+      const isPetty = exp.is_petty_cash;
+      
+      let typeBadge = '';
+      if (exp.expense_type === 'PETTY_CASH') typeBadge = '<span class="badge" style="background:#FEF3C7; color:#92400E;">🪙 Petty Cash</span>';
+      else if (exp.expense_type === 'RECURRING') typeBadge = '<span class="badge" style="background:#DBEAFE; color:#1E40AF;">🔄 Recurring</span>';
+      else if (exp.expense_type === 'CAPITAL_PURCHASE') typeBadge = '<span class="badge" style="background:#EDE9FE; color:#5B21B6;">🏢 Capital</span>';
+      else typeBadge = '<span class="badge" style="background:#F1F5F9; color:#475569;">Operational</span>';
+
+      tr.innerHTML = `
+        <td><b>${dateStr}</b></td>
+        <td><span class="badge" style="background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A;">${exp.category}</span></td>
+        <td>${typeBadge}</td>
+        <td><strong>${exp.payee || 'Direct Vendor'}</strong></td>
+        <td style="font-size:12px; max-width:220px; white-space:normal;">${exp.description || '--'}</td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(exp.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td><span style="font-size:11px; color:#64748B;">${exp.payment_method}</span></td>
+        <td><span style="font-family:monospace; font-weight:700; color:#3B5EDB;">${exp.receipt_number || 'N/A'}</span></td>
+        <td style="font-size:11px; color:#64748B;">${exp.recorded_by_name || 'System Admin'}</td>
+        <td>
+          <button class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#EF4444; border-color:#FCA5A5;" onclick="deleteExpenseRecord(${exp.id})">🗑️ Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
+  }
+}
+
+async function loadExpensesSummary() {
+  try {
+    const res = await apiFetch('/expenses/summary');
+    if (!res.ok) return;
+    const s = await res.json();
+
+    const monthlyTotal = s.total_expenses_this_month !== undefined ? s.total_expenses_this_month : (s.total_expenses_month || 0);
+    const pettyBal = s.petty_cash_float_balance !== undefined ? s.petty_cash_float_balance : (s.petty_cash_balance || 0);
+    const floatCap = s.petty_cash_float_max || 25000;
+    const pettyPct = Math.round((pettyBal / floatCap) * 100);
+    const recurringTotal = s.monthly_recurring_commitments !== undefined ? s.monthly_recurring_commitments : (s.recurring_monthly_commitments || 0);
+    const recordedCount = s.total_recorded_count !== undefined ? s.total_recorded_count : (s.total_receipts_recorded || 0);
+    const disbursed = s.petty_cash_disbursed_this_month !== undefined ? s.petty_cash_disbursed_this_month : (s.petty_cash_disbursed_month || 0);
+
+    // Metric cards
+    const mTotal = document.getElementById('kpi-expenses-monthly-total');
+    if (mTotal) mTotal.innerText = `KES ${Number(monthlyTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+
+    const mPetty = document.getElementById('kpi-petty-cash-balance');
+    if (mPetty) mPetty.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+
+    const mFloatMax = document.getElementById('kpi-petty-cash-float-max');
+    if (mFloatMax) mFloatMax.innerText = `Float Max: KES ${Number(floatCap).toLocaleString()} (${pettyPct}% of cap)`;
+
+    const mRecurring = document.getElementById('kpi-recurring-monthly-total');
+    if (mRecurring) mRecurring.innerText = `KES ${Number(recurringTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+
+    const mRecCount = document.getElementById('kpi-recurring-count');
+    if (mRecCount) mRecCount.innerText = `Active recurring obligations`;
+
+    const mReceipts = document.getElementById('kpi-receipts-count');
+    if (mReceipts) mReceipts.innerText = recordedCount;
+
+    // Petty cash float bar
+    const floatBar = document.getElementById('petty-float-bar');
+    const floatPct = document.getElementById('petty-float-percent');
+    if (floatBar) {
+      const pct = Math.min(100, Math.max(0, pettyPct));
+      floatBar.style.width = `${pct}%`;
+      if (pct < 25) floatBar.style.background = '#DC2626';
+      else if (pct < 50) floatBar.style.background = '#F59E0B';
+      else floatBar.style.background = '#16A34A';
+    }
+    if (floatPct) floatPct.innerText = `${pettyPct}%`;
+
+    const statBal = document.getElementById('petty-stat-balance');
+    if (statBal) statBal.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    const statCap = document.getElementById('petty-stat-cap');
+    if (statCap) statCap.innerText = `KES ${Number(floatCap).toLocaleString()}`;
+    const statDis = document.getElementById('petty-stat-disbursed');
+    if (statDis) statDis.innerText = `KES ${Number(disbursed).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    const statTop = document.getElementById('petty-stat-topups');
+    if (statTop) statTop.innerText = `KES ${Number(s.petty_cash_topups_month || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+
+    // Render Category Distribution bars
+    const distContainer = document.getElementById('category-distribution-container');
+    const catData = s.by_category || s.category_distribution || {};
+    if (distContainer) {
+      distContainer.innerHTML = '';
+      const total = monthlyTotal > 0 ? monthlyTotal : 1;
+      const categories = Object.keys(catData);
+      if (categories.length === 0) {
+        distContainer.innerHTML = '<div style="color:#64748B; font-size:12px; padding:12px;">No categorical expenditures recorded this month yet.</div>';
+      } else {
+        categories.forEach(cat => {
+          const amount = catData[cat];
+          const pct = Math.round((amount / total) * 100);
+          distContainer.innerHTML += `
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                <span style="font-weight:600; color:#1E293B;">${cat}</span>
+                <span style="font-weight:700; color:#0F172A;">KES ${Number(amount).toLocaleString()} (${pct}%)</span>
+              </div>
+              <div style="background:#E2E8F0; border-radius:999px; height:8px; overflow:hidden;">
+                <div style="background:#2563EB; width:${pct}%; height:100%;"></div>
+              </div>
+            </div>
+          `;
+        });
+      }
+    }
+
+  } catch (err) {
+    console.error('loadExpensesSummary error:', err);
+  }
+}
+
+async function loadPettyCashBook() {
+  const tbody = document.getElementById('petty-cash-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading petty cash ledger...</td></tr>';
+
+  try {
+    const res = await apiFetch('/expenses/petty-cash');
+    if (!res.ok) throw new Error('Failed to load petty cash book');
+    const pcData = await res.json();
+    allPettyCashTransactions = Array.isArray(pcData) ? pcData : (pcData.transactions || []);
+    if (pcData.current_balance !== undefined) {
+      const balEl = document.getElementById('petty-stat-balance');
+      if (balEl) balEl.innerText = `KES ${Number(pcData.current_balance).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    }
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (allPettyCashTransactions.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No petty cash transactions recorded. Use "+ Top-Up Petty Cash Float" to initialize float.</td></tr>';
+      return;
+    }
+
+    allPettyCashTransactions.forEach(tx => {
+      const tr = document.createElement('tr');
+      const isTopUp = tx.transaction_type === 'TOP_UP';
+      const badge = isTopUp
+        ? '<span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">🟢 FLOAT TOP-UP</span>'
+        : '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">🔴 DISBURSEMENT</span>';
+
+      const inflow = isTopUp ? `+ KES ${Number(tx.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}` : '-';
+      const outflow = !isTopUp ? `- KES ${Number(tx.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}` : '-';
+
+      tr.innerHTML = `
+        <td>${tx.transaction_date ? tx.transaction_date.substring(0, 16).replace('T', ' ') : '--'}</td>
+        <td>${badge}</td>
+        <td><strong>${tx.payee_or_custodian || '--'}</strong></td>
+        <td style="font-size:12px;">${tx.description || '--'}</td>
+        <td style="font-weight:700; color:#16A34A;">${inflow}</td>
+        <td style="font-weight:700; color:#DC2626;">${outflow}</td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(tx.running_balance).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td><span style="font-family:monospace; font-weight:700;">${tx.reference_number || '--'}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
+  }
+}
+
+async function loadRecurringExpenses() {
+  const tbody = document.getElementById('recurring-expenses-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading recurring obligations...</td></tr>';
+
+  try {
+    const res = await apiFetch('/expenses/recurring');
+    if (!res.ok) throw new Error('Failed to load recurring obligations');
+    allRecurringExpenses = await res.json();
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (allRecurringExpenses.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No recurring expenses currently registered.</td></tr>';
+      return;
+    }
+
+    allRecurringExpenses.forEach(rec => {
+      const tr = document.createElement('tr');
+      const monthlyEquiv = rec.monthly_equivalent || rec.amount;
+      const freqBadge = `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${rec.frequency || 'MONTHLY'}</span>`;
+      const dueStr = rec.next_due_date ? rec.next_due_date.substring(0, 10) : 'Ongoing';
+
+      tr.innerHTML = `
+        <td><strong>${rec.title}</strong></td>
+        <td><span class="badge" style="background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A;">${rec.category}</span></td>
+        <td>${freqBadge}</td>
+        <td>KES ${Number(rec.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="font-weight:800; color:#2563EB;">KES ${Number(monthlyEquiv).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td>📅 ${dueStr}</td>
+        <td>${rec.payee || '--'}</td>
+        <td><span class="badge" style="background:#DCFCE7; color:#166534;">ACTIVE</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function openRecordExpenseModal() {
+  const modal = document.getElementById('modal-record-expense');
+  const dateInput = document.getElementById('exp-date');
+  if (dateInput) dateInput.value = new Date().toISOString().substring(0, 10);
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeRecordExpenseModal() {
+  const modal = document.getElementById('modal-record-expense');
+  if (modal) modal.style.display = 'none';
+}
+
+function toggleRecurringExpenseFields() {
+  const typeVal = document.getElementById('exp-type')?.value;
+  const rf = document.getElementById('recurring-expense-fields');
+  if (rf) rf.style.display = (typeVal === 'RECURRING') ? 'block' : 'none';
+}
+
+async function handleRecordExpenseSubmit(e) {
+  e.preventDefault();
+  const expense_date = document.getElementById('exp-date').value;
+  const category = document.getElementById('exp-category').value;
+  const expense_type = document.getElementById('exp-type').value;
+  const payee = document.getElementById('exp-payee').value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const payment_method = document.getElementById('exp-payment-method').value;
+  const receipt_number = document.getElementById('exp-receipt-no').value.trim() || null;
+  const description = document.getElementById('exp-description').value.trim();
+  const is_petty_cash = (payment_method === 'PETTY_CASH' || expense_type === 'PETTY_CASH');
+  const is_recurring = (expense_type === 'RECURRING');
+  const recurring_frequency = is_recurring ? document.getElementById('exp-frequency')?.value : null;
+  const next_due_date = is_recurring ? (document.getElementById('exp-due-date')?.value || null) : null;
+
+  try {
+    const title = description ? description.substring(0, 80) : `${category} - ${payee}`;
+    const res = await apiFetch('/expenses', {
+      method: 'POST',
+      body: JSON.stringify({
+        expense_date,
+        title,
+        category,
+        expense_type,
+        payee,
+        amount,
+        payment_method,
+        receipt_number,
+        description,
+        is_recurring,
+        recurrence_interval: recurring_frequency,
+        next_due_date
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(`⚠️ Could not save expense: ${data.detail || 'Request failed'}`, 'danger');
+      return;
+    }
+
+    closeRecordExpenseModal();
+    showToast(`✅ Expense of KES ${Number(amount).toLocaleString()} recorded successfully!`, 'success');
+    document.getElementById('form-record-expense').reset();
+    loadExpenses();
+    loadExpensesSummary();
+
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+
+function openTopUpPettyCashModal() {
+  const modal = document.getElementById('modal-topup-petty-cash');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeTopUpPettyCashModal() {
+  const modal = document.getElementById('modal-topup-petty-cash');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleTopUpPettyCashSubmit(e) {
+  e.preventDefault();
+  const amount = parseFloat(document.getElementById('topup-amount').value);
+  const source = document.getElementById('topup-source').value;
+  const reference_number = document.getElementById('topup-ref').value.trim() || null;
+  const notes = document.getElementById('topup-notes').value.trim() || null;
+
+  try {
+    const res = await apiFetch('/expenses/petty-cash/top-up', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        source,
+        reference_number,
+        notes
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(`⚠️ Top-up failed: ${data.detail || 'Request failed'}`, 'danger');
+      return;
+    }
+
+    closeTopUpPettyCashModal();
+    showToast(`✅ Petty cash float replenished by KES ${Number(amount).toLocaleString()}!`, 'success');
+    document.getElementById('form-topup-petty-cash').reset();
+    loadExpensesSummary();
+    loadPettyCashBook();
+
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+
+async function deleteExpenseRecord(id) {
+  if (!confirm('Are you sure you want to permanently delete this expense record?')) return;
+
+  try {
+    const res = await apiFetch(`/expenses/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(`⚠️ Could not delete: ${err.detail || 'Server error'}`, 'danger');
+      return;
+    }
+    showToast('✅ Expense record removed.', 'success');
+    loadExpenses();
+    loadExpensesSummary();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  }
+}
+
+function applyExpenseFilters() {
+  loadExpenses();
+}
+
+function resetExpenseFilters() {
+  const s = document.getElementById('expense-filter-search');
+  if (s) s.value = '';
+  const c = document.getElementById('expense-filter-category');
+  if (c) c.value = '';
+  const t = document.getElementById('expense-filter-type');
+  if (t) t.value = '';
+  loadExpenses();
+}
+
+function exportExpensesReport() {
+  window.print();
+}
+
+
+/* ==========================================================================
+   MODULE: COMPANY GROWTH (CLIENTS PORTFOLIO, RECOMMENDATIONS, SERVICES)
+   ========================================================================== */
+async function loadCompanyClientsPortfolio() {
+  const container = document.getElementById('company-clients-grid');
+  if (container) container.innerHTML = '<div style="text-align:center; padding:24px; color:#64748B;">Loading corporate clients...</div>';
+
+  try {
+    const res = await apiFetch('/company/clients-portfolio');
+    if (!res.ok) throw new Error('Failed to load corporate clients');
+    const clients = await res.json();
+
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (clients.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:32px; color:#64748B;">No clients currently in portfolio.</div>';
+      return;
+    }
+
+    clients.forEach(c => {
+      const clientName = c.name || c.client_name || 'Corporate Client';
+      const rawSites = c.protected_sites || c.sites || [];
+      const sitesHtml = rawSites.map(s => {
+        if (typeof s === 'string') return `<li style="font-size:12px; color:#334155;">📍 <strong>${s}</strong></li>`;
+        return `<li style="font-size:12px; color:#334155;">📍 <strong>${s.name || s.site_name}</strong> - <em>${s.guards_count || 1} Guards</em></li>`;
+      }).join('');
+      const guardCount = c.active_guards_deployed !== undefined ? c.active_guards_deployed : (c.total_guards_deployed || 0);
+
+      container.innerHTML += `
+        <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+            <div>
+              <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:700; text-transform:uppercase;">${c.industry || 'Commercial'}</span>
+              <h4 style="margin:6px 0 2px 0; font-size:16px; font-weight:800; color:#0F172A;">${clientName}</h4>
+            </div>
+            <span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">🟢 ACTIVE</span>
+          </div>
+          <div style="font-size:12px; color:#64748B; margin-bottom:12px; line-height:1.4;">${c.notes || c.description || 'Enterprise Corporate Client.'}</div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; margin-bottom:12px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">DEPLOYED SITES & GUARD FORCE:</div>
+            <ul style="margin:0; padding-left:16px;">
+              ${sitesHtml || '<li style="font-size:12px; color:#64748B;">Standard Site Deployment</li>'}
+            </ul>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #F1F5F9; padding-top:10px; font-size:11px; color:#64748B;">
+            <div>🛡️ Total Force: <strong>${guardCount} Guards</strong></div>
+            <div style="color:#059669; font-weight:700;">⭐ ${c.sla_rating || '99.8% SLA'}</div>
+          </div>
+        </div>
+      `;
+    });
+
+  } catch (err) {
+    if (container) container.innerHTML = `<div style="color:#EF4444; padding:16px;">Error: ${err.message}</div>`;
+  }
+}
+
+async function loadCompanyRecommendations() {
+  const container = document.getElementById('company-recommendations-grid');
+  if (container) container.innerHTML = '<div style="text-align:center; padding:24px; color:#64748B;">Loading client recommendations...</div>';
+
+  try {
+    const res = await apiFetch('/company/recommendations');
+    if (!res.ok) throw new Error('Failed to load recommendations');
+    const recs = await res.json();
+
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (recs.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:32px; color:#64748B;">No formal recommendations recorded yet. Click "+ Add Client Recommendation" to publish one.</div>';
+      return;
+    }
+
+    recs.forEach(r => {
+      const stars = '⭐'.repeat(r.rating || 5);
+      const dateStr = r.recommendation_date ? r.recommendation_date.substring(0, 10) : '';
+
+      container.innerHTML += `
+        <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-size:14px;">${stars}</span>
+              <span class="badge" style="background:#F0FDF4; color:#166534; font-size:10px; font-weight:700;">VERIFIED ENDORSEMENT</span>
+            </div>
+            <blockquote style="margin:0 0 12px 0; font-size:13px; color:#334155; font-style:italic; line-height:1.5;">
+              "${r.recommendation_text || r.statement}"
+            </blockquote>
+          </div>
+          <div>
+            <div style="border-top:1px solid #F1F5F9; padding-top:10px;">
+              <div style="font-weight:800; font-size:13px; color:#0F172A;">${r.author_name || r.recommender_name}</div>
+              <div style="font-size:11px; color:#64748B;">${r.designation || r.recommender_title} — <strong>${r.client_name}</strong></div>
+              ${r.service_scope ? `<div style="font-size:11px; color:#3B5EDB; margin-top:2px;">🛡️ Scope: ${r.service_scope}</div>` : ''}
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                <span style="font-size:11px; color:#94A3B8;">📅 ${dateStr}</span>
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#EF4444; border-color:#FCA5A5;" onclick="handleDeleteRecommendation(${r.id})">🗑️ Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+  } catch (err) {
+    if (container) container.innerHTML = `<div style="color:#EF4444; padding:16px;">Error: ${err.message}</div>`;
+  }
+}
+
+async function loadCompanyServices() {
+  const container = document.getElementById('company-services-grid');
+  if (container) container.innerHTML = '<div style="text-align:center; padding:24px; color:#64748B;">Loading services catalog...</div>';
+
+  try {
+    const res = await apiFetch('/company/services');
+    if (!res.ok) throw new Error('Failed to load services');
+    const srvs = await res.json();
+
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (srvs.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:32px; color:#64748B;">No service offerings registered. Click "+ Add Service Offering" to create one.</div>';
+      return;
+    }
+
+    srvs.forEach(s => {
+      const priceStr = s.base_price ? `KES ${Number(s.base_price).toLocaleString()}` : 'Custom Quotation';
+
+      container.innerHTML += `
+        <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:800; font-family:monospace;">${s.service_code}</span>
+              <span class="badge" style="background:#F1F5F9; color:#475569; font-size:11px;">${s.billing_rate_guideline || s.billing_model || 'CONTRACT'}</span>
+            </div>
+            <h4 style="margin:4px 0 6px 0; font-size:16px; font-weight:800; color:#0F172A;">${s.service_name}</h4>
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:8px; text-transform:uppercase;">${s.category}</div>
+            <p style="font-size:12px; color:#475569; margin:0 0 12px 0; line-height:1.4;">${s.description}</p>
+          </div>
+          <div>
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:8px 10px; margin-bottom:10px;">
+              <div style="font-size:10px; font-weight:700; color:#64748B;">SLA SPECIFICATION:</div>
+              <div style="font-size:11px; color:#0F172A; font-weight:600;">${s.sla_standard || s.sla_specification || '100% On-Site SLA Compliance'}</div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #F1F5F9; padding-top:8px;">
+              <div style="font-size:12px; font-weight:800; color:#059669;">${s.billing_rate_guideline || priceStr}</div>
+              <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#EF4444; border-color:#FCA5A5;" onclick="handleDeleteService(${s.id})">🗑️ Delete</button>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+  } catch (err) {
+    if (container) container.innerHTML = `<div style="color:#EF4444; padding:16px;">Error: ${err.message}</div>`;
+  }
+}
+
+function openAddRecommendationModal() {
+  const modal = document.getElementById('modal-add-recommendation');
+  const d = document.getElementById('rec-date');
+  if (d) d.value = new Date().toISOString().substring(0, 10);
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeAddRecommendationModal() {
+  const modal = document.getElementById('modal-add-recommendation');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleCreateRecommendationSubmit(e) {
+  e.preventDefault();
+  const client_name = document.getElementById('rec-client-name').value.trim();
+  const recommender_name = document.getElementById('rec-recommender-name').value.trim();
+  const recommender_title = document.getElementById('rec-title').value.trim();
+  const rating = parseInt(document.getElementById('rec-rating').value) || 5;
+  const recommendation_date = document.getElementById('rec-date').value;
+  const contact_info = document.getElementById('rec-contact').value.trim() || null;
+  const statement = document.getElementById('rec-statement').value.trim();
+
+  try {
+    const res = await apiFetch('/company/recommendations', {
+      method: 'POST',
+      body: JSON.stringify({
+        client_name,
+        author_name: recommender_name,
+        designation: recommender_title,
+        rating,
+        recommendation_date,
+        recommendation_text: statement,
+        service_scope: contact_info
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(`⚠️ Failed to add recommendation: ${data.detail || 'Server error'}`, 'danger');
+      return;
+    }
+
+    closeAddRecommendationModal();
+    showToast(`✅ Recommendation for ${client_name} published!`, 'success');
+    document.getElementById('form-add-recommendation').reset();
+    loadCompanyRecommendations();
+
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+
+async function handleDeleteRecommendation(id) {
+  if (!confirm('Are you sure you want to delete this recommendation?')) return;
+  try {
+    const res = await apiFetch(`/company/recommendations/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Deletion failed');
+    showToast('✅ Recommendation deleted.', 'success');
+    loadCompanyRecommendations();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  }
+}
+
+function openAddServiceModal() {
+  const modal = document.getElementById('modal-add-service');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeAddServiceModal() {
+  const modal = document.getElementById('modal-add-service');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleCreateServiceSubmit(e) {
+  e.preventDefault();
+  const service_code = document.getElementById('srv-code').value.trim().toUpperCase();
+  const service_name = document.getElementById('srv-name').value.trim();
+  const category = document.getElementById('srv-category').value;
+  const billing_model = document.getElementById('srv-billing').value;
+  const rawPrice = parseFloat(document.getElementById('srv-price').value);
+  const base_price = isNaN(rawPrice) ? null : rawPrice;
+  const sla_specification = document.getElementById('srv-sla').value.trim() || null;
+  const description = document.getElementById('srv-desc').value.trim();
+
+  try {
+    const res = await apiFetch('/company/services', {
+      method: 'POST',
+      body: JSON.stringify({
+        service_code,
+        service_name,
+        category,
+        description,
+        sla_standard: sla_specification || '100% Post Coverage',
+        billing_rate_guideline: base_price ? `KES ${base_price.toLocaleString()}` : billing_model
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(`⚠️ Failed to add service: ${data.detail || 'Server error'}`, 'danger');
+      return;
+    }
+
+    closeAddServiceModal();
+    showToast(`✅ Security Service "${service_name}" created!`, 'success');
+    document.getElementById('form-add-service').reset();
+    loadCompanyServices();
+
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+
+async function handleDeleteService(id) {
+  if (!confirm('Are you sure you want to delete this security service?')) return;
+  try {
+    const res = await apiFetch(`/company/services/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Deletion failed');
+    showToast('✅ Security service removed.', 'success');
+    loadCompanyServices();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  }
+}
+
+// Global Window Exports
+window.switchExpenseSubtab = switchExpenseSubtab;
+window.loadExpenses = loadExpenses;
+window.loadExpensesSummary = loadExpensesSummary;
+window.loadPettyCashBook = loadPettyCashBook;
+window.loadRecurringExpenses = loadRecurringExpenses;
+window.openRecordExpenseModal = openRecordExpenseModal;
+window.closeRecordExpenseModal = closeRecordExpenseModal;
+window.toggleRecurringExpenseFields = toggleRecurringExpenseFields;
+window.handleRecordExpenseSubmit = handleRecordExpenseSubmit;
+window.openTopUpPettyCashModal = openTopUpPettyCashModal;
+window.closeTopUpPettyCashModal = closeTopUpPettyCashModal;
+window.handleTopUpPettyCashSubmit = handleTopUpPettyCashSubmit;
+window.deleteExpenseRecord = deleteExpenseRecord;
+window.applyExpenseFilters = applyExpenseFilters;
+window.resetExpenseFilters = resetExpenseFilters;
+window.exportExpensesReport = exportExpensesReport;
+
+window.loadCompanyClientsPortfolio = loadCompanyClientsPortfolio;
+window.loadCompanyRecommendations = loadCompanyRecommendations;
+window.loadCompanyServices = loadCompanyServices;
+window.openAddRecommendationModal = openAddRecommendationModal;
+window.closeAddRecommendationModal = closeAddRecommendationModal;
+window.handleCreateRecommendationSubmit = handleCreateRecommendationSubmit;
+window.handleDeleteRecommendation = handleDeleteRecommendation;
+window.openAddServiceModal = openAddServiceModal;
+window.closeAddServiceModal = closeAddServiceModal;
+window.handleCreateServiceSubmit = handleCreateServiceSubmit;
+window.handleDeleteService = handleDeleteService;

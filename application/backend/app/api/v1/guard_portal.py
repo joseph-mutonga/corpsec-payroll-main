@@ -67,7 +67,11 @@ def get_guard_portal_dashboard(
             end_time=shift.end_time if shift else "06:00 PM",
             is_clocked_in=clocked_in,
             is_scheduled=True,
-            attendance_id=today_att.id if today_att else None
+            attendance_id=today_att.id if today_att else None,
+            site_id=site.id if site else None,
+            site_latitude=site.latitude if site else None,
+            site_longitude=site.longitude if site else None,
+            geofence_radius=site.geofence_radius if site else 200.0
         )
     elif today_asgn and today_asgn.is_override and today_asgn.site_id is None:
         today_shift = GuardTodayShift(
@@ -93,7 +97,11 @@ def get_guard_portal_dashboard(
                 end_time=shift.end_time if shift else "06:00 PM",
                 is_clocked_in=clocked_in,
                 is_scheduled=True,
-                attendance_id=today_att.id if today_att else None
+                attendance_id=today_att.id if today_att else None,
+                site_id=site.id if site else None,
+                site_latitude=site.latitude if site else None,
+                site_longitude=site.longitude if site else None,
+                geofence_radius=site.geofence_radius if site else 200.0
             )
         else:
             today_shift = GuardTodayShift(
@@ -124,6 +132,13 @@ def get_guard_portal_dashboard(
         latest_net_pay = latest_rec.net_pay
         latest_rec_id = latest_rec.id
 
+    is_sg = bool(getattr(guard, "is_super_guard", False))
+    sg_site = db.query(Site).filter(Site.super_guard_id == guard.id).first()
+    if sg_site:
+        is_sg = True
+    elif is_sg and guard.primary_site_id:
+        sg_site = db.query(Site).filter(Site.id == guard.primary_site_id).first()
+
     return GuardHomeResponse(
         guard_id=guard.id,
         employee_number=guard.employee_number,
@@ -132,7 +147,10 @@ def get_guard_portal_dashboard(
         latest_pay_period=latest_period_name,
         latest_net_pay=latest_net_pay,
         latest_payroll_record_id=latest_rec_id,
-        recent_notifications_count=0
+        recent_notifications_count=0,
+        is_super_guard=is_sg,
+        super_guard_site_id=sg_site.id if sg_site else None,
+        super_guard_site_name=sg_site.site_name if sg_site else None
     )
 
 

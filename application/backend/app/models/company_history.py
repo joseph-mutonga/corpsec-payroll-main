@@ -93,3 +93,33 @@ class CompanyOwnershipRecord(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
 
+
+class CompanyRecommendation(Base):
+    __tablename__ = "company_recommendations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_name = Column(String(255), nullable=False)
+    author_name = Column(String(255), nullable=False)
+    designation = Column(String(255), nullable=False)
+    rating = Column(Integer, default=5, nullable=False)
+    recommendation_date = Column(Date, default=datetime.date.today, nullable=False)
+    recommendation_text = Column(Text, nullable=False)
+    service_scope = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+
+
+class CompanyService(Base):
+    __tablename__ = "company_services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_code = Column(String(50), unique=True, index=True, nullable=False)
+    service_name = Column(String(255), nullable=False)
+    category = Column(String(100), default="PHYSICAL_SECURITY", nullable=False)  # PHYSICAL_SECURITY, TECHNICAL_SECURITY, SPECIALIZED_SERVICES, CONSULTING
+    description = Column(Text, nullable=False)
+    sla_standard = Column(String(255), nullable=True)
+    billing_rate_guideline = Column(String(255), nullable=True)
+    active_sites_count = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+
+

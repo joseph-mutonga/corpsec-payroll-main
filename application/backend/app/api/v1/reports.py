@@ -476,6 +476,13 @@ def get_p9_report(
     current_user: User = Depends(get_current_user)
 ):
     """KRA P9 Tax Deduction Card Form matching Screen 24."""
+    # Role restrictions: Supervisors cannot access statutory tax cards
+    if current_user.role == "SUPERVISOR":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor role is unauthorized to view KRA P9 statutory reports."
+        )
+
     # Guard self-service restriction
     if current_user.role == "GUARD" and current_user.guard_id != guard_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view P9 for other guards")

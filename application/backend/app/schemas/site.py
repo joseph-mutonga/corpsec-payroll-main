@@ -9,6 +9,10 @@ class SiteCreate(BaseModel):
     client_name: str
     region_id: Optional[int] = None
     supervisor_id: Optional[int] = None
+    super_guard_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    geofence_radius: float = Field(default=200.0, ge=10.0, description="Geofence boundary radius in meters (default 200m)")
     basic_salary: float = Field(default=15000.0, gt=0, description="Default basic salary for guards at this site")
     daily_rate: float = 1300.0
     night_allowance: float = 200.0
@@ -22,6 +26,10 @@ class SiteUpdate(BaseModel):
     client_name: Optional[str] = None
     region_id: Optional[int] = None
     supervisor_id: Optional[int] = None
+    super_guard_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    geofence_radius: Optional[float] = None
     basic_salary: Optional[float] = None
     daily_rate: Optional[float] = None
     night_allowance: Optional[float] = None
@@ -60,6 +68,11 @@ class SiteResponse(BaseModel):
     supervisor_id: Optional[int] = None
     supervisor_name: Optional[str] = None
     supervisor_email: Optional[str] = None
+    super_guard_id: Optional[int] = None
+    super_guard_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    geofence_radius: float = 200.0
     basic_salary: float = 15000.0
     daily_rate: float
     night_allowance: float

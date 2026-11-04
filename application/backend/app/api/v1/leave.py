@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,7 @@ class UpdateLeaveStatusRequest(BaseModel):
 @router.get("/leave", response_model=List[LeaveAdminResponse])
 @router.get("/leave-requests", response_model=List[LeaveAdminResponse])
 def list_admin_leave_requests(
+    guard_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     admin_user: User = Depends(require_admin_or_supervisor)
 ):
@@ -52,6 +53,8 @@ def list_admin_leave_requests(
         assigned_guard_ids = [g[0] for g in db.query(Guard.id).filter(Guard.supervisor_id == admin_user.id).all()]
         query = query.filter(LeaveRequest.guard_id.in_(assigned_guard_ids))
 
+    if guard_id is not None:
+        query = query.filter(LeaveRequest.guard_id == guard_id)
     requests = query.order_by(LeaveRequest.id.desc()).all()
     results = []
 

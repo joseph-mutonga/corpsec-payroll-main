@@ -13,6 +13,10 @@ class GuardTodayShift(BaseModel):
     is_clocked_in: bool = False
     is_scheduled: bool = True
     attendance_id: Optional[int] = None
+    site_id: Optional[int] = None
+    site_latitude: Optional[float] = None
+    site_longitude: Optional[float] = None
+    geofence_radius: Optional[float] = 200.0
 
 
 class GuardHomeResponse(BaseModel):
@@ -24,6 +28,9 @@ class GuardHomeResponse(BaseModel):
     latest_net_pay: Optional[float] = None
     latest_payroll_record_id: Optional[int] = None
     recent_notifications_count: int = 0
+    is_super_guard: bool = False
+    super_guard_site_id: Optional[int] = None
+    super_guard_site_name: Optional[str] = None
 
 
 class ShiftInfoResponse(BaseModel):

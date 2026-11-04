@@ -12,13 +12,16 @@ from application.backend.app.models.invoice import SiteInvoice
 from application.backend.app.models.client_contract import Client, ClientContract
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.company_history import (
-    CompanyProfile, CompanyFoundingHistory, CompanyMilestone, CompanyOwnershipRecord
+    CompanyProfile, CompanyFoundingHistory, CompanyMilestone, CompanyOwnershipRecord,
+    CompanyRecommendation, CompanyService
 )
 from application.backend.app.schemas.company_history import (
     CompanyProfileUpdate, CompanyProfileResponse,
     CompanyFoundingHistoryUpdate, CompanyFoundingHistoryResponse,
     CompanyMilestoneCreate, CompanyMilestoneResponse,
-    CompanyOwnershipRecordCreate, CompanyOwnershipRecordResponse
+    CompanyOwnershipRecordCreate, CompanyOwnershipRecordResponse,
+    CompanyRecommendationCreate, CompanyRecommendationResponse,
+    CompanyServiceCreate, CompanyServiceResponse
 )
 from application.backend.app.api.v1.assets import calculate_current_depreciated_value
 
@@ -341,3 +344,105 @@ def get_company_growth_analytics(db: Session = Depends(get_db), current_user: Us
         "total_assets_book_value": round(total_asset_val, 2),
         "monthly_contract_run_rate": round(mrr, 2)
     }
+
+
+
+# ==================== RECOMMENDATIONS ====================
+@router.get("/recommendations", response_model=List[CompanyRecommendationResponse])
+def list_company_recommendations(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    return db.query(CompanyRecommendation).order_by(CompanyRecommendation.recommendation_date.desc(), CompanyRecommendation.id.desc()).all()
+
+
+@router.post("/recommendations", response_model=CompanyRecommendationResponse, status_code=status.HTTP_201_CREATED)
+def create_company_recommendation(payload: CompanyRecommendationCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    rec_date = payload.recommendation_date or datetime.date.today()
+    rec = CompanyRecommendation(
+        client_name=payload.client_name.strip(),
+        author_name=payload.author_name.strip(),
+        designation=payload.designation.strip(),
+        rating=int(payload.rating),
+        recommendation_date=rec_date,
+        recommendation_text=payload.recommendation_text.strip(),
+        service_scope=payload.service_scope.strip() if payload.service_scope else None
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    return rec
+
+
+@router.delete("/recommendations/{rec_id}", status_code=status.HTTP_200_OK)
+def delete_company_recommendation(rec_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    rec = db.query(CompanyRecommendation).filter(CompanyRecommendation.id == rec_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+    db.delete(rec)
+    db.commit()
+    return {"message": "Recommendation deleted", "id": rec_id}
+
+
+# ==================== SERVICES CATALOG ====================
+@router.get("/services", response_model=List[CompanyServiceResponse])
+def list_company_services(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    return db.query(CompanyService).order_by(CompanyService.id.asc()).all()
+
+
+@router.post("/services", response_model=CompanyServiceResponse, status_code=status.HTTP_201_CREATED)
+def create_company_service(payload: CompanyServiceCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    existing = db.query(CompanyService).filter(CompanyService.service_code == payload.service_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Service with code '{payload.service_code}' already exists")
+    
+    srv = CompanyService(
+        service_code=payload.service_code.strip().upper(),
+        service_name=payload.service_name.strip(),
+        category=payload.category.strip().upper(),
+        description=payload.description.strip(),
+        sla_standard=payload.sla_standard.strip() if payload.sla_standard else None,
+        billing_rate_guideline=payload.billing_rate_guideline.strip() if payload.billing_rate_guideline else None,
+        active_sites_count=payload.active_sites_count,
+        is_active=payload.is_active
+    )
+    db.add(srv)
+    db.commit()
+    db.refresh(srv)
+    return srv
+
+
+@router.delete("/services/{srv_id}", status_code=status.HTTP_200_OK)
+def delete_company_service(srv_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    srv = db.query(CompanyService).filter(CompanyService.id == srv_id).first()
+    if not srv:
+        raise HTTPException(status_code=404, detail="Service not found")
+    db.delete(srv)
+    db.commit()
+    return {"message": "Service deleted", "id": srv_id}
+
+
+# ==================== CLIENTS PORTFOLIO IN COMPANY GROWTH ====================
+@router.get("/clients-portfolio")
+def get_growth_clients_portfolio(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    clients = db.query(Client).order_by(Client.id.asc()).all()
+    results = []
+    for c in clients:
+        sites = db.query(Site).filter(Site.client_name == c.name).all()
+        site_names = [s.site_name for s in sites]
+        guards_count = sum(s.guard_count for s in sites)
+        contracts = db.query(ClientContract).filter(ClientContract.client_id == c.id).all()
+        results.append({
+            "id": c.id,
+            "client_code": c.client_code,
+            "name": c.name,
+            "client_type": c.client_type,
+            "industry": c.industry,
+            "county": c.county,
+            "contact_person": c.contact_person,
+            "phone": c.phone,
+            "email": c.email,
+            "status": c.status,
+            "protected_sites": site_names,
+            "active_guards_deployed": guards_count,
+            "contracts_count": len(contracts),
+            "notes": c.notes
+        })
+    return results

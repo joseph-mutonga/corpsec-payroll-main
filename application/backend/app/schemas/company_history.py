@@ -314,3 +314,55 @@ class CompanyOwnershipRecordResponse(CompanyOwnershipRecordBase):
         )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Company Recommendations Schemas ---
+class CompanyRecommendationCreate(BaseModel):
+    client_name: str = Field(..., min_length=2)
+    author_name: str = Field(..., min_length=2)
+    designation: str = Field(..., min_length=2)
+    rating: int = Field(default=5, ge=1, le=5)
+    recommendation_date: Optional[date] = None
+    recommendation_text: str = Field(..., min_length=5)
+    service_scope: Optional[str] = None
+
+
+class CompanyRecommendationResponse(BaseModel):
+    id: int
+    client_name: str
+    author_name: str
+    designation: str
+    rating: int
+    recommendation_date: date
+    recommendation_text: str
+    service_scope: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Company Services Schemas ---
+class CompanyServiceCreate(BaseModel):
+    service_code: str = Field(..., min_length=2)
+    service_name: str = Field(..., min_length=2)
+    category: str = Field(default="PHYSICAL_SECURITY")
+    description: str = Field(..., min_length=5)
+    sla_standard: Optional[str] = None
+    billing_rate_guideline: Optional[str] = None
+    active_sites_count: int = 0
+    is_active: bool = True
+
+
+class CompanyServiceResponse(BaseModel):
+    id: int
+    service_code: str
+    service_name: str
+    category: str
+    description: str
+    sla_standard: Optional[str] = None
+    billing_rate_guideline: Optional[str] = None
+    active_sites_count: int = 0
+    is_active: bool = True
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

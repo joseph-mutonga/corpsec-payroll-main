@@ -13,6 +13,8 @@ from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.off_day import OffDayAllowance, OffDayRequest, RelieverAssignment
+from application.backend.app.models.salary_advance import SalaryAdvance
+from sqlalchemy import or_, and_
 from application.backend.app.schemas.payroll import (
     PayrollPeriodCreate, PayrollPeriodResponse, PayrollRecordResponse,
     PayrollCalculationSummary, PayrollErrorResponse, ResolveErrorRequest
@@ -98,6 +100,15 @@ def execute_payroll_calculation(
             detail=f"Payroll period is Closed ({period.status}) and cannot be recalculated."
         )
 
+    # Reset any salary advances previously deducted for this period back to APPROVED
+    prev_advances = db.query(SalaryAdvance).filter(
+        SalaryAdvance.payroll_period_id == period.id,
+        SalaryAdvance.status == "DEDUCTED"
+    ).all()
+    for p_adv in prev_advances:
+        p_adv.status = "APPROVED"
+        p_adv.deducted_at = None
+
     # Clear previous draft records for this period
     db.query(PayrollRecord).filter(PayrollRecord.payroll_period_id == period.id).delete()
 
@@ -110,6 +121,13 @@ def execute_payroll_calculation(
     total_shif = 0.0
     total_housing = 0.0
     total_paye = 0.0
+    total_advances = 0.0
+
+    # Check if this payroll period has any attendance tracking captured
+    period_has_attendance = db.query(Attendance).filter(
+        Attendance.shift_date >= period.start_date,
+        Attendance.shift_date <= period.end_date
+    ).first() is not None
 
     for guard in active_guards:
         # Sum guard attendance for the period (include PRESENT, LATE, and OVERTIME statuses)
@@ -120,7 +138,18 @@ def execute_payroll_calculation(
             Attendance.status.in_(["PRESENT", "LATE", "OVERTIME"])
         ).all()
 
-        days_worked = len(attendances)
+        # Contractual standard working days for a full month
+        contractual_target_days = 26
+
+        if attendances:
+            days_worked = len(attendances)
+        elif not period_has_attendance:
+            # If no attendance has been captured across the entire period in the system,
+            # active guards receive their standard contractual monthly baseline
+            days_worked = contractual_target_days
+        else:
+            # Attendance is actively tracked for this period, but this guard had 0 shifts attended
+            days_worked = 0
         reg_hours = sum(a.regular_hours for a in attendances)
 
         # Overtime calculation: ONLY include hours & pay from APPROVED OvertimeClaims
@@ -238,14 +267,55 @@ def execute_payroll_calculation(
             if c_end >= c_start:
                 off_day_count += (c_end - c_start).days + 1
 
-        raw_off_day_deduction = round(off_day_count * (effective_basic_salary / 26.0), 2)
+        # Check statutory off-day allowance (standard company entitlement is 4 days per month)
+        allowance_entry = db.query(OffDayAllowance).filter(
+            OffDayAllowance.guard_id == guard.id,
+            OffDayAllowance.year == period.year,
+            OffDayAllowance.month == period.month
+        ).first()
+        allowed_off_days = allowance_entry.days_allowed if allowance_entry else 4
+        effective_allowed_off_days = max(allowed_off_days, days_in_month - contractual_target_days)
+
+        # Automatic absenteeism & off-day deduction:
+        # A guard has 4 allowed off days per month and a contractual baseline of 26 working days.
+        # If the guard entered fewer days (excess off days > allowed off days), deduct excess days automatically.
+        unworked_days = max(0, days_in_month - days_worked)
+        excess_unworked_days = max(0, unworked_days - effective_allowed_off_days)
+        excess_off_requests = max(0, off_day_count - allowed_off_days)
+        effective_deductible_days = max(excess_off_requests, excess_unworked_days)
+
+        raw_off_day_deduction = round(effective_deductible_days * (effective_basic_salary / 26.0), 2)
         off_day_deduction_amount = min(raw_off_day_deduction, calc_result["basic_pay"])
 
+        # Query Mid-Month Salary Advances for this guard and period
+        guard_advances = db.query(SalaryAdvance).filter(
+            SalaryAdvance.advance_type == "GUARD",
+            SalaryAdvance.guard_id == guard.id,
+            SalaryAdvance.status.in_(["APPROVED", "PENDING"]),
+            or_(
+                SalaryAdvance.payroll_period_id == period.id,
+                and_(
+                    SalaryAdvance.disbursement_date >= period.start_date,
+                    SalaryAdvance.disbursement_date <= period.end_date
+                )
+            )
+        ).all()
+
+        total_adv_amount = sum(float(a.amount) for a in guard_advances)
         statutory_deds = round(calc_result["nssf"] + calc_result["shif"] + calc_result["housing_levy"] + calc_result["paye"], 2)
+        net_before_advance = max(0.0, calc_result["gross_pay"] - (statutory_deds + unpaid_leave_amount + off_day_deduction_amount))
+        advance_deduction_amount = min(round(total_adv_amount, 2), net_before_advance)
+
+        for a in guard_advances:
+            a.status = "DEDUCTED"
+            a.payroll_period_id = period.id
+            a.deducted_at = datetime.now()
+
         calc_result["unpaid_leave_deduction"] = unpaid_leave_amount
         calc_result["off_day_deduction"] = off_day_deduction_amount
+        calc_result["salary_advance_deduction"] = advance_deduction_amount
         calc_result["reliever_earnings"] = reliever_earnings
-        calc_result["total_deductions"] = round(statutory_deds + unpaid_leave_amount + off_day_deduction_amount, 2)
+        calc_result["total_deductions"] = round(statutory_deds + unpaid_leave_amount + off_day_deduction_amount + advance_deduction_amount, 2)
         calc_result["net_pay"] = round(max(0.0, calc_result["gross_pay"] - calc_result["total_deductions"]), 2)
 
         import json
@@ -272,6 +342,7 @@ def execute_payroll_calculation(
             other_deductions=0.0,
             unpaid_leave_deduction=unpaid_leave_amount,
             off_day_deduction=off_day_deduction_amount,
+            salary_advance_deduction=advance_deduction_amount,
             reliever_earnings=reliever_earnings,
             total_deductions=calc_result["total_deductions"],
             net_pay=calc_result["net_pay"]
@@ -284,6 +355,7 @@ def execute_payroll_calculation(
         total_shif += calc_result["shif"]
         total_housing += calc_result["housing_levy"]
         total_paye += calc_result["paye"]
+        total_advances += advance_deduction_amount
 
     db.add_all(calculated_records)
     db.commit()
@@ -320,6 +392,7 @@ def execute_payroll_calculation(
         total_employer_nssf=round(total_nssf, 2),
         total_employer_housing_levy=round(total_housing, 2),
         total_employer_statutory=round(total_nssf + total_housing, 2),
+        total_salary_advances=round(total_advances, 2),
         error_count=len([e for e in errors if e.status in ["UNRESOLVED", "OPEN"]]),
         status=period.status
     )
@@ -385,6 +458,7 @@ def get_payroll_records(
             other_deductions=getattr(rec, 'other_deductions', 0.0),
             unpaid_leave_deduction=getattr(rec, 'unpaid_leave_deduction', 0.0),
             off_day_deduction=getattr(rec, 'off_day_deduction', 0.0),
+            salary_advance_deduction=getattr(rec, 'salary_advance_deduction', 0.0),
             reliever_earnings=getattr(rec, 'reliever_earnings', 0.0),
             total_deductions=rec.total_deductions,
             net_pay=rec.net_pay,
@@ -392,6 +466,63 @@ def get_payroll_records(
             employer_housing_levy_deduction=emp_housing,
             total_employer_statutory=total_emp_stat,
             paye_breakdown=paye_b
+        ))
+    return result
+
+
+
+@router.get("/guard/{guard_id}/records", response_model=List[PayrollRecordResponse])
+@router.get("/records/guard/{guard_id}", response_model=List[PayrollRecordResponse])
+def get_guard_payroll_records(
+    guard_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch payroll records history for a specific guard from the database."""
+    if current_user.role == UserRole.SUPERVISOR.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Supervisors cannot view payroll records")
+    if current_user.role == UserRole.GUARD.value and current_user.guard_id != guard_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Cannot view other guards' payroll records")
+
+    records = db.query(PayrollRecord).options(
+        joinedload(PayrollRecord.guard),
+        joinedload(PayrollRecord.period)
+    ).filter(PayrollRecord.guard_id == guard_id).order_by(PayrollRecord.id.desc()).all()
+
+    result = []
+    for rec in records:
+        emp_nssf = getattr(rec, 'employer_nssf_deduction', None) or rec.nssf_deduction
+        emp_housing = getattr(rec, 'employer_housing_levy_deduction', None) or rec.housing_levy_deduction
+        total_emp_stat = round(emp_nssf + emp_housing, 2)
+
+        result.append(PayrollRecordResponse(
+            id=rec.id,
+            payroll_period_id=rec.payroll_period_id,
+            guard_id=rec.guard_id,
+            employee_number=rec.guard.employee_number if rec.guard else f"CS-{rec.guard_id:05d}",
+            guard_name=rec.guard.full_name if rec.guard else "N/A",
+            days_worked=rec.days_worked,
+            regular_hours=rec.regular_hours,
+            overtime_hours=rec.overtime_hours,
+            basic_pay=rec.basic_pay,
+            overtime_pay=rec.overtime_pay,
+            allowances=rec.allowances,
+            gross_pay=rec.gross_pay,
+            nssf_deduction=rec.nssf_deduction,
+            shif_deduction=rec.shif_deduction,
+            housing_levy_deduction=rec.housing_levy_deduction,
+            paye_deduction=rec.paye_deduction,
+            other_deductions=getattr(rec, 'other_deductions', 0.0),
+            unpaid_leave_deduction=getattr(rec, 'unpaid_leave_deduction', 0.0),
+            off_day_deduction=getattr(rec, 'off_day_deduction', 0.0),
+            salary_advance_deduction=getattr(rec, 'salary_advance_deduction', 0.0),
+            reliever_earnings=getattr(rec, 'reliever_earnings', 0.0),
+            total_deductions=rec.total_deductions,
+            net_pay=rec.net_pay,
+            employer_nssf_deduction=emp_nssf,
+            employer_housing_levy_deduction=emp_housing,
+            total_employer_statutory=total_emp_stat,
+            paye_breakdown=None
         ))
     return result
 

@@ -1,14 +1,14 @@
 {
-  "id": "/portal",
-  "name": "CorpSec Guard Portal",
-  "short_name": "CorpSec Guard",
-  "description": "Guard shift, attendance, leave, incident and payslip portal for CorpSec employees.",
-  "start_url": "/portal",
+  "id": "/",
+  "name": "CorpSec Payroll & Workforce System",
+  "short_name": "CorpSec ERP",
+  "description": "Enterprise Security Guard Workforce, Roster & Statutory Payroll Management System.",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F8FAFC",
   "theme_color": "#0F172A",
-  "orientation": "portrait",
+  "orientation": "any",
   "icons": [
     {
       "src": "/static/images/corpsec_pwa_192.png",
@@ -33,6 +33,18 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Guard Portal",
+      "url": "/portal",
+      "description": "Open Guard Self-Service Portal"
+    },
+    {
+      "name": "Payroll Engine",
+      "url": "/#payroll",
+      "description": "Open Guided Payroll Engine"
     }
   ]
 }

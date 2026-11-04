@@ -31,6 +31,7 @@ from application.backend.app.models.statutory import (
     StatutoryPayeBand,
     StatutoryPayeRelief
 )
+from application.backend.app.models.salary_advance import SalaryAdvance
 from application.backend.app.models.roster import RosterPattern, RosterAssignment
 from application.backend.app.models.invoice import SiteInvoice, InvoiceItem
 from application.backend.app.models.asset import (
@@ -38,8 +39,10 @@ from application.backend.app.models.asset import (
 )
 from application.backend.app.models.client_contract import Client, ClientContract, ContractDeployment
 from application.backend.app.models.company_history import (
-    CompanyProfile, CompanyFoundingHistory, CompanyMilestone, CompanyOwnershipRecord
+    CompanyProfile, CompanyFoundingHistory, CompanyMilestone, CompanyOwnershipRecord,
+    CompanyRecommendation, CompanyService
 )
+from application.backend.app.models.expense import Expense, PettyCashTransaction
 
 __all__ = [
     "Base",
@@ -63,6 +66,10 @@ __all__ = [
     "CompanyFoundingHistory",
     "CompanyMilestone",
     "CompanyOwnershipRecord",
+    "CompanyRecommendation",
+    "CompanyService",
+    "Expense",
+    "PettyCashTransaction",
     "Shift",
     "Guard",
     "Attendance",
@@ -94,4 +101,5 @@ __all__ = [
     "StatutoryPayeRelief",
     "RosterPattern",
     "RosterAssignment",
+    "SalaryAdvance",
 ]

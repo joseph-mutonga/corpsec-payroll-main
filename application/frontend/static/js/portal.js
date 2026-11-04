@@ -192,7 +192,7 @@ function switchPortalTab(tabName) {
     showLoginView('Session expired. Please log in again.');
     return;
   }
-  const tabs = ['home', 'leave', 'incidents', 'payslips', 'profile'];
+  const tabs = ['home', 'leave', 'incidents', 'super-guard', 'profile'];
   tabs.forEach(tab => {
     const sec = document.getElementById(`section-${tab}`);
     const nav = document.getElementById(`nav-tab-${tab}`);
@@ -210,7 +210,7 @@ function switchPortalTab(tabName) {
     loadMyOffDayRequests();
   }
   else if (tabName === 'incidents') loadIncidents();
-  else if (tabName === 'payslips') loadPayslips();
+  else if (tabName === 'super-guard') loadSuperGuardPortal();
   else if (tabName === 'profile') loadProfile();
 }
 
@@ -218,7 +218,10 @@ function switchPortalTab(tabName) {
 // 1. HOME SCREEN & DASHBOARD
 // -------------------------------------------------------------
 let currentShiftId = null;
-let latestPayrollRecordId = null;
+let currentShiftSite = null;
+let isCurrentSuperGuard = false;
+let superGuardSiteId = null;
+let superGuardSiteName = null;
 
 async function loadDashboard() {
   try {
@@ -290,13 +293,50 @@ async function loadDashboard() {
       }
     }
 
-    // Pay Info
-    if (data.latest_pay_period) {
-      document.getElementById('dash-pay-period').innerText = data.latest_pay_period;
-      document.getElementById('dash-net-pay').innerText = `KES ${(data.latest_net_pay || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    // Super Guard & Geofence Details
+    isCurrentSuperGuard = !!data.is_super_guard;
+    superGuardSiteId = data.super_guard_site_id || (shift.site_id || null);
+    superGuardSiteName = data.super_guard_site_name || (shift.site_name || 'Assigned Site');
+
+    // Store site geofence info
+    currentShiftSite = {
+      site_id: shift.site_id,
+      site_name: shift.site_name,
+      latitude: shift.site_latitude,
+      longitude: shift.site_longitude,
+      radius: shift.geofence_radius || 200
+    };
+
+    // Update Geofence status banner
+    const geoStatusEl = document.getElementById('geo-perimeter-status');
+    const geoHeadEl = document.getElementById('geo-perimeter-heading');
+    if (geoStatusEl) {
+      if (shift.site_name) {
+        if (geoHeadEl) geoHeadEl.innerText = `Site Geofence: ${shift.site_name} (200m Radius)`;
+        geoStatusEl.innerHTML = `GPS coordinates required on clock-in. You must be physically within 200m of <strong>${shift.site_name}</strong> to sign in.`;
+      } else {
+        if (geoHeadEl) geoHeadEl.innerText = 'Site Geofence Radius Verification';
+        geoStatusEl.innerText = 'Guards must be within 200m of the site coordinates to clock in. GPS location is acquired automatically on tap.';
+      }
+    }
+
+    // Toggle Super Guard bottom nav and home banner
+    const sgNavTab = document.getElementById('nav-tab-super-guard');
+    const sgNoticeCard = document.getElementById('super-guard-notice-card');
+    const sgQaTile = document.getElementById('qa-super-guard-tile');
+    const sgBannerSite = document.getElementById('sg-dash-banner-site');
+
+    if (isCurrentSuperGuard) {
+      if (sgNavTab) sgNavTab.style.display = 'flex';
+      if (sgNoticeCard) {
+        sgNoticeCard.style.display = 'block';
+        if (sgBannerSite) sgBannerSite.innerText = `🛡️ Stationed at: ${superGuardSiteName}`;
+      }
+      if (sgQaTile) sgQaTile.style.display = 'flex';
     } else {
-      document.getElementById('dash-pay-period').innerText = 'No Payroll Run Yet';
-      document.getElementById('dash-net-pay').innerText = 'KES 0.00';
+      if (sgNavTab) sgNavTab.style.display = 'none';
+      if (sgNoticeCard) sgNoticeCard.style.display = 'none';
+      if (sgQaTile) sgQaTile.style.display = 'none';
     }
 
   } catch (err) {
@@ -310,19 +350,71 @@ async function loadDashboard() {
 }
 
 async function handleClockIn(shiftId) {
-  try {
-    const url = shiftId ? `/attendance/clock-in?shift_id=${shiftId}` : '/attendance/clock-in';
-    const res = await apiFetch(url, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.detail || 'Clock-in failed');
-      return;
-    }
-    alert('✅ Clocked in successfully!');
-    loadDashboard();
-  } catch (err) {
-    alert('Clock-in error: ' + err.message);
+  const clockBtn = document.getElementById('btn-clock-action');
+  const originalText = clockBtn ? clockBtn.innerHTML : 'Clock In';
+
+  if (!navigator.geolocation) {
+    alert('📍 Geolocation is not supported by your device browser.\n\nGuards without GPS-capable smartphones must be signed in by the Site Super Guard.');
+    return;
   }
+
+  if (clockBtn) {
+    clockBtn.disabled = true;
+    clockBtn.innerHTML = '📡 Acquiring GPS Location...';
+  }
+
+  const geoOptions = {
+    enableHighAccuracy: true,
+    timeout: 12000,
+    maximumAge: 0
+  };
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      try {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracy = Math.round(position.coords.accuracy || 0);
+
+        if (clockBtn) clockBtn.innerHTML = '⏳ Verifying Site Geofence...';
+
+        let url = `/attendance/clock-in?latitude=${lat}&longitude=${lng}`;
+        if (shiftId) url += `&shift_id=${shiftId}`;
+
+        const res = await apiFetch(url, { method: 'POST' });
+        const data = await res.json();
+
+        if (!res.ok) {
+          const errMsg = data.detail || 'Clock-in rejected';
+          alert(`❌ Clock-In Failed (Geofence Check):\n\n${errMsg}\n\nNote: If you do not have a smartphone or device GPS is inaccurate, please request your Site Super Guard to clock you in.`);
+          return;
+        }
+
+        alert(`✅ Clocked In Successfully!\n\nDevice GPS verified within site perimeter (Accuracy: ±${accuracy}m). Have a safe shift!`);
+        loadDashboard();
+      } catch (err) {
+        alert('Network or clock-in error: ' + err.message);
+      } finally {
+        if (clockBtn) {
+          clockBtn.disabled = false;
+          clockBtn.innerHTML = originalText;
+        }
+      }
+    },
+    (err) => {
+      if (clockBtn) {
+        clockBtn.disabled = false;
+        clockBtn.innerHTML = originalText;
+      }
+      let explanation = 'Could not acquire GPS position.';
+      if (err.code === 1) explanation = 'GPS location permission was denied. Please allow location access in your browser settings to verify you are within 200m of the site.';
+      else if (err.code === 2) explanation = 'GPS position unavailable. Please ensure your device location/GPS is switched ON.';
+      else if (err.code === 3) explanation = 'GPS request timed out. Please try again with clear sky or Wi-Fi visibility.';
+
+      alert(`📍 GPS Verification Required:\n\n${explanation}\n\nGuards stationed at this site without a smartphone can be clocked in directly by their Site Super Guard.`);
+    },
+    geoOptions
+  );
 }
 
 async function handleClockOut() {
@@ -337,27 +429,6 @@ async function handleClockOut() {
     loadDashboard();
   } catch (err) {
     alert('Clock-out error: ' + err.message);
-  }
-}
-
-async function downloadLatestPayslip() {
-  try {
-    const endpoint = latestPayrollRecordId ? `/payslips/${latestPayrollRecordId}/pdf` : '/payslips/my-latest/pdf';
-    const res = await apiFetch(endpoint);
-    if (!res.ok) {
-      alert('Latest confirmed payslip PDF is not yet available for download.');
-      return;
-    }
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Payslip_My_Latest.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  } catch (err) {
-    alert('Could not download payslip PDF.');
   }
 }
 
@@ -582,126 +653,136 @@ async function loadIncidents() {
 }
 
 // -------------------------------------------------------------
-// 4. PAYSLIPS SCREEN
+// 4. SUPER GUARD SITE ATTENDANCE REGISTER
 // -------------------------------------------------------------
-let currentGuardPayslips = [];
+async function loadSuperGuardPortal() {
+  const container = document.getElementById('sg-guards-list');
+  const countLabel = document.getElementById('sg-guards-count-label');
+  const siteTitle = document.getElementById('sg-portal-site-name');
 
-async function loadPayslips() {
-  const container = document.getElementById('payslip-history-list');
-  container.innerHTML = '<div style="text-align:center; padding:16px; color:#64748B;">Loading payslips...</div>';
+  if (siteTitle) {
+    siteTitle.innerText = superGuardSiteName || 'Assigned Site';
+  }
+
+  if (container) {
+    container.innerHTML = '<div style="text-align:center; padding:18px; color:#64748B;">Fetching stationed guards duty register...</div>';
+  }
 
   try {
-    const res = await apiFetch('/portal/payslips');
-    if (!res.ok) return;
-
-    currentGuardPayslips = await res.json();
-
-    if (!currentGuardPayslips || currentGuardPayslips.length === 0) {
-      // Empty state for latest card
-      document.getElementById('latest-payslip-period').innerText = 'No Payroll Run Yet';
-      document.getElementById('latest-payslip-gross').innerText = 'KES 0.00';
-      document.getElementById('latest-payslip-net').innerText = 'KES 0.00';
-      document.getElementById('latest-payslip-actions').style.display = 'none';
-
-      // Empty state for history list
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">📄</div>
-          <div style="font-weight:700; color:#1E293B; margin-bottom:4px;">No payslips yet</div>
-          <div style="font-size:12px; color:#64748B;">Your first payslip will appear here after payroll is processed.</div>
-        </div>
-      `;
+    const res = await apiFetch('/attendance/super-guard/guards');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (container) {
+        container.innerHTML = `<div style="padding:16px; color:#EF4444; background:#FEF2F2; border-radius:8px;">⚠️ ${err.detail || 'Failed to load guards register. You must be an authorized Super Guard for this site.'}</div>`;
+      }
       return;
     }
 
-    // Prominent Latest Payslip (first item in array)
-    const latest = currentGuardPayslips[0];
-    document.getElementById('latest-payslip-period').innerText = latest.period_name || 'Current Month';
-    document.getElementById('latest-payslip-gross').innerText = `KES ${latest.gross_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}`;
-    document.getElementById('latest-payslip-net').innerText = `KES ${latest.net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}`;
-    document.getElementById('latest-payslip-actions').style.display = 'flex';
+    const data = await res.json();
+    const guards = data.stationed_guards || data.guards || [];
 
-    // Payslip History (all payslips, most recent first)
-    container.innerHTML = currentGuardPayslips.map(item => `
-      <div class="history-item" style="flex-direction:row; align-items:center; justify-content:space-between; padding:14px;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <div style="font-size:24px;">📄</div>
-          <div>
-            <div style="font-weight:700; font-size:14px; color:#0F172A;">${item.period_name} Payslip</div>
-            <div style="font-size:12px; color:#64748B;">Gross: KES ${item.gross_pay.toLocaleString('en-KE', {minimumFractionDigits:2})} | Net: <strong style="color:#059669;">KES ${item.net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</strong></div>
+    if (siteTitle && data.site_name) {
+      siteTitle.innerText = data.site_name;
+    }
+
+    if (countLabel) {
+      const onDuty = guards.filter(g => g.is_clocked_in).length;
+      countLabel.innerText = `${guards.length} Stationed Guards (${onDuty} currently on duty)`;
+    }
+
+    if (!guards || guards.length === 0) {
+      if (container) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🛡️</div>
+            <div style="font-weight:700; color:#1E293B; margin-bottom:4px;">No other guards stationed here today</div>
+            <div style="font-size:12px; color:#64748B;">All guards rostered to ${data.site_name || 'this site'} will appear here.</div>
           </div>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button class="btn-submit" style="width:auto; padding:6px 12px; font-size:12px; background:#2563EB;" onclick="viewPayslipPdf(${item.payroll_record_id})">👁️ View</button>
-          <button class="btn-submit" style="width:auto; padding:6px 12px; font-size:12px; background:#059669;" onclick="downloadPayslipPdf(${item.payroll_record_id}, '${item.period_name.replace(/ /g, '_')}')">⬇️ PDF</button>
-        </div>
-      </div>
-    `).join('');
-
-  } catch (err) {
-    container.innerHTML = '<div style="color:#EF4444; padding:16px;">Failed to load payslips.</div>';
-  }
-}
-
-async function viewPayslipPdf(id) {
-  const recId = id || (currentGuardPayslips.length > 0 ? currentGuardPayslips[0].payroll_record_id : null);
-  if (!recId) {
-    alert('No payslip available to view.');
-    return;
-  }
-  try {
-    const res = await apiFetch(`/portal/payslips/${recId}/pdf`);
-    if (!res.ok) {
-      alert('Unauthorized or payslip PDF not available.');
+        `;
+      }
       return;
     }
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    window.open(url, '_blank');
+
+    if (container) {
+      container.innerHTML = guards.map(g => {
+        const statusBadge = g.is_clocked_in
+          ? `<span class="status-badge active" style="font-size:11px;">🟢 ON DUTY (${g.clock_in_time ? g.clock_in_time.substring(11, 16) : ''})</span>`
+          : `<span class="status-badge warning" style="font-size:11px;">🟡 NOT CLOCKED IN</span>`;
+
+        const actionButton = g.is_clocked_in
+          ? `<button class="btn-submit" style="width:auto; padding:6px 12px; font-size:12px; background:#DC2626;" onclick="superGuardClockOut(${g.guard_id}, '${escapeQuote(g.full_name)}')">🛑 Sign Out</button>`
+          : `<button class="btn-submit" style="width:auto; padding:6px 12px; font-size:12px; background:#059669;" onclick="superGuardClockIn(${g.guard_id}, '${escapeQuote(g.full_name)}')">⏱️ Sign In (No Phone)</button>`;
+
+        return `
+          <div class="history-item" style="padding:14px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+              <div>
+                <div style="font-weight:700; font-size:14px; color:#0F172A;">${g.full_name}</div>
+                <div style="font-size:12px; color:#64748B;">Emp ID: <span style="font-family:monospace; font-weight:700; color:#3B5EDB;">${g.employee_number}</span> | 📞 ${g.phone_number || 'No Phone'}</div>
+              </div>
+              ${statusBadge}
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #F1F5F9; padding-top:8px; margin-top:6px;">
+              <div style="font-size:11px; color:#64748B;">Shift: <strong>${g.shift_name || 'Day Shift'}</strong></div>
+              <div>${actionButton}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   } catch (err) {
-    alert('Could not view payslip PDF.');
+    if (container) {
+      container.innerHTML = `<div style="padding:16px; color:#EF4444;">Network error: ${err.message}</div>`;
+    }
   }
 }
 
-async function downloadPayslipPdf(id, periodStr) {
-  const recId = id || (currentGuardPayslips.length > 0 ? currentGuardPayslips[0].payroll_record_id : null);
-  if (!recId) {
-    alert('No payslip available to download.');
-    return;
-  }
+function escapeQuote(str) {
+  if (!str) return '';
+  return str.replace(/'/g, "\\'");
+}
+
+async function superGuardClockIn(guardId, guardName) {
+  const confirmMsg = `Authorize on-site duty clock-in for guard:
+
+${guardName}
+
+This confirms the guard is physically present on-site without a smartphone. Proceed?`;
+  if (!confirm(confirmMsg)) return;
+
   try {
-    const res = await apiFetch(`/portal/payslips/${recId}/pdf`);
+    const res = await apiFetch(`/attendance/super-guard/guards/${guardId}/clock-in`, {
+      method: 'POST'
+    });
+    const data = await res.json();
     if (!res.ok) {
-      alert('Unauthorized or payslip PDF not available.');
+      alert(`⚠️ Could not clock in guard: ${data.detail || 'Request failed'}`);
       return;
     }
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Payslip_${periodStr || 'Month'}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    alert(`✅ Guard ${guardName} successfully signed in on duty at ${data.clock_in_time || 'now'}!`);
+    loadSuperGuardPortal();
   } catch (err) {
-    alert('Could not download payslip PDF.');
+    alert('Clock-in error: ' + err.message);
   }
 }
 
-function viewLatestPayslipPdf() {
-  if (currentGuardPayslips.length > 0) {
-    viewPayslipPdf(currentGuardPayslips[0].payroll_record_id);
-  } else {
-    alert('No payslip available yet.');
-  }
-}
+async function superGuardClockOut(guardId, guardName) {
+  const confirmMsg = `Sign out guard ${guardName} from site duty?`;
+  if (!confirm(confirmMsg)) return;
 
-function downloadLatestPayslipPdf() {
-  if (currentGuardPayslips.length > 0) {
-    const latest = currentGuardPayslips[0];
-    downloadPayslipPdf(latest.payroll_record_id, latest.period_name.replace(/ /g, '_'));
-  } else {
-    alert('No payslip available yet.');
+  try {
+    const res = await apiFetch(`/attendance/super-guard/guards/${guardId}/clock-out`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(`⚠️ Could not clock out guard: ${data.detail || 'Request failed'}`);
+      return;
+    }
+    alert(`✅ Guard ${guardName} signed out successfully! (Hours: ${data.regular_hours || 0} hrs, OT: ${data.overtime_hours || 0} hrs)`);
+    loadSuperGuardPortal();
+  } catch (err) {
+    alert('Clock-out error: ' + err.message);
   }
 }
 

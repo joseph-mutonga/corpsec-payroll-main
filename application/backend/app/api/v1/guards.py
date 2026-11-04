@@ -36,6 +36,7 @@ def _format_guard(guard: Guard) -> dict:
         "basic_salary": guard.basic_salary,
         "resolved_basic_salary": guard.effective_basic_salary,
         "is_reliever": guard.is_reliever,
+        "is_super_guard": bool(getattr(guard, "is_super_guard", False)),
         "payment_method": guard.payment_method,
         "bank_name": guard.bank_name,
         "bank_account": guard.bank_account,
@@ -45,6 +46,11 @@ def _format_guard(guard: Guard) -> dict:
         "kra_pin": guard.kra_pin,
         "status": guard.status,
         "deactivation_reason": guard.deactivation_reason,
+        "education_level": guard.education_level,
+        "emergency_contact_name": guard.emergency_contact_name,
+        "emergency_contact_phone": guard.emergency_contact_phone,
+        "blood_group": guard.blood_group,
+        "next_of_kin": guard.next_of_kin,
         "created_at": guard.created_at
     }
 
@@ -116,6 +122,7 @@ def create_guard_profile(
         hire_date=payload.hire_date,
         basic_salary=payload.basic_salary,
         is_reliever=payload.is_reliever,
+        is_super_guard=payload.is_super_guard,
         payment_method=payload.payment_method,
         bank_name=payload.bank_name,
         bank_account=payload.bank_account,
@@ -123,6 +130,11 @@ def create_guard_profile(
         nssf_number=payload.nssf_number,
         shif_number=payload.shif_number,
         kra_pin=payload.kra_pin,
+        education_level=payload.education_level,
+        emergency_contact_name=payload.emergency_contact_name,
+        emergency_contact_phone=payload.emergency_contact_phone,
+        blood_group=payload.blood_group,
+        next_of_kin=payload.next_of_kin,
         status="ACTIVE"
     )
     db.add(guard)
@@ -337,3 +349,4 @@ def reactivate_guard(
     db.refresh(guard)
 
     return _format_guard(guard)
+

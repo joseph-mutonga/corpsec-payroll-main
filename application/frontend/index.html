@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CorpSec Payroll & Workforce System</title>
   <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0F172A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
   <link rel="stylesheet" href="/static/css/styles.css">
   <script src="/static/js/app.js"></script>
 </head>
@@ -87,19 +92,27 @@
 
         <!-- 1-Click Quick Fill Demo Credentials -->
         <div class="login-quickfill-section">
-          <span class="quickfill-title">Quick Demo Sign-In:</span>
+          <span class="quickfill-title">⚡ 1-Click Quick Demo Sign-In:</span>
           <div class="quickfill-chips">
-            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('admin@corpsec.co.ke', 'Admin@CorpSec2026!')">
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('admin@corpsec.co.ke', 'Admin@CorpSec2026!')" title="1-Click Login as System Administrator">
               <span class="chip-role">System Admin</span>
               <span class="chip-id">admin@corpsec.co.ke</span>
             </button>
-            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('peter.otieno@corpsec.co.ke', 'Guard@123456')">
-              <span class="chip-role">Guard</span>
-              <span class="chip-id">Peter Otieno (CS-00431)</span>
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('hr@corpsec.co.ke', 'password123')" title="1-Click Login as HR Manager">
+              <span class="chip-role" style="background:#E0E7FF; color:#3730A3;">HR Manager</span>
+              <span class="chip-id">hr@corpsec.co.ke</span>
             </button>
-            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('john.mwangi@corpsec.co.ke', 'Guard@123456')">
-              <span class="chip-role">Guard</span>
-              <span class="chip-id">John Mwangi (CS-00452)</span>
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('supervisor@corpsec.co.ke', 'password123')" title="1-Click Login as Field Supervisor">
+              <span class="chip-role" style="background:#FEF3C7; color:#92400E;">Supervisor</span>
+              <span class="chip-id">supervisor@corpsec.co.ke</span>
+            </button>
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('peter.otieno@corpsec.co.ke', 'Guard@123456')" title="1-Click Login as Super Guard (Redirects to Mobile Shift Portal)">
+              <span class="chip-role" style="background:#DCFCE7; color:#166534;">Super Guard</span>
+              <span class="chip-id">Peter Otieno</span>
+            </button>
+            <button type="button" class="quickfill-chip" onclick="quickFillCredentials('john.mwangi@corpsec.co.ke', 'Guard@123456')" title="1-Click Login as Guard (Redirects to Mobile Shift Portal)">
+              <span class="chip-role" style="background:#DCFCE7; color:#166534;">Guard</span>
+              <span class="chip-id">John Mwangi</span>
             </button>
           </div>
         </div>
@@ -130,6 +143,7 @@
       <li class="nav-item" onclick="switchTab('reports')">📈 Analytics & Reports</li>
       <li class="nav-item" onclick="switchTab('documents')">📑 Company Documents</li>
       <li class="nav-item" onclick="switchTab('staff')">👥 Staff & HR</li>
+      <li class="nav-item" onclick="switchTab('expenses')" title="Firm Expenses, Petty Cash & Shop Overhead">💸 Expenses & Petty Cash</li>
       <li class="nav-item" onclick="switchTab('incidents')">🚨 Incident Reports</li>
       <li class="nav-item" onclick="switchTab('leave')">🏖️ Leave Requests</li>
       <li class="nav-item" onclick="switchTab('guards')">🛡️ Guard Directory</li>
@@ -138,11 +152,13 @@
       <li class="nav-item" onclick="switchTab('shifts')">📅 Shift Roster</li>
       
       <div class="sidebar-section-title">FINANCIAL</div>
+      <li class="nav-item" onclick="switchTab('expenses')">💸 Expenses & Petty Cash</li>
       <li class="nav-item" onclick="switchTab('invoices')">🧾 Site Invoices</li>
         <li class="nav-item" onclick="switchTab('clients')">🤝 Clients & Contracts</li>
         <li class="nav-item" onclick="switchTab('assets')">📦 Assets & Inventory</li>
         <li class="nav-item" onclick="switchTab('company-history')">🏛️ Company Profile & History</li>
       <li class="nav-item" onclick="switchTab('attendance')">⏰ Attendance & Overtime</li>
+      <li class="nav-item" onclick="switchTab('salary-advances')">💵 Salary Advances</li>
       <li class="nav-item" onclick="switchTab('payroll')">⚙️ Payroll Engine</li>
       <li class="nav-item" onclick="switchTab('payments')">💳 Payment Schedules</li>
       <li class="nav-item" onclick="switchTab('statutory')">🏛️ Tax & Statutory Rates</li>
@@ -150,14 +166,15 @@
       <div class="sidebar-section-title">TOOLS</div>
       <li class="nav-item" onclick="switchTab('audit')">📜 Audit Trail</li>
       <li class="nav-item" onclick="switchTab('settings')">⚙️ System Settings</li>
+      <li class="nav-item" onclick="switchTab('download-app')" id="nav-item-download-app" style="font-weight:700;">💻 Download App</li>
     </ul>
 
     <!-- Sidebar Bottom Promo Card -->
-    <div class="sidebar-promo-card">
-      <div class="promo-icon">🛡️</div>
-      <h4>CorpSec System Pro</h4>
-      <p>System operating smoothly with 100% database health.</p>
-      <button class="btn btn-primary" style="width:100%; font-size:12px; padding:8px 12px;" onclick="switchTab('reports')">View Analytics</button>
+    <div class="sidebar-promo-card" style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border: 1px solid #334155;">
+      <div class="promo-icon" style="font-size:20px;">💻</div>
+      <h4 style="color:#FFF;">CorpSec Desktop App</h4>
+      <p style="color:#94A3B8;">Download or install CorpSec directly onto your PC machine.</p>
+      <button class="btn btn-primary" style="width:100%; font-size:12px; padding:8px 12px; margin-top:6px; background:#2563EB;" onclick="switchTab('download-app')">💻 Download App</button>
     </div>
 
     <div class="user-profile-badge">
@@ -172,14 +189,22 @@
   <!-- Main Content View Container -->
   <div id="main-content">
     <header class="top-bar">
-      <div style="display: flex; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 14px;">
         <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-        <h1 class="page-title" id="current-page-title">Dashboard</h1>
-        <div id="top-bar-date-subtitle" style="font-size:12px; color:#64748B; margin-top:2px;">Data summary for September 18, 2026</div>
+        <div style="display: flex; flex-direction: column; justify-content: center;">
+          <h1 class="page-title" id="current-page-title" style="margin: 0; line-height: 1.2;">Dashboard</h1>
+          <div id="top-bar-date-subtitle" style="font-size: 12px; color: #64748B; margin-top: 3px;">Data summary for September 18, 2026</div>
+        </div>
       </div>
       <div class="header-right-group" style="position:relative;">
         <button class="icon-btn-pill" title="Search guards, sites, or shifts" aria-label="Search guards, sites, or shifts" onclick="toggleSearchModal()">🔍</button>
         
+        <!-- Quick Download App Button -->
+        <button class="btn btn-secondary" onclick="switchTab('download-app')" title="Download Application in your machine" style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:6px 14px; border-radius:20px; background:#F8FAFC; border:1px solid #CBD5E1; color:#0F172A; cursor:pointer;">
+          <span style="font-size:13px;">💻</span>
+          <span>Download App</span>
+        </button>
+
         <!-- Notification Bell Icon with Red Dot Indicator -->
         <button class="icon-btn-pill" title="Notifications" aria-label="Notifications" aria-expanded="false" onclick="toggleNotificationsDropdown(event)">
           🔔
@@ -341,6 +366,18 @@
             <div class="metric-value" style="color:#C2410C;" id="metric-leave-pending-count">0</div>
             <div class="metric-footer">
               <span class="metric-trend trend-down" id="metric-leave-subtext">Awaiting Review</span>
+            </div>
+          </div>
+
+          <!-- Card 9: Firm Expenses & Petty Cash (Admin/HR) -->
+          <div class="metric-card metric-mint" id="dash-card-expenses" onclick="switchTab('expenses')" title="Click to view Expenses & Petty Cash" style="cursor:pointer;">
+            <div class="metric-header">
+              <div class="metric-label" id="dash-card-expenses-label">Expenses & Petty Cash</div>
+              <div class="metric-icon-bubble">💸</div>
+            </div>
+            <div class="metric-value" id="metric-dashboard-expenses">KES 0.00</div>
+            <div class="metric-footer">
+              <span class="metric-trend trend-up" id="metric-dashboard-expenses-subtext">Active Imprest Float</span>
             </div>
           </div>
         </div>
@@ -808,6 +845,7 @@
                 <th>Default Salary (KES)</th>
                 <th>Daily Rate (KES)</th>
                 <th>Night Allowance</th>
+                <th>Geofence & Super Guard</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -966,24 +1004,30 @@
           </div>
         </div>
 
-        <div class="table-container">
-          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0;">Gross-to-Net Payroll Review Table</div>
-          <table class="data-table">
+        <div class="table-container" style="overflow-x: auto; width: 100%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+            <span>Gross-to-Net Payroll Review Table</span>
+            <span style="font-size:11px; color:#64748B; font-weight:500;">👉 Scroll horizontally to view all columns & PDF payslips</span>
+          </div>
+          <table class="data-table" style="min-width: 1450px; width: 100%;">
             <thead>
               <tr>
-                <th>Emp No</th>
-                <th>Guard Name</th>
-                <th>Basic Pay</th>
-                <th>Overtime</th>
-                <th>Allowances</th>
-                <th>Gross Pay</th>
-                <th>NSSF</th>
-                <th>SHIF</th>
-                <th>Housing Levy</th>
-                <th>PAYE</th>
-                <th>Unpaid Leave</th>
-                <th>Net Pay</th>
-                <th>Actions</th>
+                <th style="min-width: 90px; white-space: nowrap;">Emp No</th>
+                <th style="min-width: 140px; white-space: nowrap;">Guard Name</th>
+                <th style="min-width: 110px; white-space: nowrap;">Days Worked</th>
+                <th style="min-width: 100px; white-space: nowrap;">Basic Pay</th>
+                <th style="min-width: 90px; white-space: nowrap;">Overtime</th>
+                <th style="min-width: 100px; white-space: nowrap;">Allowances</th>
+                <th style="min-width: 100px; white-space: nowrap;">Gross Pay</th>
+                <th style="min-width: 80px; white-space: nowrap;">NSSF</th>
+                <th style="min-width: 80px; white-space: nowrap;">SHIF</th>
+                <th style="min-width: 110px; white-space: nowrap;">Housing Levy</th>
+                <th style="min-width: 160px; white-space: nowrap;">PAYE</th>
+                <th style="min-width: 110px; white-space: nowrap;">Unpaid Leave</th>
+                <th style="min-width: 130px; white-space: nowrap;">Off-Day / Absent</th>
+                <th style="min-width: 120px; white-space: nowrap;">Advance (KES)</th>
+                <th style="min-width: 110px; white-space: nowrap;">Net Pay</th>
+                <th style="min-width: 90px; white-space: nowrap;">Actions</th>
               </tr>
             </thead>
             <tbody id="payroll-review-body">
@@ -993,7 +1037,97 @@
         </div>
       </section>
 
-      <!-- Tab Panel 7: Payment Schedules -->
+            <!-- Tab Panel: Mid-Month Salary Advances -->
+      <section id="panel-salary-advances" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:14px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:8px; margin:0;">
+              <span>💵</span> Mid-Month Salary Advances
+            </h2>
+            <div style="font-size:13px; color:#64748B; margin-top:4px;">
+              Document advances disbursed to security guards and corporate staff. Approved advances are automatically deducted from monthly payroll.
+            </div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" onclick="loadSalaryAdvances()">🔄 Refresh</button>
+            <button class="btn btn-primary" onclick="openIssueSalaryAdvanceModal()">+ Issue Salary Advance</button>
+          </div>
+        </div>
+
+        <!-- 4 KPI Summary Cards -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:14px; margin-bottom:24px;">
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.02);">
+            <div style="font-size:12px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Total Advances Disbursed</div>
+            <div id="adv-kpi-disbursed" style="font-size:22px; font-weight:800; color:#0F172A; margin-top:6px;">KES 0.00</div>
+            <div style="font-size:11px; color:#10B981; margin-top:4px; font-weight:600;">All active &amp; historical advances</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.02);">
+            <div style="font-size:12px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Deducted via Payroll</div>
+            <div id="adv-kpi-deducted" style="font-size:22px; font-weight:800; color:#059669; margin-top:6px;">KES 0.00</div>
+            <div style="font-size:11px; color:#059669; margin-top:4px; font-weight:600;">Successfully deducted from pay</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.02);">
+            <div style="font-size:12px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Pending Deductions</div>
+            <div id="adv-kpi-pending" style="font-size:22px; font-weight:800; color:#D97706; margin-top:6px;">KES 0.00</div>
+            <div style="font-size:11px; color:#D97706; margin-top:4px; font-weight:600;">Awaiting next payroll run</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.02);">
+            <div style="font-size:12px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Total Advances Count</div>
+            <div id="adv-kpi-count" style="font-size:22px; font-weight:800; color:#2563EB; margin-top:6px;">0</div>
+            <div style="font-size:11px; color:#2563EB; margin-top:4px; font-weight:600;">Guards &amp; corporate staff records</div>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">RECIPIENT TYPE</label>
+              <select id="adv-filter-type" class="form-control" style="font-size:12px; padding:6px 12px; min-width:140px;" onchange="filterSalaryAdvances()">
+                <option value="ALL">All Recipients</option>
+                <option value="GUARD">🛡️ Guards Only</option>
+                <option value="STAFF">👔 Corporate Staff</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">DEDUCTION STATUS</label>
+              <select id="adv-filter-status" class="form-control" style="font-size:12px; padding:6px 12px; min-width:150px;" onchange="filterSalaryAdvances()">
+                <option value="ALL">All Statuses</option>
+                <option value="APPROVED">APPROVED (Pending Deduction)</option>
+                <option value="DEDUCTED">DEDUCTED (Payroll Applied)</option>
+              </select>
+            </div>
+          </div>
+          <div style="position:relative; min-width:260px;">
+            <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">SEARCH ADVANCES</label>
+            <input type="text" id="adv-filter-search" class="form-control" placeholder="Search ref, name, employee #..." style="font-size:12px; padding:6px 12px; width:100%;" oninput="filterSalaryAdvances()">
+          </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Advance Ref</th>
+                <th>Type</th>
+                <th>Recipient (Name &amp; ID)</th>
+                <th>Amount (KES)</th>
+                <th>Disbursed Date</th>
+                <th>Method &amp; Ref</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="salary-advances-table-body">
+              <tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;">Loading salary advances...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+<!-- Tab Panel 7: Payment Schedules -->
       <section id="panel-payments" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
           <h2 style="font-size:16px; font-weight:700;">Disbursement Schedules (Bank & M-Pesa)</h2>
@@ -1568,6 +1702,22 @@
             <button type="submit" class="btn btn-primary">Save Statutory Settings</button>
           </form>
         </div>
+
+        <!-- Expenditures & Petty Cash Administration in System Settings -->
+        <div style="background:#FFF; padding:24px; border-radius:12px; border:1px solid #E2E8F0; max-width:640px; margin-top:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h2 style="font-size:18px; font-weight:700; color:#0F172A; margin:0;">💸 Firm Expenses & Petty Cash Administration</h2>
+            <span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">ACTIVE FLOAT</span>
+          </div>
+          <p style="font-size:13px; color:#64748B; margin-bottom:16px; line-height:1.5;">
+            Configure firm operational disbursements, manage imprest petty cash float balance, track recurring vendor commitments, and review shop utility records.
+          </p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" onclick="switchTab('expenses')">📋 Open Full Expenses & Petty Cash</button>
+            <button type="button" class="btn btn-secondary" style="background:#059669; color:#FFF; border:none;" onclick="openTopUpPettyCashModal()">💰 Top-Up Petty Cash Float</button>
+            <button type="button" class="btn btn-secondary" onclick="openRecordExpenseModal()">+ Record Firm Expense</button>
+          </div>
+        </div>
       </section>
 
       <!-- Tab Panel: Tax & Statutory Rates Management -->
@@ -1685,6 +1835,7 @@
           </div>
           <div style="display:flex; gap:10px; align-items:center;">
             <button class="btn btn-secondary" onclick="loadStaffMembers()">🔄 Refresh</button>
+            <button class="btn btn-secondary" style="background:#0D7682; color:#FFF; border:none;" onclick="switchTab('expenses')">💸 Expenses & Petty Cash</button>
             <button class="btn btn-primary" onclick="openAddStaffModal()">+ Add Staff Member</button>
           </div>
         </div>
@@ -1726,6 +1877,22 @@
         </div>
 
         <!-- Filter & Search Bar -->
+        <!-- HR & Admin Expenses Hub Card inside Staff & HR -->
+        <div class="card" style="background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%); border:1px solid #BFDBFE; border-radius:12px; padding:18px 20px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+          <div style="display:flex; align-items:center; gap:16px;">
+            <div style="width:48px; height:48px; background:#DBEAFE; color:#1E40AF; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px;">💸</div>
+            <div>
+              <h3 style="margin:0 0 4px 0; font-size:16px; font-weight:800; color:#0F172A;">Firm Expenses, Petty Cash & Shop Expenditure Hub</h3>
+              <p style="margin:0; font-size:12px; color:#64748B;">Record petty cash disbursements, track shop recurring overheads, and manage operational expenditures.</p>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary" style="font-size:12px; padding:8px 14px;" onclick="openRecordExpenseModal()">+ Record Expense</button>
+            <button class="btn btn-secondary" style="font-size:12px; padding:8px 14px; background:#059669; color:#FFF; border:none;" onclick="openTopUpPettyCashModal()">💰 Top-Up Float</button>
+            <button class="btn btn-secondary" style="font-size:12px; padding:8px 14px;" onclick="switchTab('expenses')">📋 Open Full Expense Ledger</button>
+          </div>
+        </div>
+
         <div class="table-container">
           <div style="padding:16px 20px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -1767,8 +1934,14 @@
             <p style="font-size:13px; color:#64748B; margin:0;">Secure repository for PSRA licenses, client contracts, insurance policies, and statutory compliance files</p>
           </div>
           <div style="display:flex; gap:10px; align-items:center;">
+            <span class="badge" style="background:#ECFDF5; color:#065F46; font-size:12px; font-weight:700; padding:6px 12px; border:1px solid #A7F3D0; display:flex; align-items:center; gap:6px;">
+              <span>🔓</span> Vault Unlocked
+            </span>
             <button class="btn btn-secondary" onclick="loadCompanyDocuments()">🔄 Refresh</button>
             <button class="btn btn-primary" onclick="openUploadDocumentModal()">📤 Upload Document</button>
+            <button class="btn btn-secondary" onclick="lockCompanyDocumentsVault()" style="color:#DC2626; border-color:#FCA5A5; font-weight:700; display:flex; align-items:center; gap:6px;" title="Lock repository vault immediately">
+              <span>🔒</span> Lock Vault
+            </button>
           </div>
         </div>
 
@@ -2249,6 +2422,9 @@
           <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:14px; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
             <div style="display:flex; gap:8px;">
               <button id="btn-subtab-history-profile" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('profile')">🏛️ Corporate Profile</button>
+              <button id="btn-subtab-history-clients" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('clients')">🏢 Corporate Clients</button>
+              <button id="btn-subtab-history-recommendations" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('recommendations')">⭐ Recommendations</button>
+              <button id="btn-subtab-history-services" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('services')">🛡️ Services Portfolio</button>
               <button id="btn-subtab-history-founding" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('founding')">📜 Founding Heritage</button>
               <button id="btn-subtab-history-milestones" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('milestones')">🏆 Growth Milestones</button>
               <button id="btn-subtab-history-governance" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchHistorySubtab('governance')">👔 Governance & Board</button>
@@ -2425,9 +2601,611 @@
                 </div>
               </div>
             </div>
+                    <!-- Subtab: Corporate Clients Portfolio -->
+          <div id="subtab-history-clients" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div>
+                <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">🏢 Corporate Clients & Deployed Sites</h3>
+                <p style="font-size:12px; color:#64748B; margin:4px 0 0 0;">Premier commercial, industrial, healthcare, maritime logistics, and government facilities guarded by CorpSec.</p>
+              </div>
+              <button class="btn btn-secondary" style="font-size:12px;" onclick="loadCompanyClientsPortfolio()">🔄 Refresh Portfolio</button>
+            </div>
+            <div id="company-clients-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+              <div style="text-align:center; padding:24px; color:#64748B;">Loading corporate clients...</div>
+            </div>
+          </div>
+
+          <!-- Subtab: Client Recommendations & Written Commendations -->
+          <div id="subtab-history-recommendations" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div>
+                <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⭐ Client Recommendations & Commendations</h3>
+                <p style="font-size:12px; color:#64748B; margin:4px 0 0 0;">Formal client endorsements, PSRA verification letters, and stakeholder satisfaction testimonials.</p>
+              </div>
+              <button class="btn btn-primary" style="font-size:12px;" onclick="openAddRecommendationModal()">+ Add Client Recommendation</button>
+            </div>
+            <div id="company-recommendations-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+              <div style="text-align:center; padding:24px; color:#64748B;">Loading recommendations...</div>
+            </div>
+          </div>
+
+          <!-- Subtab: Security Services Portfolio -->
+          <div id="subtab-history-services" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div>
+                <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">🛡️ Core Security Services & Capabilities</h3>
+                <p style="font-size:12px; color:#64748B; margin:4px 0 0 0;">Standard operational services, pricing baselines, equipment deployments, and SLA benchmarks.</p>
+              </div>
+              <button class="btn btn-primary" style="font-size:12px;" onclick="openAddServiceModal()">+ Add Service Offering</button>
+            </div>
+            <div id="company-services-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+              <div style="text-align:center; padding:24px; color:#64748B;">Loading services portfolio...</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- PANEL: EXPENSES & PETTY CASH MANAGEMENT                 -->
+      <!-- ======================================================== -->
+      <section id="panel-expenses" style="display:none;">
+        <div class="content-header" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:24px; font-weight:900; color:#0F172A; margin:0;">💸 Firm Expenses & Petty Cash Management</h2>
+            <p style="color:#64748B; font-size:13px; margin:4px 0 0 0;">
+              Record operational firm expenses, track petty cash imprest float, manage recurring expenditure commitments, and monitor shop overheads.
+            </p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary" onclick="openRecordExpenseModal()">+ Record Firm Expense</button>
+            <button class="btn btn-secondary" style="background:#059669; color:#FFF; border:none;" onclick="openTopUpPettyCashModal()">💰 Top-Up Petty Cash Float</button>
+            <button class="btn btn-secondary" onclick="exportExpensesReport()">🖨️ Export PDF Report</button>
+          </div>
+        </div>
+
+        <!-- 4 KPI Metric Cards -->
+        <div class="kpi-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; margin-bottom:24px;">
+          <div class="kpi-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
+            <div style="font-size:12px; font-weight:700; color:#64748B;">TOTAL EXPENSES (THIS MONTH)</div>
+            <div id="kpi-expenses-monthly-total" style="font-size:24px; font-weight:900; color:#0F172A; margin-top:4px;">KES 0.00</div>
+            <div style="font-size:11px; color:#DC2626; font-weight:600; margin-top:4px;" id="kpi-expenses-ytd-subtitle">YTD Operational Outflow</div>
+          </div>
+          <div class="kpi-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
+            <div style="font-size:12px; font-weight:700; color:#64748B;">PETTY CASH FLOAT BALANCE</div>
+            <div id="kpi-petty-cash-balance" style="font-size:24px; font-weight:900; color:#059669; margin-top:4px;">KES 0.00</div>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;" id="kpi-petty-cash-float-max">Imprest Float Cap: KES 25,000</div>
+          </div>
+          <div class="kpi-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
+            <div style="font-size:12px; font-weight:700; color:#64748B;">RECURRING COMMITMENTS</div>
+            <div id="kpi-recurring-monthly-total" style="font-size:24px; font-weight:900; color:#2563EB; margin-top:4px;">KES 0.00</div>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;" id="kpi-recurring-count">0 active commitments</div>
+          </div>
+          <div class="kpi-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
+            <div style="font-size:12px; font-weight:700; color:#64748B;">RECEIPTS & VOUCHERS RECORDED</div>
+            <div id="kpi-receipts-count" style="font-size:24px; font-weight:900; color:#7C3AED; margin-top:4px;">0</div>
+            <div style="font-size:11px; color:#10B981; font-weight:600; margin-top:4px;">Fully Audited & Tracked</div>
+          </div>
+        </div>
+
+        <!-- Subtabs & Controls -->
+        <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:20px; margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:14px; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; gap:8px;">
+              <button id="btn-subtab-expense-all" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="switchExpenseSubtab('all')">📋 All Firm Expenses</button>
+              <button id="btn-subtab-expense-petty" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchExpenseSubtab('petty')">🪙 Petty Cash Book</button>
+              <button id="btn-subtab-expense-recurring" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchExpenseSubtab('recurring')">🔄 Recurring Obligations</button>
+              <button id="btn-subtab-expense-breakdown" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchExpenseSubtab('breakdown')">📊 Category Breakdown & Shop</button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 1: ALL FIRM EXPENSES -->
+          <div id="subtab-expense-all">
+            <!-- Filter Bar -->
+            <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+              <input type="text" id="expense-filter-search" class="form-control" placeholder="Search payee, notes, voucher..." style="max-width:220px;" oninput="applyExpenseFilters()">
+              <select id="expense-filter-category" class="form-control" style="max-width:180px;" onchange="applyExpenseFilters()">
+                <option value="">All Categories</option>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+              </select>
+              <select id="expense-filter-type" class="form-control" style="max-width:160px;" onchange="applyExpenseFilters()">
+                <option value="">All Types</option>
+                <option value="OPERATIONAL">Operational</option>
+                <option value="PETTY_CASH">Petty Cash</option>
+                <option value="RECURRING">Recurring</option>
+                <option value="CAPITAL_PURCHASE">Capital Purchase</option>
+              </select>
+              <button class="btn btn-secondary" style="font-size:12px;" onclick="resetExpenseFilters()">Reset Filters</button>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th>Payee / Vendor</th>
+                    <th>Description</th>
+                    <th>Amount (KES)</th>
+                    <th>Method</th>
+                    <th>Voucher / Ref</th>
+                    <th>Recorded By</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="expenses-table-body">
+                  <tr><td colspan="10" style="text-align:center; padding:24px; color:#64748B;">Loading expenses...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SUBTAB 2: PETTY CASH BOOK -->
+          <div id="subtab-expense-petty" style="display:none;">
+            <!-- Float Visual Card -->
+            <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:16px; margin-bottom:20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="font-weight:700; color:#166534; font-size:14px;">Petty Cash Imprest Float Health</span>
+                <span id="petty-float-percent" style="font-weight:800; color:#15803D;">--%</span>
+              </div>
+              <div style="background:#DCFCE7; border-radius:999px; height:10px; overflow:hidden; margin-bottom:12px;">
+                <div id="petty-float-bar" style="background:#16A34A; width:0%; height:100%;"></div>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; font-size:12px;">
+                <div><span style="color:#64748B;">Float Cap:</span> <strong id="petty-stat-cap">KES 25,000</strong></div>
+                <div><span style="color:#64748B;">Cash On Hand:</span> <strong id="petty-stat-balance" style="color:#16A34A;">KES 0.00</strong></div>
+                <div><span style="color:#64748B;">Disbursed Month:</span> <strong id="petty-stat-disbursed">KES 0.00</strong></div>
+                <div><span style="color:#64748B;">Top-ups Month:</span> <strong id="petty-stat-topups">KES 0.00</strong></div>
+              </div>
+            </div>
+
+            <!-- Petty Cash Transactions Table -->
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Date & Time</th>
+                    <th>Transaction Type</th>
+                    <th>Payee / Custodian</th>
+                    <th>Purpose / Details</th>
+                    <th>Inflow (+)</th>
+                    <th>Outflow (-)</th>
+                    <th>Running Balance</th>
+                    <th>Voucher No</th>
+                  </tr>
+                </thead>
+                <tbody id="petty-cash-table-body">
+                  <tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading petty cash transactions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SUBTAB 3: RECURRING COMMITMENTS -->
+          <div id="subtab-expense-recurring" style="display:none;">
+            <div style="margin-bottom:14px; font-size:13px; color:#64748B;">
+              Scheduled obligations, licenses, and monthly firm liabilities with auto-tracked billing cycles.
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Commitment Name</th>
+                    <th>Category</th>
+                    <th>Billing Frequency</th>
+                    <th>Amount per Cycle (KES)</th>
+                    <th>Monthly Equiv (KES)</th>
+                    <th>Next Due Date</th>
+                    <th>Vendor / Payee</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="recurring-expenses-table-body">
+                  <tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading recurring obligations...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SUBTAB 4: EXPENDITURE BREAKDOWN & SHOP ANALYTICS -->
+          <div id="subtab-expense-breakdown" style="display:none;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <h4 style="margin:0 0 12px 0; font-size:14px; color:#0F172A;">📊 Expenditure by Category</h4>
+                <div id="category-distribution-container" style="display:flex; flex-direction:column; gap:10px;">
+                  <!-- Category bars populated via JS -->
+                </div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <h4 style="margin:0 0 12px 0; font-size:14px; color:#0F172A;">🏪 Shop & Firm Facility Overheads</h4>
+                <div style="font-size:12px; color:#475569; line-height:1.6;">
+                  <p>All petty cash disbursements for tea, pantry supplies, minor plumbing, and shop retail maintenance are audited under the Imprest Petty Cash Float system.</p>
+                  <p>Receipt vouchers must be uploaded or referenced with original fiscal receipts for month-end reconciliation.</p>
+                </div>
+                <div style="margin-top:14px; padding:12px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px;">
+                  <div style="font-size:11px; font-weight:700; color:#1E40AF;">POLICY GUIDELINE:</div>
+                  <div style="font-size:11px; color:#1E3A8A; margin-top:2px;">Disbursements over KES 5,000 require Administrator pre-authorization. Petty cash floats must be replenished when balance drops below 25% (KES 6,250).</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Tab Panel: Download Application in Your Machine -->
+      <section id="panel-download-app" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:14px;">
+          <div>
+            <h2 style="font-size:22px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:10px; margin:0;">
+              <span>💻</span> Download Application in Your Machine
+            </h2>
+            <div style="font-size:13px; color:#64748B; margin-top:4px;">
+              Install CorpSec Payroll &amp; Security Workforce System directly onto your machine (Windows PC, Mac, or Mobile) for high-speed desktop window mode, desktop shortcuts, and offline reliability.
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="/api/v1/desktop/download-launcher" class="btn btn-primary" download style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; padding:8px 16px; font-size:13px; font-weight:700;">
+              <span>⬇️</span> Download Windows Launcher (.bat)
+            </a>
+            <a href="/api/v1/desktop/download-package" class="btn btn-secondary" download style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; padding:8px 16px; font-size:13px; font-weight:700;">
+              <span>📦</span> Full Setup Bundle (.ZIP)
+            </a>
+          </div>
+        </div>
+
+        <!-- Machine Environment & Detection Banner -->
+        <div style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:14px; padding:20px 24px; margin-bottom:24px; color:#FFFFFF; box-shadow:0 10px 25px -5px rgba(15,23,42,0.15); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div style="display:flex; align-items:center; gap:16px;">
+            <div style="width:52px; height:52px; border-radius:12px; background:rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:26px; border:1px solid rgba(255,255,255,0.15);">
+              🖥️
+            </div>
+            <div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px; font-weight:800;" id="detected-machine-os">Your Machine: Windows PC</span>
+                <span class="badge" style="background:#10B981; color:#FFFFFF; font-size:11px; padding:3px 10px; font-weight:700;">100% Compatible</span>
+              </div>
+              <div style="font-size:12px; color:#94A3B8; margin-top:3px;" id="detected-machine-browser">
+                Detected Browser: Chrome/Edge • Ready for Native Desktop App &amp; Offline Launcher Installation
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-primary" onclick="triggerPwaInstall()" style="background:#2563EB; border:none; padding:8px 18px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px;">
+              <span>⚡</span> Install on this Machine
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Prominent Download & Installation Options Grid -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:18px; margin-bottom:28px;">
+          
+          <!-- Card 1: Windows Desktop Launcher -->
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+            <div style="position:absolute; top:12px; right:12px;">
+              <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BFDBFE;">RECOMMENDED</span>
+            </div>
+            <div>
+              <div style="font-size:32px; margin-bottom:12px;">🪟</div>
+              <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Windows Desktop Launcher</h3>
+              <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                One-click batch launcher that automatically creates an official CorpSec shortcut on your Windows desktop and opens in a standalone desktop window without browser borders.
+              </div>
+              <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                <li>Creates "CorpSec Payroll System" desktop shortcut</li>
+                <li>Frameless native desktop window (App Mode)</li>
+                <li>No installation privileges or admin rights required</li>
+              </ul>
+            </div>
+            <div>
+              <a href="/api/v1/desktop/download-launcher" download class="btn btn-primary" style="width:100%; display:flex; justify-content:center; align-items:center; gap:8px; text-decoration:none; padding:10px; font-size:13px; font-weight:700;">
+                <span>⬇️</span> Download Windows Launcher (.bat)
+              </a>
+            </div>
+          </div>
+
+          <!-- Card 2: 1-Click Browser Desktop App (PWA) -->
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+            <div style="position:absolute; top:12px; right:12px;">
+              <span class="badge" style="background:#ECFDF5; color:#059669; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #A7F3D0;">1-CLICK PWA</span>
+            </div>
+            <div>
+              <div style="font-size:32px; margin-bottom:12px;">⚡</div>
+              <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Native Desktop App (PWA)</h3>
+              <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                Installs CorpSec directly through your Chrome or Edge browser. Integrates seamlessly into your Windows Start Menu, Taskbar, and desktop.
+              </div>
+              <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                <li>Pins to Windows Taskbar &amp; Start Menu</li>
+                <li>Instant startup with offline cache engine</li>
+                <li>Self-updates automatically with new payroll rules</li>
+              </ul>
+            </div>
+            <div>
+              <button class="btn btn-primary" id="btn-pwa-install-app" onclick="triggerPwaInstall()" style="width:100%; display:flex; justify-content:center; align-items:center; gap:8px; padding:10px; font-size:13px; font-weight:700; background:#0D9488; border:none;">
+                <span>💻</span> Install Desktop App Now
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 3: Full Setup Bundle (.ZIP) -->
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+            <div style="position:absolute; top:12px; right:12px;">
+              <span class="badge" style="background:#FFFBEB; color:#D97706; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #FDE68A;">PORTABLE</span>
+            </div>
+            <div>
+              <div style="font-size:32px; margin-bottom:12px;">📦</div>
+              <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Offline Setup Bundle (.ZIP)</h3>
+              <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                Complete portable ZIP archive containing batch launchers, PowerShell setup scripts, offline documentation, and server tools.
+              </div>
+              <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                <li>Transferable via USB drive to any workstation</li>
+                <li>Includes PowerShell &amp; VBScript shortcut creators</li>
+                <li>Includes setup and offline startup guides</li>
+              </ul>
+            </div>
+            <div>
+              <a href="/api/v1/desktop/download-package" download class="btn btn-secondary" style="width:100%; display:flex; justify-content:center; align-items:center; gap:8px; text-decoration:none; padding:10px; font-size:13px; font-weight:700;">
+                <span>⬇️</span> Download Bundle (.ZIP)
+              </a>
+            </div>
+          </div>
+
+          <!-- Card 4: Guard Mobile Portal -->
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+            <div style="position:absolute; top:12px; right:12px;">
+              <span class="badge" style="background:#F5F3FF; color:#7C3AED; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #DDD6FE;">MOBILE PORTAL</span>
+            </div>
+            <div>
+              <div style="font-size:32px; margin-bottom:12px;">📱</div>
+              <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Guard Mobile Self-Service</h3>
+              <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                Mobile web application for security guards and field officers to clock in, view shift rosters, request off-days, and download payslips.
+              </div>
+              <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                <li>Optimized for Android &amp; iOS smartphones</li>
+                <li>One-tap "Add to Home screen" PWA icon</li>
+                <li>Direct mobile attendance &amp; payslip access</li>
+              </ul>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <a href="/portal" target="_blank" class="btn btn-secondary" style="flex:1; display:flex; justify-content:center; align-items:center; gap:6px; text-decoration:none; padding:10px; font-size:12px; font-weight:700;">
+                <span>🌐</span> Open Portal
+              </a>
+              <button class="btn btn-secondary" onclick="showQrModal()" style="padding:10px 14px; font-size:12px; font-weight:700;" title="Scan QR Code on Phone">
+                📷 QR
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Step-by-Step Installation Guides -->
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:24px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); margin-bottom:28px;">
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0 0 16px 0; display:flex; align-items:center; gap:8px;">
+            <span>📖</span> Quick Step-by-Step Installation Instructions
+          </h3>
+
+          <!-- Guide Tabs Navigation -->
+          <div style="display:flex; gap:8px; border-bottom:1px solid #E2E8F0; padding-bottom:12px; margin-bottom:20px; flex-wrap:wrap;">
+            <button class="btn btn-primary" id="tab-btn-guide-win" onclick="switchDownloadTab('win')" style="font-size:12px; font-weight:700; padding:6px 14px;">🪟 Windows (.bat Launcher)</button>
+            <button class="btn btn-secondary" id="tab-btn-guide-chrome" onclick="switchDownloadTab('chrome')" style="font-size:12px; font-weight:700; padding:6px 14px;">🌐 Google Chrome</button>
+            <button class="btn btn-secondary" id="tab-btn-guide-edge" onclick="switchDownloadTab('edge')" style="font-size:12px; font-weight:700; padding:6px 14px;">🌊 Microsoft Edge</button>
+            <button class="btn btn-secondary" id="tab-btn-guide-mobile" onclick="switchDownloadTab('mobile')" style="font-size:12px; font-weight:700; padding:6px 14px;">📱 Mobile (Android / iOS)</button>
+          </div>
+
+          <!-- Guide Tab 1: Windows (.bat Launcher) -->
+          <div id="guide-content-win" style="display:block;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#2563EB; margin-bottom:6px;">Step 1: Download</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Click the <b>Download Windows Launcher (.bat)</b> button above to save the launcher to your Downloads folder.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#2563EB; margin-bottom:6px;">Step 2: Run Launcher</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Double-click <code>CorpSec_Desktop_Launcher.bat</code>. If Windows SmartScreen prompts, click <i>More Info → Run Anyway</i>.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#2563EB; margin-bottom:6px;">Step 3: Desktop Icon Created</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">A new shortcut named <b>CorpSec Payroll System</b> is placed on your Windows desktop.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#2563EB; margin-bottom:6px;">Step 4: Launch App</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Double-click the desktop shortcut anytime to open the system in full desktop window mode.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guide Tab 2: Google Chrome -->
+          <div id="guide-content-chrome" style="display:none;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#0D9488; margin-bottom:6px;">Step 1: Check Address Bar</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Look at the right side of Chrome's address bar at the top of your screen for the <b>Install icon (💻 or ⊕)</b>.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#0D9488; margin-bottom:6px;">Step 2: Or Use Chrome Menu</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Click the three dots (⋮) in the top-right corner → select <b>Save and share</b> → <b>Install CorpSec ERP as App</b>.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#0D9488; margin-bottom:6px;">Step 3: Confirm Install</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Click <b>Install</b> in the dialog box. Chrome will automatically launch the app in its own window.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#0D9488; margin-bottom:6px;">Step 4: Pin to Taskbar</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Right-click the CorpSec icon on your Windows Taskbar and select <b>Pin to taskbar</b> for 1-click access.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guide Tab 3: Microsoft Edge -->
+          <div id="guide-content-edge" style="display:none;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#4338CA; margin-bottom:6px;">Step 1: Edge Address Bar</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Click the <b>App Available (田)</b> icon in the Microsoft Edge address bar.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#4338CA; margin-bottom:6px;">Step 2: Or Edge Menu</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Click Edge settings menu (...) → select <b>Apps</b> → click <b>Install this site as an app</b>.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#4338CA; margin-bottom:6px;">Step 3: Desktop &amp; Start Menu</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Edge will ask if you want to pin to Taskbar and create a Desktop shortcut. Check both and click <b>Allow</b>.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guide Tab 4: Mobile (Android / iOS) -->
+          <div id="guide-content-mobile" style="display:none;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#7C3AED; margin-bottom:6px;">Android Phone</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Open <code>/portal</code> in Chrome on Android → Tap menu (⋮) → Tap <b>Install app</b> or <b>Add to Home Screen</b>.</div>
+              </div>
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:14px; font-weight:800; color:#7C3AED; margin-bottom:6px;">Apple iPhone (iOS)</div>
+                <div style="font-size:12px; color:#475569; line-height:1.5;">Open <code>/portal</code> in Safari on iPhone → Tap the <b>Share button (↑)</b> → Scroll down and tap <b>Add to Home Screen</b>.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Machine Technical Specifications & Health -->
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:20px; margin-bottom:24px;">
+          <div style="font-size:13px; font-weight:800; color:#334155; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.5px;">Machine System Specifications</div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px;">
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px;">
+              <div style="font-size:11px; color:#64748B; font-weight:600;">OPERATING SYSTEMS</div>
+              <div style="font-size:13px; font-weight:700; color:#0F172A; margin-top:2px;">Windows 10/11, macOS, Linux</div>
+            </div>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px;">
+              <div style="font-size:11px; color:#64748B; font-weight:600;">SUPPORTED BROWSERS</div>
+              <div style="font-size:13px; font-weight:700; color:#0F172A; margin-top:2px;">Chrome 90+, Edge 90+, Safari 14+</div>
+            </div>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px;">
+              <div style="font-size:11px; color:#64748B; font-weight:600;">DISK FOOTPRINT</div>
+              <div style="font-size:13px; font-weight:700; color:#0F172A; margin-top:2px;">&lt; 50 MB Cache / Instant Run</div>
+            </div>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px;">
+              <div style="font-size:11px; color:#64748B; font-weight:600;">OFFLINE RELIABILITY</div>
+              <div style="font-size:13px; font-weight:700; color:#10B981; margin-top:2px;">PWA Service Worker Enabled</div>
+            </div>
           </div>
         </div>
       </section>
+
+      <!-- Modal: Mobile QR Code -->
+      <div id="modal-mobile-qr" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeQrModal()">
+        <div class="modal-content" style="max-width:420px; text-align:center; padding:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="font-size:18px; font-weight:800; margin:0; color:#0F172A;">📱 Mobile Guard Portal QR</h3>
+            <button onclick="closeQrModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+          </div>
+          <div style="font-size:13px; color:#64748B; margin-bottom:20px;">
+            Scan this QR code with your smartphone camera to immediately open the Guard Mobile Portal on your phone.
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:20px; display:inline-block; margin-bottom:20px;">
+            <!-- Rendered SVG QR Code -->
+            <svg width="200" height="200" viewBox="0 0 100 100" style="display:block; margin:0 auto;">
+              <rect width="100" height="100" fill="#FFFFFF"/>
+              <!-- Position markers -->
+              <rect x="10" y="10" width="25" height="25" fill="#0F172A"/>
+              <rect x="15" y="15" width="15" height="15" fill="#FFFFFF"/>
+              <rect x="18" y="18" width="9" height="9" fill="#0F172A"/>
+              <rect x="65" y="10" width="25" height="25" fill="#0F172A"/>
+              <rect x="70" y="15" width="15" height="15" fill="#FFFFFF"/>
+              <rect x="73" y="18" width="9" height="9" fill="#0F172A"/>
+              <rect x="10" y="65" width="25" height="25" fill="#0F172A"/>
+              <rect x="15" y="70" width="15" height="15" fill="#FFFFFF"/>
+              <rect x="18" y="73" width="9" height="9" fill="#0F172A"/>
+              <!-- Data modules -->
+              <rect x="40" y="15" width="6" height="6" fill="#0F172A"/>
+              <rect x="50" y="12" width="6" height="6" fill="#0F172A"/>
+              <rect x="42" y="25" width="6" height="6" fill="#0F172A"/>
+              <rect x="52" y="28" width="6" height="6" fill="#0F172A"/>
+              <rect x="15" y="42" width="6" height="6" fill="#0F172A"/>
+              <rect x="25" y="48" width="6" height="6" fill="#0F172A"/>
+              <rect x="38" y="40" width="8" height="8" fill="#2563EB"/>
+              <rect x="50" y="42" width="6" height="6" fill="#0F172A"/>
+              <rect x="65" y="45" width="6" height="6" fill="#0F172A"/>
+              <rect x="78" y="42" width="6" height="6" fill="#0F172A"/>
+              <rect x="45" y="55" width="6" height="6" fill="#0F172A"/>
+              <rect x="55" y="62" width="6" height="6" fill="#0F172A"/>
+              <rect x="65" y="68" width="6" height="6" fill="#0F172A"/>
+              <rect x="75" y="75" width="6" height="6" fill="#0F172A"/>
+              <rect x="42" y="78" width="6" height="6" fill="#0F172A"/>
+              <rect x="52" y="85" width="6" height="6" fill="#0F172A"/>
+              <rect x="85" y="85" width="6" height="6" fill="#0F172A"/>
+            </svg>
+          </div>
+          <div style="font-size:12px; font-family:monospace; background:#F1F5F9; padding:8px 12px; border-radius:6px; color:#334155; word-break:break-all; margin-bottom:20px;">
+            http://localhost:8000/portal
+          </div>
+          <div style="display:flex; justify-content:center; gap:10px;">
+            <a href="/portal" target="_blank" class="btn btn-primary" style="text-decoration:none; padding:8px 16px;">Open in Browser</a>
+            <button class="btn btn-secondary" onclick="closeQrModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: PWA Installation Guidance -->
+      <div id="modal-pwa-install-guide" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closePwaInstallHelpModal()">
+        <div class="modal-content" style="max-width:550px; padding:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="font-size:18px; font-weight:800; margin:0; color:#0F172A;">💻 Install CorpSec Desktop App</h3>
+            <button onclick="closePwaInstallHelpModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+          </div>
+          <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:14px; margin-bottom:18px;">
+            <div style="font-size:13px; font-weight:700; color:#1E40AF; margin-bottom:4px;">How to Install in 2 Simple Clicks:</div>
+            <div style="font-size:12px; color:#1E3A8A; line-height:1.5;">
+              You can install CorpSec directly to your Windows desktop and taskbar via your browser's built-in app installer.
+            </div>
+          </div>
+          <div style="margin-bottom:20px;">
+            <div style="display:flex; gap:12px; margin-bottom:14px; align-items:flex-start;">
+              <div style="width:28px; height:28px; border-radius:50%; background:#2563EB; color:#FFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0;">1</div>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:#0F172A;">Look at your browser's address bar (Top-Right)</div>
+                <div style="font-size:12px; color:#64748B; margin-top:2px;">Look at the URL bar where it says <code>http://localhost:8000/</code>. On the far right side, click the <b>Install App icon (💻 or ⊕)</b>.</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:12px; margin-bottom:14px; align-items:flex-start;">
+              <div style="width:28px; height:28px; border-radius:50%; background:#2563EB; color:#FFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0;">2</div>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:#0F172A;">Or click Chrome / Edge Menu (...)</div>
+                <div style="font-size:12px; color:#64748B; margin-top:2px;">In Google Chrome, click Menu (⋮) → <b>Save and share</b> → <b>Install CorpSec ERP as App</b>. In Edge, click (...) → <b>Apps</b> → <b>Install this site as an app</b>.</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+              <div style="width:28px; height:28px; border-radius:50%; background:#2563EB; color:#FFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0;">3</div>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:#0F172A;">Click "Install" to Confirm</div>
+                <div style="font-size:12px; color:#64748B; margin-top:2px;">The app will immediately open in its own clean desktop window and pin to your taskbar!</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #E2E8F0; padding-top:16px;">
+            <a href="/api/v1/desktop/download-launcher" download class="btn btn-primary" style="text-decoration:none; font-size:12px; font-weight:700;">
+              ⬇️ Or Download Windows Launcher (.bat)
+            </a>
+            <button class="btn btn-secondary" onclick="closePwaInstallHelpModal()">Got It</button>
+          </div>
+        </div>
+      </div>
 
     </div><!-- /.content-container -->
   </div><!-- /#main-content -->
@@ -2689,6 +3467,28 @@
           <div>
             <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Daily Billing Rate (KES)</label>
             <input type="number" id="new-site-rate" class="form-control" value="1200" required>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Site Latitude (GPS)</label>
+              <input type="number" step="any" id="new-site-latitude" class="form-control" placeholder="-1.268300">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Site Longitude (GPS)</label>
+              <input type="number" step="any" id="new-site-longitude" class="form-control" placeholder="36.804400">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Geofence Radius (meters)</label>
+              <input type="number" id="new-site-geofence-radius" class="form-control" value="200" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Assigned Super Guard</label>
+              <select id="new-site-super-guard-select" class="form-control">
+                <option value="">No Super Guard (Unassigned)</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -3186,11 +3986,11 @@
     </div>
   </div>
 
-  <!-- Modal: Guard File / Profile View (Modal fallback) -->
-  <div id="modal-guard-file" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target===this)closeGuardFileModal()">
-    <div class="modal-content" style="max-width:1100px; width:100%; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:0; overflow:hidden; margin:auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+  <!-- Modal: Guard File / Profile View (Permanently hidden fallback - guard files open full-page in #guard-file-view) -->
+  <div id="modal-guard-file" class="modal-overlay" style="display:none !important;" onclick="if(event.target===this)closeGuardFileModal()">
+    <div class="modal-content" style="max-width:1100px; width:100%; max-height:92vh; display:flex; flex-direction:column; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:0; overflow:hidden; margin:auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
       <!-- Modal Header -->
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:#FFFFFF; border-bottom:1px solid #E2E8F0; position:sticky; top:0; z-index:10;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:#FFFFFF; border-bottom:1px solid #E2E8F0; flex-shrink:0;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:20px;">📋</span>
           <div>
@@ -3200,10 +4000,10 @@
         </div>
         <button onclick="closeGuardFileModal()" style="background:#F1F5F9; border:1px solid #E2E8F0; color:#64748B; border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">✕</button>
       </div>
-      <!-- Modal Body (dynamically filled by JS) -->
-      <div id="guard-file-body" style="padding:24px; min-height:200px;"></div>
+      <!-- Modal Body (dynamically filled by JS - fully scrollable) -->
+      <div id="guard-file-body" style="padding:24px; min-height:200px; max-height:calc(92vh - 130px); overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; flex:1 1 auto;"></div>
       <!-- Modal Footer -->
-      <div style="padding:14px 24px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; background:#FFFFFF;">
+      <div style="padding:14px 24px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; background:#FFFFFF; flex-shrink:0;">
         <button class="btn btn-secondary" onclick="closeGuardFileModal()">Close</button>
       </div>
     </div>
@@ -3324,6 +4124,33 @@
               <div>
                 <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">SHIF Number</label>
                 <input type="text" id="amend-guard-shif" class="form-control" placeholder="e.g. SHIF-123456">
+              </div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #E2E8F0; padding-top:12px;">
+            <label style="font-size:13px; font-weight:800; display:block; margin-bottom:8px; color:#1E3A5F;">🎓 Academic Qualification & 🆘 Emergency Contact</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:10px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Highest Education Level</label>
+                <input type="text" id="amend-guard-education" class="form-control" placeholder="e.g. KCSE / Diploma / Degree">
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Blood Group</label>
+                <input type="text" id="amend-guard-blood-group" class="form-control" placeholder="e.g. O+, A+, B+, AB-">
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Emergency Contact Name</label>
+                <input type="text" id="amend-guard-em-name" class="form-control" placeholder="e.g. Grace Mwangi (Spouse)">
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Emergency Contact Phone</label>
+                <input type="text" id="amend-guard-em-phone" class="form-control" placeholder="e.g. 0722334455">
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Next of Kin</label>
+                <input type="text" id="amend-guard-next-of-kin" class="form-control" placeholder="e.g. Grace Mwangi">
               </div>
             </div>
           </div>
@@ -3546,6 +4373,78 @@
     </div>
   </div>
 
+  <!-- Modal: Document Vault Password Gate -->
+  <div id="modal-documents-vault-auth" class="modal-overlay" style="display:none; align-items:center; justify-content:center; padding:20px 16px; background:rgba(15, 23, 42, 0.75); backdrop-filter:blur(4px); z-index:9999;" onclick="if(event.target===this)closeDocumentsVaultModal()">
+    <div class="modal-content" style="max-width:440px; width:100%; margin:auto; border-radius:12px; overflow:hidden; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.35); border:1px solid #334155; padding:0;">
+      <div style="background:#0F172A; padding:20px 24px; color:#FFFFFF; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1E293B;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:24px;">🔐</span>
+          <div>
+            <div style="font-size:16px; font-weight:800; color:#FFFFFF;">Security Authentication</div>
+            <div style="font-size:12px; color:#94A3B8;">Company Documents & Legal Repository</div>
+          </div>
+        </div>
+        <button type="button" onclick="closeDocumentsVaultModal()" style="background:none; border:none; color:#94A3B8; font-size:20px; cursor:pointer; line-height:1;">✕</button>
+      </div>
+      <form id="vault-auth-form" onsubmit="handleDocumentsVaultAuthSubmit(event)" style="padding:24px; background:#FFFFFF;">
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 14px; margin-bottom:18px;">
+          <div style="font-size:12px; color:#475569; line-height:1.5;">
+            🛡️ This section contains confidential PSRA operating licenses, master client contracts, insurance policies, and corporate governance files. <strong>Enter your password to unlock the repository vault.</strong>
+          </div>
+        </div>
+        <div id="vault-auth-error" style="display:none; padding:10px 12px; margin-bottom:14px; background:#FEE2E2; border:1px solid #FCA5A5; color:#991B1B; border-radius:6px; font-size:12px; font-weight:600;"></div>
+        <div style="margin-bottom:20px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">Your Account Password *</label>
+          <div style="position:relative;">
+            <input type="password" id="vault-password-input" class="form-control" placeholder="Enter password to unlock vault..." required style="padding-right:40px; font-size:14px; height:42px;">
+            <button type="button" onclick="toggleVaultPasswordVisibility()" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:#64748B; font-size:16px;" title="Show/Hide password">👁️</button>
+          </div>
+          <small style="font-size:11px; color:#64748B; margin-top:5px; display:block;">Enter your logged-in user password (or Master Vault Password) to verify your credentials.</small>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeDocumentsVaultModal()">Cancel</button>
+          <button type="submit" id="btn-vault-unlock" class="btn btn-primary" style="background:#0F172A; border-color:#0F172A; font-weight:700; padding:9px 20px;">🔓 Unlock Vault</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Document Viewer & Inline Preview -->
+  <div id="modal-view-document" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto; z-index:9998;" onclick="if(event.target===this)closeViewDocumentModal()">
+    <div class="modal-content" style="max-width:1100px; width:100%; max-height:94vh; display:flex; flex-direction:column; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; overflow:hidden; margin:auto; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25); padding:0;">
+      <!-- Viewer Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; background:#0F172A; color:#FFFFFF; flex-shrink:0;">
+        <div style="display:flex; align-items:center; gap:12px; overflow:hidden;">
+          <span style="font-size:22px;">📄</span>
+          <div style="overflow:hidden;">
+            <div id="viewer-doc-title" style="font-size:15px; font-weight:800; color:#FFFFFF; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">Document Preview</div>
+            <div id="viewer-doc-sub" style="font-size:12px; color:#94A3B8;">Confidential Legal Repository Document</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <button type="button" id="viewer-fullscreen-btn" class="btn btn-secondary" style="font-size:12px; padding:6px 12px; background:#1E293B; color:#FFFFFF; border-color:#334155; cursor:pointer;" title="Open in new full tab">
+            ↗️ Full Screen
+          </button>
+          <button type="button" id="viewer-download-btn" class="btn btn-primary" style="font-size:12px; padding:6px 12px; cursor:pointer;" title="Download file to device">
+            ⬇️ Download
+          </button>
+          <button type="button" onclick="closeViewDocumentModal()" style="background:#334155; border:none; color:#FFFFFF; border-radius:6px; width:30px; height:30px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
+        </div>
+      </div>
+      <!-- Viewer Metadata Bar -->
+      <div id="viewer-meta-bar" style="padding:10px 20px; background:#F8FAFC; border-bottom:1px solid #E2E8F0; display:flex; gap:16px; font-size:12px; color:#475569; flex-wrap:wrap; flex-shrink:0; align-items:center;">
+        <!-- Dynamically filled with Category, Size, Upload Date, Uploaded By -->
+      </div>
+      <!-- Viewer Body (iframe for PDF, img for pictures, text pre for text) -->
+      <div id="viewer-content-body" style="flex:1 1 auto; height:calc(94vh - 140px); min-height:480px; background:#F1F5F9; position:relative; overflow:auto;">
+        <div style="text-align:center; padding:60px 20px; color:#64748B;">
+          <div style="font-size:32px; margin-bottom:8px;">⏳</div>
+          Loading document preview...
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Modal: Deactivate Security Guard -->
   <div id="modal-deactivate-guard" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target===this)closeDeactivateGuardModal()">
@@ -3693,6 +4592,28 @@
             <div>
               <label style="font-size:11px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Housing Allow.</label>
               <input type="number" id="edit-site-housing-allowance" class="form-control" placeholder="150">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Site Latitude (GPS)</label>
+              <input type="number" step="any" id="edit-site-latitude" class="form-control" placeholder="-1.268300">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Site Longitude (GPS)</label>
+              <input type="number" step="any" id="edit-site-longitude" class="form-control" placeholder="36.804400">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Geofence Radius (meters)</label>
+              <input type="number" id="edit-site-geofence-radius" class="form-control" value="200" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Assigned Super Guard</label>
+              <select id="edit-site-super-guard-select" class="form-control">
+                <option value="">No Super Guard (Unassigned)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -3930,59 +4851,76 @@
   </div>
 
   <!-- ========================================== -->
-  <!-- Modal: View & Preview Site Invoice         -->
+  <!-- Modal: View & Preview Site Invoice (Official CorpSec Investigations Letterhead) -->
   <!-- ========================================== -->
   <div id="modal-view-invoice" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target===this) closeViewInvoiceModal()">
-    <div class="modal-content" style="max-width: 720px; width:100%; margin:auto; background:#FFFFFF; padding:0; border-radius:10px; overflow:hidden;">
+    <div class="modal-content" style="max-width: 800px; width:100%; margin:auto; background:#FFFFFF; padding:0; border-radius:12px; overflow:hidden; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);">
       
-      <!-- Top Accent Bar -->
-      <div style="height:8px; background:#0D7682; width:100%;"></div>
-      
-      <div style="padding:24px 28px;">
-        <!-- Header Section -->
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
-          <div>
-            <h1 style="font-size:32px; font-weight:900; color:#0F172A; margin:0 0 4px 0; letter-spacing:-0.5px;">Invoice</h1>
-            <span id="view-inv-status-badge" class="badge" style="background:#ECFDF5; color:#059669; font-size:12px; font-weight:700; padding:4px 10px;">ISSUED</span>
+      <!-- Top Letterhead Curved Banner Ribbon -->
+      <img src="/static/images/corpsec_banner_top.png" alt="CorpSec Letterhead Header" style="width:100%; height:52px; object-fit:cover; display:block;">
+
+      <div id="printable-invoice-sheet" style="padding:20px 32px 28px 32px; position:relative; background:#FFFFFF;">
+        
+        <!-- Faint Centered Logo Watermark (Translucent 6% opacity) -->
+        <div style="position:absolute; top:52%; left:50%; transform:translate(-50%, -50%); opacity:0.06; pointer-events:none; z-index:0; user-select:none;">
+          <img src="/static/images/corpsec_watermark.png" alt="CorpSec Watermark" style="width:340px; height:340px; object-fit:contain;">
+        </div>
+
+        <!-- Header Row: Official Logo Left | Official Contact Block Right -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; position:relative; z-index:1;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <img src="/static/images/corpsec_official_logo.png" alt="CorpSec Investigations Logo" style="height:68px; object-fit:contain;">
           </div>
-          <div style="text-align:right; font-size:12px; color:#64748B; line-height:1.5;">
-            <div style="font-weight:800; font-size:14px; color:#0F172A;">CORPSEC SECURITY SERVICES LTD</div>
-            <div>Upper Hill Financial District, Cathedral Rd</div>
-            <div>P.O. Box 45123 - 00100, Nairobi, Kenya</div>
-            <div>Tel: +254 700 000 000 | billing@corpsec.co.ke</div>
-            <div style="font-weight:600; color:#334155;">KRA PIN: P051234567X</div>
+          <div style="text-align:right; font-size:11px; color:#334155; line-height:1.45;">
+            <div style="font-weight:800; color:#0F2C59; font-size:11.5px;">📞 0726 058 358 / 0739 058 358</div>
+            <div>✉️ info@corpsecinvestigations.com</div>
+            <div>✉️ corpsec.investigations@gmail.com</div>
+            <div>🌐 www.corpsecinvestigations.com</div>
+            <div>📍 Nairobi, Kenya</div>
           </div>
         </div>
 
-        <div style="border-bottom:1px solid #E2E8F0; margin-bottom:20px;"></div>
+        <!-- Center Company Division & Document Title -->
+        <div style="text-align:center; margin:10px 0 14px 0; position:relative; z-index:1;">
+          <h2 style="font-size:18px; font-weight:900; color:#0F2C59; margin:0 0 3px 0; letter-spacing:0.8px; text-transform:uppercase;">CORPSEC INVESTIGATIONS LIMITED</h2>
+          <div style="font-size:12px; color:#64748B; font-weight:600; letter-spacing:0.3px;">Guarding Services Division | Nairobi, Kenya</div>
+          <div style="font-size:15px; font-weight:900; color:#0F2C59; letter-spacing:1px; margin-top:8px; text-transform:uppercase;">TAX INVOICE</div>
+        </div>
 
-        <!-- Bill To & Metadata -->
-        <div style="display:flex; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
-          <div>
-            <div style="font-size:10px; font-weight:800; color:#94A3B8; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">BILL TO:</div>
-            <div id="view-inv-client" style="font-size:16px; font-weight:800; color:#0F172A;">Client Name</div>
-            <div id="view-inv-site" style="font-size:13px; color:#334155; margin-top:2px;">Site: Westlands Mall</div>
+        <!-- Double Divider Line: Primary Navy + Accent Orange -->
+        <div style="height:2px; background:#0F2C59; margin-bottom:2px; position:relative; z-index:1;"></div>
+        <div style="height:1px; background:#E67E22; margin-bottom:18px; position:relative; z-index:1;"></div>
+
+        <!-- Bill To & Metadata Section -->
+        <div style="display:flex; justify-content:space-between; margin-bottom:22px; flex-wrap:wrap; gap:16px; position:relative; z-index:1;">
+          <div style="max-width:360px;">
+            <div style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">BILLED TO (CLIENT):</div>
+            <div id="view-inv-client" style="font-size:15px; font-weight:800; color:#0F172A;">Client Name</div>
+            <div id="view-inv-site" style="font-size:12.5px; color:#334155; margin-top:2px;">Site: Westlands Mall</div>
             <div id="view-inv-address" style="font-size:12px; color:#64748B;">Nairobi, Kenya</div>
-            <div id="view-inv-period" style="font-size:12px; color:#0D7682; font-weight:600; margin-top:4px;">Billing Period: November 2026</div>
+            <div id="view-inv-period" style="font-size:12px; color:#0F2C59; font-weight:700; margin-top:4px;">Billing Period: November 2026</div>
           </div>
-          <div style="text-align:right; font-size:12px; min-width:180px;">
-            <div style="margin-bottom:6px;"><span style="color:#64748B; font-weight:700;">INVOICE #:</span> <strong id="view-inv-number" style="color:#0F172A; font-size:13px;">INV-2026-0001</strong></div>
-            <div style="margin-bottom:6px;"><span style="color:#64748B;">DATE:</span> <span id="view-inv-issue-date" style="color:#0F172A; font-weight:600;">02/11/2026</span></div>
-            <div style="margin-bottom:6px;"><span style="color:#64748B;">DUE DATE:</span> <span id="view-inv-due-date" style="color:#0F172A; font-weight:600;">16/11/2026</span></div>
+          <div style="text-align:right; font-size:12px; min-width:210px;">
+            <div style="margin-bottom:5px;"><span style="color:#64748B; font-weight:700;">REF #:</span> <strong id="view-inv-ref" style="color:#0F2C59; font-size:12.5px;">CSIL/INV/2026-0001</strong></div>
+            <div style="margin-bottom:5px;"><span style="color:#64748B; font-weight:700;">TAX INVOICE NO:</span> <strong id="view-inv-number" style="color:#0F172A; font-size:12.5px;">INV-2026-0001</strong></div>
+            <div style="margin-bottom:5px;"><span style="color:#64748B;">ISSUE DATE:</span> <span id="view-inv-issue-date" style="color:#0F172A; font-weight:600;">02/11/2026</span></div>
+            <div style="margin-bottom:5px;"><span style="color:#64748B;">DUE DATE:</span> <span id="view-inv-due-date" style="color:#0F172A; font-weight:600;">16/11/2026</span></div>
+            <div style="margin-bottom:5px;"><span style="color:#64748B;">KRA PIN:</span> <strong style="color:#0F172A;">P051234567Z</strong></div>
+            <div style="margin-top:4px;"><span id="view-inv-status-badge" class="badge" style="background:#ECFDF5; color:#059669; font-size:11px; font-weight:800; padding:3px 10px; border-radius:4px;">ISSUED</span></div>
           </div>
         </div>
 
-        <!-- Items Table -->
-        <div style="border:1px solid #E2E8F0; border-radius:8px; overflow:hidden; margin-bottom:20px;">
+        <!-- Line Items Table -->
+        <div style="border:1px solid #CBD5E1; border-radius:6px; overflow:hidden; margin-bottom:18px; position:relative; z-index:1;">
           <table style="width:100%; border-collapse:collapse; font-size:12px;">
-            <thead style="background:#F8FAFC; border-bottom:1.5px solid #CBD5E1;">
+            <thead style="background:#0F2C59; color:#FFFFFF;">
               <tr>
-                <th style="padding:10px 12px; text-align:left; font-size:11px; font-weight:700; color:#475569;">ITEMS</th>
-                <th style="padding:10px 12px; text-align:left; font-size:11px; font-weight:700; color:#475569;">DESCRIPTION</th>
-                <th style="padding:10px 12px; text-align:center; font-size:11px; font-weight:700; color:#475569;">QUANTITY</th>
-                <th style="padding:10px 12px; text-align:right; font-size:11px; font-weight:700; color:#475569;">PRICE (KES)</th>
-                <th style="padding:10px 12px; text-align:center; font-size:11px; font-weight:700; color:#475569;">TAX</th>
-                <th style="padding:10px 12px; text-align:right; font-size:11px; font-weight:700; color:#475569;">AMOUNT (KES)</th>
+                <th style="padding:9px 12px; text-align:left; font-size:11px; font-weight:800; letter-spacing:0.3px;">ITEM</th>
+                <th style="padding:9px 12px; text-align:left; font-size:11px; font-weight:800; letter-spacing:0.3px;">SERVICE DESCRIPTION</th>
+                <th style="padding:9px 12px; text-align:center; font-size:11px; font-weight:800; letter-spacing:0.3px;">QTY</th>
+                <th style="padding:9px 12px; text-align:right; font-size:11px; font-weight:800; letter-spacing:0.3px;">RATE (KES)</th>
+                <th style="padding:9px 12px; text-align:center; font-size:11px; font-weight:800; letter-spacing:0.3px;">VAT</th>
+                <th style="padding:9px 12px; text-align:right; font-size:11px; font-weight:800; letter-spacing:0.3px;">AMOUNT (KES)</th>
               </tr>
             </thead>
             <tbody id="view-inv-items-body">
@@ -3991,45 +4929,74 @@
           </table>
         </div>
 
-        <!-- Summary & Notes -->
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
-          <div style="flex:1; min-width:260px; font-size:11px; color:#475569; line-height:1.5;">
-            <div style="font-weight:700; color:#334155; margin-bottom:4px;">NOTES / PAYMENT INSTRUCTIONS:</div>
-            <div id="view-inv-notes" style="margin-bottom:8px;">Payment is due within 14 days of invoice date.</div>
-            <div id="view-inv-payment-terms" style="background:#F8FAFC; border-left:3px solid #0D7682; padding:8px 12px; border-radius:0 6px 6px 0;">
-              Banking: KCB Bank Kenya Ltd | Acc: 1234567890 | Paybill: 522522
+        <!-- Financial Summary & Payment Instructions -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; gap:20px; flex-wrap:wrap; position:relative; z-index:1;">
+          <div style="max-width:380px; font-size:11.5px; color:#334155; line-height:1.5;">
+            <div style="font-weight:800; font-size:11.5px; color:#0F2C59; margin-bottom:4px; text-transform:uppercase;">Payment Instructions & Banking:</div>
+            <div id="view-inv-notes" style="margin-bottom:6px; color:#475569;">Payment is due within 14 days of invoice date. Thank you for choosing CorpSec Investigations Limited.</div>
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:10px 12px; font-size:11px;">
+              <div><strong>Bank:</strong> KCB Bank Kenya Ltd | <strong>A/C Name:</strong> CorpSec Investigations Limited</div>
+              <div><strong>Account No:</strong> 1234567890 | <strong>Branch:</strong> Upper Hill, Nairobi</div>
+              <div style="margin-top:3px;"><strong>M-PESA Paybill:</strong> <strong style="color:#059669;">522522</strong> | <strong>Account No:</strong> <span id="view-inv-paybill-acc">INV-2026-0001</span></div>
             </div>
+            <div id="view-inv-payment-terms" style="display:none;"></div>
           </div>
-          <div style="width:260px; font-size:12px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#64748B;">
-              <span>SUBTOTAL:</span>
+          
+          <div style="min-width:240px; font-size:12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+              <span style="color:#64748B; font-weight:600;">SUBTOTAL (EXCL. VAT):</span>
               <strong id="view-inv-subtotal" style="color:#0F172A;">KES 0.00</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#64748B;">
-              <span id="view-inv-tax-label">TAX (16% VAT):</span>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+              <span id="view-inv-tax-label" style="color:#64748B; font-weight:600;">VAT (16%):</span>
               <strong id="view-inv-tax" style="color:#0F172A;">KES 0.00</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; padding-top:8px; border-top:1.5px solid #0D7682; font-size:18px; font-weight:900; color:#0D7682;">
-              <span>TOTAL:</span>
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-top:1.5px solid #0F2C59; border-bottom:1.5px solid #0F2C59; font-size:16px; font-weight:900; color:#0F2C59; margin-top:6px; background:#F1F5F9; padding-left:8px; padding-right:8px; border-radius:4px;">
+              <span>TOTAL DUE:</span>
               <span id="view-inv-total">KES 0.00</span>
             </div>
           </div>
         </div>
 
-        <!-- Modal Actions Footer -->
-        <div style="margin-top:28px; padding-top:16px; border-top:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
-          <button type="button" class="btn btn-secondary" onclick="closeViewInvoiceModal()">✕ Close</button>
-          <div style="display:flex; gap:10px;">
-            <button type="button" class="btn btn-secondary" id="btn-view-amend" onclick="openEditCurrentViewInvoice()">✏️ Amend Invoice</button>
-            <button type="button" class="btn btn-primary" id="btn-view-download-pdf" onclick="downloadCurrentViewInvoicePdf()">📄 Download PDF</button>
+        <!-- Authorized Signatory & Compliance Certification (Matching Letterhead Photo) -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; padding-top:12px; border-top:1px solid #E2E8F0; position:relative; z-index:1; flex-wrap:wrap; gap:16px;">
+          <div>
+            <div style="font-size:12px; color:#334155; margin-bottom:2px;">Yours sincerely,</div>
+            <img src="/static/images/corpsec_clean_signature.png" alt="Moses Alango Signature" style="height:36px; display:block; margin:2px 0;">
+            <div style="font-size:13px; font-weight:800; color:#0F172A;">Moses Alango</div>
+            <div style="font-size:11px; color:#64748B;">Director — CorpSec Investigations Limited</div>
+            <div style="font-size:11px; color:#64748B;" id="view-inv-sig-date">Date: 02/11/2026</div>
           </div>
+
+          <!-- Official Stamp / Regulatory Compliance Box -->
+          <div style="background:#F0FDF4; border:1px solid #86EFAC; border-radius:8px; padding:10px 14px; text-align:right;">
+            <div style="font-size:11.5px; font-weight:800; color:#166534; display:flex; align-items:center; justify-content:flex-end; gap:6px;">
+              <span>✔</span> <span>CORPSEC VERIFIED & APPROVED</span>
+            </div>
+            <div style="font-size:10.5px; color:#15803D; margin-top:2px;">Compliant with KRA eTIMS & Private Security Regulatory Authority (PSRA)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Letterhead Curved Banner Ribbon -->
+      <img src="/static/images/corpsec_banner_bottom.png" alt="CorpSec Letterhead Footer" style="width:100%; height:44px; object-fit:cover; display:block;">
+      <div style="text-align:center; font-size:10px; font-weight:700; color:#0F2C59; padding:8px 0; background:#F8FAFC; border-top:1px solid #E2E8F0; letter-spacing:0.3px;">
+        CORPSEC INVESTIGATIONS LIMITED • PSRA LICENSED • TRUST BUT VERIFY • NAIROBI, KENYA
+      </div>
+
+      <!-- Modal Actions Footer (Hidden when printing) -->
+      <div class="no-print" style="padding:14px 28px; background:#F8FAFC; border-top:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-secondary" onclick="closeViewInvoiceModal()">✕ Close</button>
+        <div style="display:flex; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="window.print()">🖨️ Print Invoice</button>
+          <button type="button" class="btn btn-secondary" id="btn-view-amend" onclick="openEditCurrentViewInvoice()">✏️ Amend Invoice</button>
+          <button type="button" class="btn btn-primary" id="btn-view-download-pdf" onclick="downloadCurrentViewInvoicePdf()">📄 Download Official PDF</button>
         </div>
       </div>
     </div>
   </div>
 
 
-  <!-- ======================================================== -->
   <!-- MODALS FOR MODULE 1: ASSETS & INVENTORY                 -->
   <!-- ======================================================== -->
 
@@ -5314,8 +6281,16 @@
         <input type="hidden" id="return-custody-alloc-id">
         <input type="hidden" id="return-custody-target-type">
         <input type="hidden" id="return-custody-target-id">
+        <input type="hidden" id="return-custody-item-kind" value="asset">
+        <input type="hidden" id="return-custody-item-id">
+        <input type="hidden" id="return-custody-qty" value="1">
 
-        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div id="return-custody-select-container" style="display:none; margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Select Item to Mark as Returned *</label>
+          <select id="return-custody-item-select" class="form-control" onchange="onReturnItemSelectChange()"></select>
+        </div>
+
+        <div id="return-custody-info-box" style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:16px;">
           <div style="font-size:11px; font-weight:700; color:#64748B;">ITEM BEING RETURNED</div>
           <div id="return-custody-item-name" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:2px;">-</div>
           <div id="return-custody-item-tag" style="font-size:12px; font-weight:600; color:#0D7682; margin-top:2px;">-</div>
@@ -5500,11 +6475,395 @@
         </div>
       </div>
 
+            <!-- Staff Salary Advances Section -->
+      <div style="border:1px solid #E2E8F0; border-radius:12px; padding:20px; background:#FAFAFA; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">💵 Mid-Month Salary Advances</h4>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">All salary advances disbursed to this staff member with deduction records.</p>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="openStaffIssueAdvanceModal()">+ Issue Salary Advance</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>REF #</th>
+                <th>AMOUNT</th>
+                <th>DISBURSEMENT DATE</th>
+                <th>PAYMENT METHOD</th>
+                <th>REFERENCE #</th>
+                <th>REASON</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="staff-advances-table-body">
+              <tr><td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No advances recorded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="modal-footer" style="padding-top:14px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeStaffFileModal()">Close Personnel File</button>
       </div>
     </div>
   </div>
 
+  <!-- Modal: Issue Mid-Month Salary Advance -->
+  <div id="modal-issue-advance" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target === this) closeIssueSalaryAdvanceModal()">
+    <div class="modal-content" style="max-width: 650px; width:100%; margin:auto; background:#FFFFFF; border-radius:16px; padding:28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:16px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:10px; background:#ECFDF5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:22px;">💵</div>
+          <div>
+            <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">Issue Mid-Month Salary Advance</h3>
+            <div style="font-size:12px; color:#64748B; margin-top:2px;">Disburse advance to guard or corporate staff. Deducted automatically at month-end payroll.</div>
+          </div>
+        </div>
+        <button onclick="closeIssueSalaryAdvanceModal()" style="background:#F1F5F9; border:none; border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px; color:#64748B;">✕</button>
+      </div>
+
+      <form id="form-issue-salary-advance" onsubmit="handleIssueSalaryAdvanceSubmit(event)">
+        <!-- Recipient Type -->
+        <div style="margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Recipient Type *</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #CBD5E1; border-radius:8px; cursor:pointer; background:#F8FAFC;" id="label-adv-guard">
+              <input type="radio" name="adv_recipient_type" value="GUARD" checked onchange="toggleAdvanceRecipientType()">
+              <span style="font-size:13px; font-weight:700; color:#0F172A;">🛡️ Security Guard</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #CBD5E1; border-radius:8px; cursor:pointer; background:#F8FAFC;" id="label-adv-staff">
+              <input type="radio" name="adv_recipient_type" value="STAFF" onchange="toggleAdvanceRecipientType()">
+              <span style="font-size:13px; font-weight:700; color:#0F172A;">👔 Corporate Staff</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Recipient Select: Guard vs Staff -->
+        <div id="adv-guard-select-group" style="margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select Guard *</label>
+          <select id="adv-guard-id" class="form-control" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+            <option value="">-- Choose Security Guard --</option>
+          </select>
+        </div>
+
+        <div id="adv-staff-select-group" style="display:none; margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select Staff Member *</label>
+          <select id="adv-staff-id" class="form-control" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+            <option value="">-- Choose Corporate Staff (HR/Supervisor/Admin) --</option>
+          </select>
+        </div>
+
+        <!-- Advance Amount & Disbursement Date -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Advance Amount (KES) *</label>
+            <input type="number" id="adv-amount" class="form-control" placeholder="e.g. 5000" min="1" step="0.01" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-weight:700; font-size:14px;">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Disbursement Date *</label>
+            <input type="date" id="adv-date" class="form-control" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+          </div>
+        </div>
+
+        <!-- Payroll Period & Payment Method -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Deduction Payroll Period</label>
+            <select id="adv-payroll-period-id" class="form-control" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+              <option value="">Auto-detect by Disbursement Date</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Disbursement Method *</label>
+            <select id="adv-payment-method" class="form-control" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+              <option value="M-PESA">📱 M-Pesa</option>
+              <option value="BANK">🏛️ Bank Transfer</option>
+              <option value="CASH">💵 Cash / Petty Cash</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Transaction Reference & Reason -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Trx / Reference Number</label>
+            <input type="text" id="adv-ref-number" class="form-control" placeholder="e.g. QK8912345 or Bank Ref" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Reason / Purpose *</label>
+            <input type="text" id="adv-reason" class="form-control" placeholder="e.g. Mid-month emergency, Medical, School fees" required style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div style="margin-bottom:24px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Internal Notes / Approver Remarks</label>
+          <textarea id="adv-notes" class="form-control" rows="2" placeholder="Optional approval notes or disbursement details..." style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; resize:vertical;"></textarea>
+        </div>
+
+        <!-- Submit Footer -->
+        <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #E2E8F0; padding-top:16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeIssueSalaryAdvanceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-salary-advance">💾 Issue &amp; Approve Advance</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </body>
 </html>
+
+  <!-- ======================================================== -->
+  <!-- MODALS FOR EXPENSES & PETTY CASH                        -->
+  <!-- ======================================================== -->
+
+  <!-- Modal: Record Firm Expense -->
+  <div id="modal-record-expense" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeRecordExpenseModal()">
+    <div class="modal-content" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">💸 Record Firm Expense / Shop Overhead</h3>
+        <button onclick="closeRecordExpenseModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-record-expense" onsubmit="handleRecordExpenseSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Date *</label>
+              <input type="date" id="exp-date" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Category *</label>
+              <select id="exp-category" class="form-control" required>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Type *</label>
+              <select id="exp-type" class="form-control" required onchange="toggleRecurringExpenseFields()">
+                <option value="OPERATIONAL">Operational Disbursement</option>
+                <option value="PETTY_CASH">Petty Cash Imprest</option>
+                <option value="RECURRING">Recurring Obligation</option>
+                <option value="CAPITAL_PURCHASE">Capital Purchase</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payee / Vendor Name *</label>
+              <input type="text" id="exp-payee" class="form-control" required placeholder="e.g. TotalEnergies, Kenya Power">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount (KES) *</label>
+              <input type="number" step="0.01" id="exp-amount" class="form-control" required placeholder="0.00">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payment Method *</label>
+              <select id="exp-payment-method" class="form-control" required>
+                <option value="PETTY_CASH">Petty Cash Imprest</option>
+                <option value="MPESA">M-Pesa Till / Paybill</option>
+                <option value="BANK_TRANSFER">Bank EFT / Transfer</option>
+                <option value="CASH">Cash at Hand</option>
+                <option value="CHEQUE">Bank Cheque</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Receipt Ref / Voucher No</label>
+            <input type="text" id="exp-receipt-no" class="form-control" placeholder="e.g. VCH-0045, KPLC-98212">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Description / Purpose *</label>
+            <textarea id="exp-description" class="form-control" rows="2" required placeholder="State purpose of expenditure..."></textarea>
+          </div>
+          <!-- Recurring Fields -->
+          <div id="recurring-expense-fields" style="display:none; padding:12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Recurring Cycle</label>
+                <select id="exp-frequency" class="form-control">
+                  <option value="MONTHLY">Monthly</option>
+                  <option value="QUARTERLY">Quarterly</option>
+                  <option value="ANNUAL">Annual</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Next Due Date</label>
+                <input type="date" id="exp-due-date" class="form-control">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRecordExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">💾 Save Expense Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Top-Up Petty Cash Float -->
+  <div id="modal-topup-petty-cash" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeTopUpPettyCashModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">💰 Top-Up Petty Cash Float</h3>
+        <button onclick="closeTopUpPettyCashModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-topup-petty-cash" onsubmit="handleTopUpPettyCashSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Replenishment Amount (KES) *</label>
+            <input type="number" step="0.01" id="topup-amount" class="form-control" required placeholder="e.g. 15000">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Disbursing Source *</label>
+            <select id="topup-source" class="form-control" required>
+              <option value="Bank Withdrawal (Standard Chartered)">Bank Withdrawal (Standard Chartered)</option>
+              <option value="Director Injection (Equity)">Director Injection (Equity)</option>
+              <option value="Cash Float Transfer">Cash Float Transfer</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Bank Cheque / Reference No</label>
+            <input type="text" id="topup-ref" class="form-control" placeholder="e.g. CHQ-88412, WD-0941">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Custodian Notes</label>
+            <textarea id="topup-notes" class="form-control" rows="2" placeholder="Float replenishment notes..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeTopUpPettyCashModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#059669; border:none;">💰 Confirm Float Top-Up</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Recommendation -->
+  <div id="modal-add-recommendation" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeAddRecommendationModal()">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⭐ Add Client Recommendation</h3>
+        <button onclick="closeAddRecommendationModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-recommendation" onsubmit="handleCreateRecommendationSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Client Organization Name *</label>
+            <input type="text" id="rec-client-name" class="form-control" required placeholder="e.g. Westlands Mall, Nairobi Hospital">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Recommender Name *</label>
+              <input type="text" id="rec-recommender-name" class="form-control" required placeholder="e.g. Dr. Faith Kamau">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Title / Designation *</label>
+              <input type="text" id="rec-title" class="form-control" required placeholder="e.g. Head of Security & Safety">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Star Rating (1 - 5) *</label>
+              <select id="rec-rating" class="form-control" required>
+                <option value="5">⭐⭐⭐⭐⭐ (5 Stars)</option>
+                <option value="4">⭐⭐⭐⭐ (4 Stars)</option>
+                <option value="3">⭐⭐⭐ (3 Stars)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Recommendation Date *</label>
+              <input type="date" id="rec-date" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Official Contact / Email</label>
+            <input type="text" id="rec-contact" class="form-control" placeholder="e.g. security@client.co.ke, 0722000000">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Testimonial Statement / Commendation *</label>
+            <textarea id="rec-statement" class="form-control" rows="3" required placeholder="Quotes, SLA feedback, performance review..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddRecommendationModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">⭐ Publish Recommendation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Security Service -->
+  <div id="modal-add-service" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeAddServiceModal()">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">🛡️ Add Security Service Offering</h3>
+        <button onclick="closeAddServiceModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-service" onsubmit="handleCreateServiceSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1fr 2fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Service Code *</label>
+              <input type="text" id="srv-code" class="form-control" required placeholder="e.g. SRV-MG">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Service Title *</label>
+              <input type="text" id="srv-name" class="form-control" required placeholder="e.g. Static Guarding & Access Control">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Category *</label>
+              <select id="srv-category" class="form-control" required>
+                <option value="Manned Guarding">Manned Guarding</option>
+                <option value="Armed Response">Armed Response</option>
+                <option value="Executive Protection">Executive Protection</option>
+                <option value="Canine Unit">Canine Unit</option>
+                <option value="Electronic Security">Electronic Security</option>
+                <option value="Risk Consulting">Risk Consulting</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Billing Model *</label>
+              <select id="srv-billing" class="form-control" required>
+                <option value="MONTHLY_CONTRACT">Monthly Contract</option>
+                <option value="DAILY_RATE">Daily Rate</option>
+                <option value="PER_INCIDENT">Per Incident / Dispatch</option>
+                <option value="PROJECT_BASED">Project Based</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Base Price / Rate (KES)</label>
+            <input type="number" step="0.01" id="srv-price" class="form-control" placeholder="e.g. 45000.00">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">SLA Specification</label>
+            <input type="text" id="srv-sla" class="form-control" placeholder="e.g. 100% Post Coverage, <7 min response time">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Description *</label>
+            <textarea id="srv-desc" class="form-control" rows="2" required placeholder="Scope of service, personnel qualifications..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddServiceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">🛡️ Save Service Offering</button>
+        </div>
+      </form>
+    </div>
+  </div>
