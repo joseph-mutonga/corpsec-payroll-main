@@ -463,9 +463,9 @@ body {
 }
 
 .incidents-table-wrapper {
-  max-height: calc(100vh - 280px);
-  overflow-y: auto !important;
   overflow-x: auto !important;
+  overflow-y: visible !important;
+  max-height: none !important;
   position: relative;
   border: 1px solid #E2E8F0;
   border-radius: 16px;

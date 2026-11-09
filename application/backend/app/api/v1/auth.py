@@ -16,17 +16,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication & Access Control"])
 def check_user_credentials(user: User, password: str) -> bool:
     if not user or not user.password_hash:
         return False
-    if verify_password(password, user.password_hash):
-        return True
-    # Safe multi-credential acceptance for Admin, Guards, HR, and Supervisors
-    if user.email and user.email.lower() == "admin@corpsec.co.ke":
-        if password in ["Admin@CorpSec2026!", "TestAdminSecretPass123!", "password123", "admin123"]:
-            return True
-    if user.role in ["SUPERVISOR", "HR"] and password in ["password123", "Admin@CorpSec2026!"]:
-        return True
-    if user.role == "GUARD" and password in ["Guard@123456", "123456", "password123"]:
-        return True
-    return False
+    return verify_password(password, user.password_hash)
 
 
 @router.post(

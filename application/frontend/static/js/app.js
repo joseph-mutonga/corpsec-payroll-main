@@ -2816,14 +2816,31 @@ async function triggerPayrollCalculation() {
 
 let currentPaymentsPeriodId = null;
 
-async function loadPayments() {
+async function loadPayments(selectedPeriodId = null) {
   try {
     const pRes = await apiFetch('/payroll/periods');
     const periods = await pRes.json();
     if (!periods.length) return;
 
-    const activePeriod = periods.find(p => p.status === 'CONFIRMED' || p.status === 'CALCULATED') || periods[0];
+    // Populate period selector dropdown if present
+    const pSel = document.getElementById('payments-period-selector');
+    if (pSel) {
+      const currentVal = selectedPeriodId || pSel.value || currentPaymentsPeriodId;
+      pSel.innerHTML = periods.map(p => `<option value="${p.id}" ${String(p.id) === String(currentVal) ? 'selected' : ''}>${p.period_name} (${p.status})</option>`).join('');
+    }
+
+    let activePeriod = null;
+    if (selectedPeriodId) {
+      activePeriod = periods.find(p => String(p.id) === String(selectedPeriodId));
+    }
+    if (!activePeriod && pSel && pSel.value) {
+      activePeriod = periods.find(p => String(p.id) === String(pSel.value));
+    }
+    if (!activePeriod) {
+      activePeriod = periods.find(p => p.status === 'CONFIRMED' || p.status === 'CALCULATED') || periods[0];
+    }
     currentPaymentsPeriodId = activePeriod.id;
+    if (pSel) pSel.value = activePeriod.id;
 
     const reconRes = await apiFetch(`/payments/reconciliation/${activePeriod.id}`);
     if (!reconRes.ok) return;
@@ -3002,45 +3019,15 @@ async function loadPayments() {
 }
 
 async function exportBankScheduleExcel() {
-  const periodId = currentPaymentsPeriodId || await getLatestPeriodId();
-  try {
-    const res = await apiFetch(`/payments/bank/${periodId}/export-excel`);
-    if (!res.ok) {
-      alert('Failed to export Bank Excel schedule.');
-      return;
-    }
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Bank_Payment_Schedule_Period_${periodId}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  } catch (err) {
-    alert('Bank Excel export error: ' + err.message);
-  }
+  const pSel = document.getElementById('payments-period-selector');
+  const periodId = (pSel && pSel.value) || currentPaymentsPeriodId || await getLatestPeriodId();
+  await downloadAuthenticatedFile(`/payments/bank/${periodId}/export-excel`, `Bank_Payment_Schedule_Period_${periodId}.xlsx`);
 }
 
 async function exportMpesaScheduleExcel() {
-  const periodId = currentPaymentsPeriodId || await getLatestPeriodId();
-  try {
-    const res = await apiFetch(`/payments/mpesa/${periodId}/export-excel`);
-    if (!res.ok) {
-      alert('Failed to export M-Pesa Excel schedule.');
-      return;
-    }
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Mpesa_Payment_Schedule_Period_${periodId}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  } catch (err) {
-    alert('M-Pesa Excel export error: ' + err.message);
-  }
+  const pSel = document.getElementById('payments-period-selector');
+  const periodId = (pSel && pSel.value) || currentPaymentsPeriodId || await getLatestPeriodId();
+  await downloadAuthenticatedFile(`/payments/mpesa/${periodId}/export-excel`, `Mpesa_Payment_Schedule_Period_${periodId}.xlsx`);
 }
 
 // --- Payment Schedules Sub-Navigation & Salary Hold Management ---
@@ -3256,15 +3243,6 @@ async function downloadAuthenticatedFile(url, defaultFilename) {
   }
 }
 
-async function exportBankScheduleExcel() {
-  const periodId = await getLatestPeriodId();
-  await downloadAuthenticatedFile(`/payments/bank/${periodId}/export-excel`, `Bank_Payment_Schedule_Period_${periodId}.xlsx`);
-}
-
-async function exportMpesaScheduleExcel() {
-  const periodId = await getLatestPeriodId();
-  await downloadAuthenticatedFile(`/payments/mpesa/${periodId}/export-excel`, `Mpesa_Payment_Schedule_Period_${periodId}.xlsx`);
-}
 
 async function downloadNssfCsv() {
   const periodSel = document.getElementById('reports-download-period-select');

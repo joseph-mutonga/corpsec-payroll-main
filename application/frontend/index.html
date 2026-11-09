@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261109_v6">
-  <script src="/static/js/app.js?v=20261109_v6"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261109_v8">
+  <script src="/static/js/app.js?v=20261109_v8"></script>
 </head>
 <body>
 
@@ -1166,6 +1166,12 @@
             </div>
           </div>
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="payments-period-selector" style="font-size:12px; font-weight:700; color:#475569; margin:0;">Period:</label>
+              <select id="payments-period-selector" class="form-control" style="padding:6px 12px; font-size:13px; font-weight:600; min-width:170px;" onchange="loadPayments(this.value)">
+                <option value="">Loading periods...</option>
+              </select>
+            </div>
             <button class="btn btn-secondary" onclick="loadPayments()" title="Reload payment status">🔄 Refresh</button>
             <button class="btn btn-secondary" onclick="exportBankScheduleExcel()" style="display:inline-flex; align-items:center; gap:6px;">📊 Export Bank Excel</button>
             <button class="btn btn-primary" onclick="exportMpesaScheduleExcel()" style="display:inline-flex; align-items:center; gap:6px; background:#059669; border-color:#059669;">📱 Export M-Pesa Excel</button>
@@ -1609,7 +1615,7 @@
           </div>
         </div>
 
-        <div class="table-container incidents-table-wrapper" style="max-height: calc(100vh - 280px); overflow-y: auto; overflow-x: auto;">
+        <div class="table-container incidents-table-wrapper" style="overflow-x: auto;">
           <table class="data-table">
             <thead>
               <tr style="position: sticky; top: 0; z-index: 10; background: #F8FAFC;">
@@ -6856,7 +6862,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
             <div>
               <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damage Deduction (KES) *</label>
-              <input type="number" id="damage-ded-amount" class="form-control" placeholder="e.g. 1500" min="1" step="any" required>
+              <input type="number" id="damage-ded-amount" class="form-control" placeholder="e.g. 1500" min="0.01" step="any" required>
             </div>
             <div>
               <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Incident Date *</label>
@@ -7274,6 +7280,11 @@
       const nameEl = document.getElementById('damage-ded-guard-name-display');
       if (nameEl) nameEl.innerText = guardName || ('Guard #' + guardId);
       document.getElementById('damage-ded-date').value = initialDate || new Date().toISOString().substring(0, 10);
+      const amtEl = document.getElementById('damage-ded-amount');
+      if (amtEl) {
+        amtEl.step = 'any';
+        amtEl.min = '0.01';
+      }
       if (initialItemName) {
         const itemEl = document.getElementById('damage-ded-item-name');
         if (itemEl) itemEl.value = initialItemName;
@@ -7281,6 +7292,21 @@
       if (initialDesc) {
         const descEl = document.getElementById('damage-ded-description');
         if (descEl) descEl.value = initialDesc;
+      }
+
+      // Populate periods in damage deduction target select
+      const periodSel = document.getElementById('damage-ded-period-select');
+      if (periodSel) {
+        try {
+          const res = await apiFetch('/payroll/periods');
+          if (res.ok) {
+            const periods = await res.json();
+            periodSel.innerHTML = '<option value="">Auto-deduct in next active payroll run</option>' +
+              periods.map(p => `<option value="${p.id}">${p.period_name} (${p.status})</option>`).join('');
+          }
+        } catch (e) {
+          console.warn('Could not load periods for damage deduction modal:', e);
+        }
       }
       modal.style.display = 'flex';
     };

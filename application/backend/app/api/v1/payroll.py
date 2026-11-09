@@ -311,7 +311,20 @@ def execute_payroll_calculation(
         excess_off_requests = max(0, off_day_count - allowed_off_days)
         effective_deductible_days = max(excess_off_requests, excess_unworked_days)
 
-        raw_off_day_deduction = round(effective_deductible_days * (effective_basic_salary / 26.0), 2)
+        # Also check if any relievers were assigned to cover shifts for this regular guard
+        reliever_covered_asgns = db.query(RelieverAssignment).filter(
+            RelieverAssignment.covering_for_guard_id == guard.id,
+            RelieverAssignment.shift_date >= period.start_date,
+            RelieverAssignment.shift_date <= period.end_date
+        ).all()
+        reliever_coverage_deduction = 0.0
+        for r_cov in reliever_covered_asgns:
+            cov_site = db.query(Site).filter(Site.id == r_cov.site_id).first()
+            site_basic = (cov_site.basic_salary if cov_site and cov_site.basic_salary else effective_basic_salary)
+            reliever_coverage_deduction += (site_basic / 26.0)
+        reliever_coverage_deduction = round(reliever_coverage_deduction, 2)
+
+        raw_off_day_deduction = max(round(effective_deductible_days * (effective_basic_salary / 26.0), 2), reliever_coverage_deduction)
         off_day_deduction_amount = min(raw_off_day_deduction, calc_result["basic_pay"])
 
         # Query Mid-Month Salary Advances for this guard and period
