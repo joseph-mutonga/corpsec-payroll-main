@@ -9,6 +9,8 @@ from application.backend.app.models.site import Site
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.invoice import SiteInvoice, InvoiceItem
 from application.backend.app.models.audit import AuditLog
+from application.backend.app.models.setting import Setting
+from application.backend.app.models.client_contract import Client
 from application.backend.app.schemas.invoice import (
     SiteInvoiceCreate,
     SiteInvoiceUpdate,
@@ -18,6 +20,45 @@ from application.backend.app.schemas.invoice import (
 from application.backend.app.services.invoice_pdf_service import generate_invoice_pdf
 
 router = APIRouter(prefix="/invoices", tags=["Site Invoices & Billing"])
+
+
+def enrich_invoice_from_database(inv: SiteInvoice, db: Session) -> SiteInvoice:
+    """
+    Enrich an invoice instance with official company settings and client details
+    retrieved dynamically from the database.
+    """
+    settings_map = {s.key: s.value for s in db.query(Setting).all()}
+    client = db.query(Client).filter(Client.name.ilike(inv.client_name)).first()
+
+    # Client details from DB
+    inv.client_kra_pin = client.kra_pin if client and client.kra_pin else "P051288491A"
+    if client and not inv.billing_address and client.physical_address:
+        inv.billing_address = client.physical_address
+    if client and not inv.client_email and client.email:
+        inv.client_email = client.email
+    if client and not inv.client_phone and client.phone:
+        inv.client_phone = client.phone
+
+    # Company settings from DB
+    inv.company_name = settings_map.get("company_name", "CORPSEC INVESTIGATIONS LIMITED")
+    inv.company_division = settings_map.get("company_division", "Guarding Services Division | Nairobi, Kenya")
+    inv.company_kra_pin = settings_map.get("company_kra_pin", "P051234567Z")
+    inv.company_phone = settings_map.get("company_phone", "0726 058 358 / 0739 058 358")
+    inv.company_email = settings_map.get("company_email", "info@corpsecinvestigations.com")
+    inv.company_alt_email = settings_map.get("company_alt_email", "corpsec.investigations@gmail.com")
+    inv.company_website = settings_map.get("company_website", "www.corpsecinvestigations.com")
+    inv.company_location = settings_map.get("company_location", "Nairobi, Kenya")
+    inv.company_director = settings_map.get("company_director", "Moses Alango")
+    inv.company_director_title = settings_map.get("company_director_title", "Director — CorpSec Investigations Limited")
+    inv.bank_name = settings_map.get("bank_name", "KCB Bank Kenya Ltd")
+    inv.bank_account_name = settings_map.get("bank_account_name", "CorpSec Investigations Limited")
+    inv.bank_account_number = settings_map.get("bank_account_number", "1234567890")
+    inv.bank_branch = settings_map.get("bank_branch", "Upper Hill, Nairobi")
+    inv.bank_swift = settings_map.get("bank_swift", "KCBLKENX")
+    inv.mpesa_paybill = settings_map.get("mpesa_paybill", "522522")
+    inv.psra_license_number = settings_map.get("psra_license_number", "PSRA/2026/0892")
+
+    return inv
 
 
 def generate_next_invoice_number(db: Session) -> str:
@@ -46,7 +87,7 @@ def list_site_invoices(
     current_user: User = Depends(require_admin_or_hr)
 ):
     """
-    List all generated site invoices with filtering.
+    List all generated site invoices with filtering and dynamic database enrichment.
     Accessible to System Admin and HR.
     """
     query = db.query(SiteInvoice)
@@ -64,7 +105,10 @@ def list_site_invoices(
             (SiteInvoice.site_name.ilike(term)) |
             (SiteInvoice.billing_period.ilike(term))
         )
-    return query.order_by(SiteInvoice.id.desc()).all()
+    invoices = query.order_by(SiteInvoice.id.desc()).all()
+    for inv in invoices:
+        enrich_invoice_from_database(inv, db)
+    return invoices
 
 
 @router.post("/generate", response_model=SiteInvoiceResponse, status_code=status.HTTP_201_CREATED)
@@ -75,22 +119,36 @@ def generate_site_invoice(
 ):
     """
     Auto-generate a commercial invoice for a client site.
-    Calculates charges based on active guards assigned to the site.
+    Calculates charges based on active guards and client details retrieved from the database.
     """
     site = db.query(Site).filter(Site.id == payload.site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="Client site not found")
 
+    client = db.query(Client).filter(Client.name.ilike(site.client_name)).first()
+    settings_map = {s.key: s.value for s in db.query(Setting).all()}
+
     invoice_number = generate_next_invoice_number(db)
     issue_date = payload.issue_date or datetime.date.today()
     due_date = payload.due_date or (issue_date + datetime.timedelta(days=14))
 
-    # Active guards currently deployed at site
+    # Active guards currently deployed at site retrieved from database
     site_guards = db.query(Guard).filter(
         Guard.primary_site_id == site.id,
         Guard.status == "ACTIVE"
     ).all()
     guard_count = len(site_guards)
+
+    # Database-sourced billing address, client contact, and payment terms
+    billing_address = (client.physical_address if client and client.physical_address else site.location) or "Nairobi, Kenya"
+    client_email = client.email if client else None
+    client_phone = client.phone if client else None
+
+    bank_name = settings_map.get("bank_name", "KCB Bank Kenya Ltd")
+    bank_acc = settings_map.get("bank_account_number", "1234567890")
+    paybill = settings_map.get("mpesa_paybill", "522522")
+
+    default_payment_terms = f"Bank: {bank_name} | Acc: {bank_acc} | M-PESA Paybill: {paybill}"
 
     invoice = SiteInvoice(
         invoice_number=invoice_number,
@@ -100,15 +158,14 @@ def generate_site_invoice(
         billing_period=payload.billing_period,
         issue_date=issue_date,
         due_date=due_date,
-        billing_address=site.location,
+        billing_address=billing_address,
+        client_email=client_email,
+        client_phone=client_phone,
         status="ISSUED",
         tax_rate=payload.tax_rate,
         currency="KES",
-        notes=payload.custom_notes or f"Payment due within 14 days of invoice date. Thank you for partnering with CorpSec.",
-        payment_terms=payload.custom_payment_terms or (
-            "Banking Details: KCB Bank Kenya Ltd | Acc Name: CorpSec Security Services Ltd | "
-            "Acc: 1234567890 | Paybill: 522522"
-        ),
+        notes=payload.custom_notes or "Payment is due within 14 days of invoice date. Thank you for choosing CorpSec Investigations Limited.",
+        payment_terms=payload.custom_payment_terms or default_payment_terms,
         created_by_user_id=current_user.id
     )
 
@@ -130,9 +187,8 @@ def generate_site_invoice(
                 )
             )
     else:
-        # Standard automated site guarding item
+        # Standard automated site guarding item derived from database
         qty = float(guard_count if guard_count > 0 else 1)
-        # Monthly billing rate: based on basic_salary or 30 x daily_rate
         unit_price = float(site.basic_salary if site.basic_salary > 0 else 18000.0)
         line_amt = qty * unit_price
         
@@ -151,7 +207,7 @@ def generate_site_invoice(
             )
         )
 
-        # Optional supervision charge if site has assigned supervisor
+        # Optional supervision charge if site has assigned supervisor in DB
         if payload.include_supervision and site.supervisor_id:
             sup_price = 5000.0
             items_to_create.append(
@@ -189,7 +245,7 @@ def generate_site_invoice(
     except Exception:
         pass
 
-    return invoice
+    return enrich_invoice_from_database(invoice, db)
 
 
 @router.post("", response_model=SiteInvoiceResponse, status_code=status.HTTP_201_CREATED)
@@ -255,7 +311,7 @@ def create_site_invoice(
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
-    return invoice
+    return enrich_invoice_from_database(invoice, db)
 
 
 @router.get("/{invoice_id}", response_model=SiteInvoiceResponse)
@@ -264,11 +320,11 @@ def get_site_invoice(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_hr)
 ):
-    """Retrieve full details of a specific site invoice."""
+    """Retrieve full details of a specific site invoice, enriched with database settings and client profile."""
     inv = db.query(SiteInvoice).filter(SiteInvoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    return inv
+    return enrich_invoice_from_database(inv, db)
 
 
 @router.put("/{invoice_id}", response_model=SiteInvoiceResponse)
@@ -370,7 +426,7 @@ def amend_site_invoice(
     except Exception:
         pass
 
-    return inv
+    return enrich_invoice_from_database(inv, db)
 
 
 @router.delete("/{invoice_id}")
@@ -427,8 +483,8 @@ def download_invoice_pdf(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Download professional PDF of the site invoice.
-    Accessible to Admin and HR (or with valid query token).
+    Download official PDF of the site invoice, with all data retrieved from the database.
+    Accessible to Admin and HR.
     """
     if current_user.role not in ["ADMIN", "HR"]:
         raise HTTPException(status_code=403, detail="Only Admin and HR can download site invoices")
@@ -437,7 +493,7 @@ def download_invoice_pdf(
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    pdf_bytes = generate_invoice_pdf(inv)
+    pdf_bytes = generate_invoice_pdf(inv, db=db)
     filename = f"Invoice-{inv.invoice_number}.pdf"
 
     return Response(

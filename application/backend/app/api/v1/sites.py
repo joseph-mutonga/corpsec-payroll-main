@@ -189,10 +189,23 @@ def update_site_rates(
         if not sup_user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{new_supervisor_id} not found")
 
-    if "super_guard_id" in update_data and update_data["super_guard_id"] is not None:
-        sg_guard = db.query(Guard).filter(Guard.id == update_data["super_guard_id"]).first()
-        if sg_guard:
-            sg_guard.is_super_guard = True
+    old_sg_id = site.super_guard_id
+    if "super_guard_id" in update_data:
+        new_sg_id = update_data["super_guard_id"]
+        if new_sg_id != old_sg_id:
+            # 1. If previous super guard is removed or changed, demote them if they have no other super guard site
+            if old_sg_id:
+                other_sg_site = db.query(Site).filter(Site.id != site.id, Site.super_guard_id == old_sg_id).first()
+                if not other_sg_site:
+                    old_guard = db.query(Guard).filter(Guard.id == old_sg_id).first()
+                    if old_guard:
+                        old_guard.is_super_guard = False
+
+            # 2. If new super guard is assigned, promote them
+            if new_sg_id is not None:
+                new_guard = db.query(Guard).filter(Guard.id == new_sg_id).first()
+                if new_guard:
+                    new_guard.is_super_guard = True
 
     for key, value in update_data.items():
         setattr(site, key, value)

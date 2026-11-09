@@ -40,6 +40,18 @@ def _format_expense(exp: Expense) -> dict:
     }
 
 
+def _recalculate_petty_cash_balances(db: Session):
+    txs = db.query(PettyCashTransaction).order_by(PettyCashTransaction.id.asc()).all()
+    running_balance = 0.0
+    for t in txs:
+        if t.transaction_type == "TOP_UP":
+            running_balance += t.amount
+        elif t.transaction_type == "DISBURSEMENT":
+            running_balance -= t.amount
+        t.balance_after = round(running_balance, 2)
+    db.flush()
+
+
 def _get_current_float_balance(db: Session) -> float:
     last_tx = db.query(PettyCashTransaction).order_by(PettyCashTransaction.id.desc()).first()
     return float(last_tx.balance_after) if last_tx else 0.0
@@ -91,6 +103,18 @@ def record_expense(
     """Record a firm expense or petty cash payout."""
     exp_date = payload.expense_date or datetime.date.today()
     
+    # Duplicate submission prevention (within 30 seconds)
+    recent_window = datetime.datetime.now() - datetime.timedelta(seconds=30)
+    existing_dup = db.query(Expense).filter(
+        Expense.payee == payload.payee.strip(),
+        Expense.amount == float(payload.amount),
+        Expense.category == payload.category.upper(),
+        Expense.expense_date == exp_date,
+        Expense.created_at >= recent_window
+    ).first()
+    if existing_dup:
+        return _format_expense(existing_dup)
+
     # If petty cash payment, verify sufficient float
     current_float = _get_current_float_balance(db)
     if payload.payment_method == "PETTY_CASH_FLOAT" or payload.expense_type == "PETTY_CASH":
@@ -328,10 +352,12 @@ def delete_expense(
     if not exp:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
 
-    # If it had an associated petty cash disbursement, remove or revert
+    # If it had an associated petty cash disbursement, remove and recalculate running float
     pc_tx = db.query(PettyCashTransaction).filter(PettyCashTransaction.expense_id == exp.id).first()
     if pc_tx:
         db.delete(pc_tx)
+        db.flush()
+        _recalculate_petty_cash_balances(db)
 
     audit = AuditLog(
         user_id=current_user.id,

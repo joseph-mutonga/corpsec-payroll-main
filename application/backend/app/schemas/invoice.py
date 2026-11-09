@@ -86,6 +86,26 @@ class SiteInvoiceResponse(SiteInvoiceBase):
     updated_at: datetime
     items: List[InvoiceItemResponse] = Field(default_factory=list)
 
+    # Database-retrieved company & client details:
+    client_kra_pin: Optional[str] = None
+    company_name: Optional[str] = None
+    company_division: Optional[str] = None
+    company_kra_pin: Optional[str] = None
+    company_phone: Optional[str] = None
+    company_email: Optional[str] = None
+    company_alt_email: Optional[str] = None
+    company_website: Optional[str] = None
+    company_location: Optional[str] = None
+    company_director: Optional[str] = None
+    company_director_title: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_branch: Optional[str] = None
+    bank_swift: Optional[str] = None
+    mpesa_paybill: Optional[str] = None
+    psra_license_number: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -99,4 +119,3 @@ class GenerateInvoiceRequest(BaseModel):
     custom_notes: Optional[str] = None
     custom_payment_terms: Optional[str] = None
     custom_items: Optional[List[InvoiceItemCreate]] = None
-

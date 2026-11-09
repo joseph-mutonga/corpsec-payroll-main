@@ -352,7 +352,7 @@ def _resolve_super_guard(db: Session, current_user: User):
     if not site:
         site = db.query(Site).filter(Site.super_guard_id == guard.id).first()
 
-    has_mandate = bool(getattr(guard, "is_super_guard", False) or (site and site.super_guard_id == guard.id))
+    has_mandate = bool(getattr(guard, "is_super_guard", False) and site and site.super_guard_id == guard.id)
     if not has_mandate:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

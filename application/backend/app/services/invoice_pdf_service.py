@@ -1,7 +1,7 @@
 import io
 import os
 import datetime
-from typing import Any
+from typing import Any, Optional
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import (
@@ -9,6 +9,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
+from sqlalchemy.orm import Session, object_session
 
 
 # Asset paths
@@ -28,7 +29,7 @@ class CorpSecLetterheadCanvas(canvas.Canvas):
     - Top orange & blue wave ribbon
     - Faint centered spiral eye watermark
     - Bottom blue & orange wave ribbon
-    - Professional footer legal text and page numbers
+    - Dynamic database company legal text and page numbers
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -54,7 +55,6 @@ class CorpSecLetterheadCanvas(canvas.Canvas):
         if os.path.exists(TOP_BANNER_PATH):
             self.drawImage(TOP_BANNER_PATH, 0, page_h - 48, width=page_w, height=48, mask='auto')
         else:
-            # Fallback vector bands
             self.setFillColor(colors.HexColor('#E67E22'))
             self.rect(0, page_h - 14, page_w, 14, fill=1, stroke=0)
             self.setFillColor(colors.HexColor('#2378BA'))
@@ -76,7 +76,6 @@ class CorpSecLetterheadCanvas(canvas.Canvas):
         if os.path.exists(BOT_BANNER_PATH):
             self.drawImage(BOT_BANNER_PATH, 0, 0, width=page_w, height=42, mask='auto')
         else:
-            # Fallback vector bands
             self.setFillColor(colors.HexColor('#2378BA'))
             self.rect(0, 14, page_w, 8, fill=1, stroke=0)
             self.setFillColor(colors.HexColor('#E67E22'))
@@ -96,11 +95,72 @@ class CorpSecLetterheadCanvas(canvas.Canvas):
         self.restoreState()
 
 
-def generate_invoice_pdf(invoice: Any) -> bytes:
+def generate_invoice_pdf(invoice: Any, db: Optional[Session] = None) -> bytes:
     """
-    Generates a high-quality commercial tax invoice PDF matching
-    the official CorpSec Investigations Limited letterhead specification.
+    Generates a high-quality commercial tax invoice PDF with all corporate parameters,
+    tax compliance details, client profile, and line items retrieved dynamically from the database.
     """
+    # Dynamically resolve database session to pull live database records
+    close_db_when_done = False
+    if db is None:
+        db = object_session(invoice)
+        if db is None:
+            try:
+                from application.backend.app.core.database import SessionLocal
+                db = SessionLocal()
+                close_db_when_done = True
+            except Exception:
+                db = None
+
+    # 1. Retrieve Company Settings from Database
+    settings_map = {}
+    if db:
+        try:
+            from application.backend.app.models.setting import Setting
+            for s in db.query(Setting).all():
+                settings_map[s.key] = s.value
+        except Exception:
+            pass
+
+    # 2. Retrieve Client Profile & KRA PIN from Database
+    client = None
+    if db and getattr(invoice, 'client_name', None):
+        try:
+            from application.backend.app.models.client_contract import Client
+            client = db.query(Client).filter(Client.name.ilike(invoice.client_name)).first()
+        except Exception:
+            client = None
+
+    # Close session if we created it locally
+    if close_db_when_done and db:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+    # Extract all dynamic fields retrieved from the database
+    company_name = settings_map.get("company_name", getattr(invoice, 'company_name', None) or "CORPSEC INVESTIGATIONS LIMITED")
+    company_division = settings_map.get("company_division", getattr(invoice, 'company_division', None) or "Guarding Services Division | Nairobi, Kenya")
+    company_kra_pin = settings_map.get("company_kra_pin", getattr(invoice, 'company_kra_pin', None) or "P051234567Z")
+    company_phone = settings_map.get("company_phone", getattr(invoice, 'company_phone', None) or "0726 058 358 / 0739 058 358")
+    company_email = settings_map.get("company_email", getattr(invoice, 'company_email', None) or "info@corpsecinvestigations.com")
+    company_alt_email = settings_map.get("company_alt_email", getattr(invoice, 'company_alt_email', None) or "corpsec.investigations@gmail.com")
+    company_website = settings_map.get("company_website", getattr(invoice, 'company_website', None) or "www.corpsecinvestigations.com")
+    company_location = settings_map.get("company_location", getattr(invoice, 'company_location', None) or "Nairobi, Kenya")
+    company_director = settings_map.get("company_director", getattr(invoice, 'company_director', None) or "Moses Alango")
+    company_director_title = settings_map.get("company_director_title", getattr(invoice, 'company_director_title', None) or "Director — CorpSec Investigations Limited")
+    bank_name = settings_map.get("bank_name", getattr(invoice, 'bank_name', None) or "KCB Bank Kenya Ltd")
+    bank_account_name = settings_map.get("bank_account_name", getattr(invoice, 'bank_account_name', None) or company_name)
+    bank_account_number = settings_map.get("bank_account_number", getattr(invoice, 'bank_account_number', None) or "1234567890")
+    bank_branch = settings_map.get("bank_branch", getattr(invoice, 'bank_branch', None) or "Upper Hill, Nairobi")
+    mpesa_paybill = settings_map.get("mpesa_paybill", getattr(invoice, 'mpesa_paybill', None) or "522522")
+
+    # Client specific fields from DB
+    client_kra_pin = (client.kra_pin if client and client.kra_pin else getattr(invoice, 'client_kra_pin', None)) or "P051288491A"
+    billing_address = (client.physical_address if client and client.physical_address else invoice.billing_address) or "Nairobi, Kenya"
+    client_email = client.email if client and client.email else getattr(invoice, 'client_email', None)
+    client_phone = client.phone if client and client.phone else getattr(invoice, 'client_phone', None)
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -317,19 +377,19 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
 
     story = []
 
-    # 1. Top Header Row: Logo Left | Contacts Right
+    # 1. Top Header Row: Logo Left | Contacts Right (All retrieved from DB)
     logo_paras = []
     if os.path.exists(LOGO_PATH):
         logo_paras.append(PlatypusImage(LOGO_PATH, width=155, height=65))
     else:
-        logo_paras.append(Paragraph("<b>CORPSEC INVESTIGATION</b><br/><i>— Trust But Verify —</i>", bill_to_name))
+        logo_paras.append(Paragraph(f"<b>{company_name}</b><br/><i>— Trust But Verify —</i>", bill_to_name))
 
     contact_paras = [
-        Paragraph("<b>📞 0726 058 358 / 0739 058 358</b>", contact_style),
-        Paragraph("✉️ info@corpsecinvestigations.com", contact_style),
-        Paragraph("✉️ corpsec.investigations@gmail.com", contact_style),
-        Paragraph("🌐 www.corpsecinvestigations.com", contact_style),
-        Paragraph("📍 Nairobi, Kenya", contact_style),
+        Paragraph(f"<b>📞 {company_phone}</b>", contact_style),
+        Paragraph(f"✉️ {company_email}", contact_style),
+        Paragraph(f"✉️ {company_alt_email}", contact_style),
+        Paragraph(f"🌐 {company_website}", contact_style),
+        Paragraph(f"📍 {company_location}", contact_style),
     ]
 
     header_table = Table(
@@ -346,10 +406,10 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
     story.append(header_table)
     story.append(Spacer(1, 8))
 
-    # 2. Company Division Header & Document Title (Centered, matching reference photo)
-    story.append(Paragraph("CORPSEC INVESTIGATIONS LIMITED", comp_title_style))
+    # 2. Company Division Header & Document Title (Centered, from Database)
+    story.append(Paragraph(company_name, comp_title_style))
     story.append(Spacer(1, 2))
-    story.append(Paragraph("Guarding Services Division | Nairobi, Kenya", comp_sub_style))
+    story.append(Paragraph(company_division, comp_sub_style))
     story.append(Spacer(1, 4))
     story.append(Paragraph("TAX INVOICE", doc_type_style))
     story.append(Spacer(1, 6))
@@ -358,7 +418,7 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
     story.append(HRFlowable(width="100%", thickness=1.5, color=navy_color, spaceAfter=2))
     story.append(HRFlowable(width="100%", thickness=0.8, color=orange_color, spaceAfter=10))
 
-    # 3. Bill To & Metadata Section
+    # 3. Bill To & Metadata Section (All from Database)
     issue_date_str = invoice.issue_date.strftime("%d/%m/%Y") if hasattr(invoice.issue_date, 'strftime') else str(invoice.issue_date)
     due_date_str = invoice.due_date.strftime("%d/%m/%Y") if hasattr(invoice.due_date, 'strftime') else str(invoice.due_date)
 
@@ -367,19 +427,17 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
         Spacer(1, 3),
         Paragraph(f"<b>{invoice.client_name}</b>", bill_to_name),
         Paragraph(f"Site: {invoice.site_name}", bill_to_details),
+        Paragraph(billing_address, bill_to_details),
     ]
-    if getattr(invoice, 'billing_address', None):
-        bill_to_paras.append(Paragraph(invoice.billing_address, bill_to_details))
-    if getattr(invoice, 'client_email', None):
-        bill_to_paras.append(Paragraph(f"Email: {invoice.client_email}", bill_to_details))
-    if getattr(invoice, 'client_phone', None):
-        bill_to_paras.append(Paragraph(f"Phone: {invoice.client_phone}", bill_to_details))
+    if client_email:
+        bill_to_paras.append(Paragraph(f"Email: {client_email}", bill_to_details))
+    if client_phone:
+        bill_to_paras.append(Paragraph(f"Phone: {client_phone}", bill_to_details))
     bill_to_paras.append(Paragraph(f"Billing Period: <b>{invoice.billing_period}</b>", bill_to_details))
 
     status_str = getattr(invoice, 'status', 'ISSUED').upper()
     status_hex = '#059669' if status_str == 'PAID' else ('#D97706' if status_str == 'DRAFT' else '#0F2C59')
 
-    # Reference number matching official CorpSec reference style
     inv_num = invoice.invoice_number
     ref_str = f"CSIL/INV/{inv_num.replace('INV-', '')}" if inv_num.startswith('INV-') else f"CSIL/INV/{inv_num}"
 
@@ -388,7 +446,8 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
         [Paragraph("TAX INVOICE NO", meta_label), Paragraph(f"<b>{invoice.invoice_number}</b>", meta_val)],
         [Paragraph("ISSUE DATE", meta_label), Paragraph(issue_date_str, meta_val)],
         [Paragraph("PAYMENT DUE DATE", meta_label), Paragraph(due_date_str, meta_val)],
-        [Paragraph("KRA PIN", meta_label), Paragraph("P051234567Z", meta_val)],
+        [Paragraph("COMPANY PIN", meta_label), Paragraph(f"<b>{company_kra_pin}</b>", meta_val)],
+        [Paragraph("CLIENT PIN", meta_label), Paragraph(f"<b>{client_kra_pin}</b>", meta_val)],
         [Paragraph("STATUS", meta_label), Paragraph(f"<font color='{status_hex}'><b>{status_str}</b></font>", meta_val)],
     ]
     meta_table = Table(meta_rows, colWidths=[120, 110])
@@ -414,7 +473,7 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
     story.append(info_table)
     story.append(Spacer(1, 14))
 
-    # 4. Line Items Table (Navy Header, clean borders, professional corporate layout)
+    # 4. Line Items Table (Retrieved directly from database table invoice_items)
     table_data = [[
         Paragraph("ITEM", th_style),
         Paragraph("SERVICE DESCRIPTION", th_style),
@@ -464,7 +523,7 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
     story.append(items_table)
     story.append(Spacer(1, 10))
 
-    # 5. Financial Summary & Notes Section
+    # 5. Financial Summary & Notes Section (Database values)
     curr = getattr(invoice, 'currency', 'KES') or 'KES'
     summary_rows = [
         [Paragraph("SUBTOTAL (EXCL. VAT):", total_label), Paragraph(f"{curr} {invoice.subtotal:,.2f}", total_val)],
@@ -499,15 +558,15 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
         Paragraph("<b>PAYMENT INSTRUCTIONS & BANKING DETAILS:</b>", notes_title),
         Spacer(1, 3),
         Paragraph(
-            invoice.notes or "Payment is due within 14 days of invoice date. Thank you for your valued partnership.",
+            invoice.notes or f"Payment is due within 14 days of invoice date. Thank you for choosing {company_name}.",
             notes_body
         ),
         Spacer(1, 4),
         Paragraph(
             invoice.payment_terms or (
-                "<b>Bank:</b> KCB Bank Kenya Ltd | <b>A/C Name:</b> CorpSec Investigations Limited<br/>"
-                "<b>Account No:</b> 1234567890 | <b>Branch:</b> Upper Hill, Nairobi | <b>Swift:</b> KCBLKENX<br/>"
-                "<b>M-PESA Paybill:</b> <b>522522</b> | <b>Account:</b> " + invoice.invoice_number
+                f"<b>Bank:</b> {bank_name} | <b>A/C Name:</b> {bank_account_name}<br/>"
+                f"<b>Account No:</b> {bank_account_number} | <b>Branch:</b> {bank_branch}<br/>"
+                f"<b>M-PESA Paybill:</b> <b>{mpesa_paybill}</b> | <b>Account:</b> {invoice.invoice_number}"
             ),
             notes_body
         )
@@ -527,7 +586,7 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
     story.append(bottom_table)
     story.append(Spacer(1, 14))
 
-    # 6. Authorized Signatory / Certification Block (Matching reference photo Moses Alango signature)
+    # 6. Authorized Signatory / Certification Block (Directly using director from database)
     sig_elements = [
         Paragraph("Yours sincerely,", notes_body),
         Spacer(1, 2)
@@ -538,15 +597,15 @@ def generate_invoice_pdf(invoice: Any) -> bytes:
         sig_elements.append(Spacer(1, 20))
 
     sig_elements.extend([
-        Paragraph("<b>Moses Alango</b>", bill_to_name),
-        Paragraph("Director — CorpSec Investigations Limited", comp_sub_style),
+        Paragraph(f"<b>{company_director}</b>", bill_to_name),
+        Paragraph(company_director_title, comp_sub_style),
         Paragraph(f"Date: {issue_date_str}", notes_body),
     ])
 
     # Right side: Official Verification Seal badge
     seal_table_data = [
         [Paragraph("<font color='#059669'><b>✔ CORPSEC VERIFIED & APPROVED</b></font>", notes_title)],
-        [Paragraph("Tax Invoice compliant with KRA TIMS/eTIMS and PSRA Regulations.", notes_body)]
+        [Paragraph(f"Tax Invoice compliant with KRA TIMS/eTIMS and PSRA Regulations ({company_kra_pin}).", notes_body)]
     ]
     seal_table = Table(seal_table_data, colWidths=[220])
     seal_table.setStyle(TableStyle([

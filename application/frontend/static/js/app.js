@@ -868,7 +868,10 @@ async function loadGuards() {
             <td>${g.national_id || '—'}</td>
             <td>${g.phone || '—'}</td>
             <td>${salDisplay}</td>
-            <td>${relieverBadge}</td>
+            <td>
+              ${g.is_super_guard ? '<span class="badge" style="background:#E0F2FE; color:#0369A1; font-weight:700; margin-bottom:3px; display:inline-block;">⭐ Super Guard</span><br/>' : ''}
+              ${relieverBadge}
+            </td>
             <td><span class="badge badge-active">ACTIVE</span></td>
             <td style="display:flex; gap:6px; flex-wrap:wrap;">
               <button class="btn btn-primary" style="padding:4px 10px; font-size:12px;" onclick="viewGuardFile(${g.id})">📋 View File</button>
@@ -1100,6 +1103,39 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </button>
       </div>
     ` : ''}
+
+    <!-- Super Guard Mandate Status Card -->
+    ${g.is_super_guard ? `
+      <div style="background:#EFF6FF; border:1.5px solid #93C5FD; border-radius:12px; padding:16px 20px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 4px 12px rgba(37,99,235,0.06);">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div style="width:44px; height:44px; border-radius:10px; background:#DBEAFE; display:flex; align-items:center; justify-content:center; font-size:24px;">⭐</div>
+          <div>
+            <div style="font-weight:800; font-size:15px; color:#1E40AF; display:flex; align-items:center; gap:8px;">
+              <span>ACTIVE SITE SUPER GUARD MANDATE</span>
+              <span class="badge" style="background:#2563EB; color:#FFF; font-size:11px; padding:2px 8px;">AUTHORIZED</span>
+            </div>
+            <div style="font-size:12.5px; color:#3B82F6; margin-top:3px;">
+              Empowered to clock in and out fellow stationed guards who do not possess smartphones at <b>${escapeHtml(siteName)}</b>.
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn" style="background:#FEE2E2; color:#DC2626; border:1px solid #FCA5A5; font-size:12px; font-weight:700; padding:8px 16px; border-radius:8px;" onclick="removeSuperGuardMandate(${g.id})">
+          🚫 Remove as Super Guard
+        </button>
+      </div>
+    ` : `
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:12px 20px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:18px; color:#64748B;">🛡️</span>
+          <div style="font-size:13px; color:#475569;">
+            <strong>Standard Guard Status</strong> (No site clock-in mandate assigned).
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary" style="color:#0369A1; border-color:#BAE6FD; font-size:12px; padding:6px 14px; font-weight:700;" onclick="assignSuperGuardMandate(${g.id})">
+          ⭐ Designate as Site Super Guard
+        </button>
+      </div>
+    `}
 
     <!-- Card 1: Security Guard Personnel File -->
     <div class="profile-card">
@@ -1651,6 +1687,8 @@ function openAmendGuardModal(guardId) {
   document.getElementById('amend-guard-hire-date').value = g.hire_date ? String(g.hire_date).substring(0, 10) : '';
   document.getElementById('amend-guard-salary').value = g.basic_salary !== null && g.basic_salary !== undefined ? g.basic_salary : '';
   document.getElementById('amend-guard-is-reliever').checked = !!g.is_reliever;
+  const sgEl = document.getElementById('amend-guard-is-super-guard');
+  if (sgEl) sgEl.checked = !!g.is_super_guard;
 
   const payMethod = g.payment_method || 'Bank Transfer';
   document.getElementById('amend-guard-pay-method').value = payMethod;
@@ -1729,6 +1767,7 @@ async function handleAmendGuardSubmit(e) {
   const basic_salary = salary_val ? parseFloat(salary_val) : null;
 
   const is_reliever = document.getElementById('amend-guard-is-reliever').checked;
+  const is_super_guard = document.getElementById('amend-guard-is-super-guard')?.checked || false;
   const payment_method = document.getElementById('amend-guard-pay-method').value;
   const mpesa_number = document.getElementById('amend-guard-mpesa').value.trim() || null;
   const bank_name = document.getElementById('amend-guard-bank-name').value.trim() || null;
@@ -1746,7 +1785,7 @@ async function handleAmendGuardSubmit(e) {
 
   const payload = {
     full_name, national_id, phone, email, gender, date_of_birth, hire_date,
-    site_id, shift_id, supervisor_id, basic_salary, is_reliever,
+    site_id, shift_id, supervisor_id, basic_salary, is_reliever, is_super_guard,
     payment_method, mpesa_number, bank_name, bank_account,
     kra_pin, nssf_number, shif_number,
     education_level, blood_group, emergency_contact_name, emergency_contact_phone, next_of_kin
@@ -3557,6 +3596,8 @@ async function handleAddGuardSubmit(e) {
       payment_method: 'Bank Transfer'
     };
     if (emailVal) payload.email = emailVal;
+    payload.is_super_guard = document.getElementById('new-guard-is-super-guard')?.checked || false;
+    payload.is_reliever = document.getElementById('new-guard-is-reliever')?.checked || false;
 
     const res = await apiFetch('/guards', {
       method: 'POST',
@@ -7544,12 +7585,33 @@ async function handleEditInvoiceSubmit(e) {
 async function viewInvoice(invoiceId) {
   try {
     currentViewInvoiceId = invoiceId;
-    let inv = (cachedInvoices || []).find(i => i.id === invoiceId);
-    if (!inv || !inv.items || inv.items.length === 0) {
-      const res = await apiFetch(`/invoices/${invoiceId}`);
-      if (!res.ok) throw new Error('Invoice not found');
-      inv = await res.json();
-    }
+    // Always fetch fresh 100% database-retrieved invoice details
+    const res = await apiFetch(`/invoices/${invoiceId}`);
+    if (!res.ok) throw new Error('Invoice not found');
+    const inv = await res.json();
+
+    // 1. Populate Company Information retrieved from Database
+    if (inv.company_name) document.getElementById('view-inv-comp-name').innerText = inv.company_name;
+    if (inv.company_division) document.getElementById('view-inv-comp-div').innerText = inv.company_division;
+    if (inv.company_phone) document.getElementById('view-inv-comp-phone').innerText = `📞 ${inv.company_phone}`;
+    if (inv.company_email) document.getElementById('view-inv-comp-email').innerText = `✉️ ${inv.company_email}`;
+    if (inv.company_alt_email) document.getElementById('view-inv-comp-alt-email').innerText = `✉️ ${inv.company_alt_email}`;
+    if (inv.company_website) document.getElementById('view-inv-comp-web').innerText = `🌐 ${inv.company_website}`;
+    if (inv.company_location) document.getElementById('view-inv-comp-loc').innerText = `📍 ${inv.company_location}`;
+    if (inv.company_kra_pin) document.getElementById('view-inv-comp-pin').innerText = inv.company_kra_pin;
+    if (inv.company_director) document.getElementById('view-inv-director').innerText = inv.company_director;
+    if (inv.company_director_title) document.getElementById('view-inv-director-title').innerText = inv.company_director_title;
+
+    // 2. Populate Client Profile retrieved from Database
+    const clientPinEl = document.getElementById('view-inv-client-pin');
+    if (clientPinEl) clientPinEl.innerText = inv.client_kra_pin || 'P051288491A';
+
+    // 3. Populate Banking & Paybill Instructions retrieved from Database
+    if (inv.bank_name) document.getElementById('view-inv-bank-name').innerText = inv.bank_name;
+    if (inv.bank_account_name) document.getElementById('view-inv-bank-acc-name').innerText = inv.bank_account_name;
+    if (inv.bank_account_number) document.getElementById('view-inv-bank-acc').innerText = inv.bank_account_number;
+    if (inv.bank_branch) document.getElementById('view-inv-bank-branch').innerText = inv.bank_branch;
+    if (inv.mpesa_paybill) document.getElementById('view-inv-paybill-num').innerText = inv.mpesa_paybill;
 
     document.getElementById('view-inv-number').innerText = inv.invoice_number || '';
     document.getElementById('view-inv-client').innerText = inv.client_name || '';
@@ -7608,6 +7670,8 @@ async function viewInvoice(invoiceId) {
 
     const modal = document.getElementById('modal-view-invoice');
     if (modal) modal.style.display = 'flex';
+    const scrollBody = document.getElementById('modal-view-invoice-scroll-body');
+    if (scrollBody) scrollBody.scrollTop = 0;
   } catch (err) {
     showToast('Failed to view invoice: ' + err.message, 'danger');
   }
@@ -11057,6 +11121,13 @@ function toggleRecurringExpenseFields() {
 
 async function handleRecordExpenseSubmit(e) {
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.btn-primary');
+  const origBtnText = submitBtn ? submitBtn.innerText : 'Save';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Saving Expense...';
+  }
+
   const expense_date = document.getElementById('exp-date').value;
   const category = document.getElementById('exp-category').value;
   const expense_type = document.getElementById('exp-type').value;
@@ -11104,6 +11175,11 @@ async function handleRecordExpenseSubmit(e) {
 
   } catch (err) {
     showToast('Network error: ' + err.message, 'danger');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = origBtnText;
+    }
   }
 }
 
@@ -11119,6 +11195,12 @@ function closeTopUpPettyCashModal() {
 
 async function handleTopUpPettyCashSubmit(e) {
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.btn-primary');
+  const origBtnText = submitBtn ? submitBtn.innerText : 'Replenish Float';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Replenishing Float...';
+  }
   const amount = parseFloat(document.getElementById('topup-amount').value);
   const source = document.getElementById('topup-source').value;
   const reference_number = document.getElementById('topup-ref').value.trim() || null;
@@ -11149,6 +11231,11 @@ async function handleTopUpPettyCashSubmit(e) {
 
   } catch (err) {
     showToast('Network error: ' + err.message, 'danger');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = origBtnText;
+    }
   }
 }
 

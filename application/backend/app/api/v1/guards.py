@@ -252,6 +252,22 @@ def update_guard_profile(
             if target_site and target_site.supervisor_id:
                 update_data["supervisor_id"] = target_site.supervisor_id
 
+    if "is_super_guard" in update_data:
+        new_is_sg = bool(update_data["is_super_guard"])
+        guard.is_super_guard = new_is_sg
+        if not new_is_sg:
+            # Clear super_guard_id on any site that assigned this guard as super guard
+            db.query(Site).filter(Site.super_guard_id == guard.id).update(
+                {Site.super_guard_id: None},
+                synchronize_session=False
+            )
+        else:
+            # If set to True and guard has a primary site that doesn't have a super guard, assign them
+            if guard.primary_site_id:
+                target_site = db.query(Site).filter(Site.id == guard.primary_site_id).first()
+                if target_site and (target_site.super_guard_id is None or target_site.super_guard_id == guard.id):
+                    target_site.super_guard_id = guard.id
+
     for key, value in update_data.items():
         setattr(guard, key, value)
 
@@ -291,7 +307,12 @@ def deactivate_guard(
 
     guard.status = "INACTIVE"
     guard.deactivation_reason = payload.reason
+    guard.is_super_guard = False
     guard.updated_at = datetime.now()
+    db.query(Site).filter(Site.super_guard_id == guard.id).update(
+        {Site.super_guard_id: None},
+        synchronize_session=False
+    )
 
     user_acc = db.query(User).filter(User.guard_id == guard.id).first()
     if user_acc:
@@ -350,3 +371,85 @@ def reactivate_guard(
 
     return _format_guard(guard)
 
+
+
+@router.post("/{guard_id}/remove-super-guard", response_model=GuardResponse)
+def remove_super_guard_mandate(
+    guard_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Explicitly remove Super Guard designation from a guard and unassign from any sites."""
+    guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
+
+    guard.is_super_guard = False
+    guard.updated_at = datetime.now()
+    db.query(Site).filter(Site.super_guard_id == guard.id).update(
+        {Site.super_guard_id: None},
+        synchronize_session=False
+    )
+
+    audit_entry = AuditLog(
+        user_id=admin.id,
+        user_name=admin.email,
+        role=admin.role,
+        action="REMOVE_SUPER_GUARD",
+        target_entity="Guard",
+        target_id=str(guard.id),
+        new_values=f"Revoked Super Guard mandate from {guard.full_name}",
+        reason="Super Guard revocation"
+    )
+    db.add(audit_entry)
+    db.commit()
+    db.refresh(guard)
+    return _format_guard(guard)
+
+
+@router.post("/{guard_id}/assign-super-guard", response_model=GuardResponse)
+def assign_super_guard_mandate(
+    guard_id: int,
+    site_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Explicitly assign Super Guard designation to a guard and attach to site."""
+    guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
+
+    target_site_id = site_id or guard.primary_site_id
+    if not target_site_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Guard must have an assigned primary site to be designated as Super Guard.")
+
+    target_site = db.query(Site).filter(Site.id == target_site_id).first()
+    if not target_site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target site not found")
+
+    # If the site had an existing super guard, demote them
+    if target_site.super_guard_id and target_site.super_guard_id != guard.id:
+        prev_sg = db.query(Guard).filter(Guard.id == target_site.super_guard_id).first()
+        if prev_sg:
+            prev_sg.is_super_guard = False
+
+    guard.is_super_guard = True
+    guard.primary_site_id = target_site.id
+    guard.updated_at = datetime.now()
+    target_site.super_guard_id = guard.id
+    target_site.updated_at = datetime.now()
+
+    audit_entry = AuditLog(
+        user_id=admin.id,
+        user_name=admin.email,
+        role=admin.role,
+        action="ASSIGN_SUPER_GUARD",
+        target_entity="Guard",
+        target_id=str(guard.id),
+        new_values=f"Designated {guard.full_name} as Super Guard for site {target_site.site_name}",
+        reason="Super Guard designation"
+    )
+    db.add(audit_entry)
+    db.commit()
+    db.refresh(guard)
+    return _format_guard(guard)

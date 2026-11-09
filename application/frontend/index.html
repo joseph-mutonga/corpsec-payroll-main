@@ -143,7 +143,6 @@
       <li class="nav-item" onclick="switchTab('reports')">📈 Analytics & Reports</li>
       <li class="nav-item" onclick="switchTab('documents')">📑 Company Documents</li>
       <li class="nav-item" onclick="switchTab('staff')">👥 Staff & HR</li>
-      <li class="nav-item" onclick="switchTab('expenses')" title="Firm Expenses, Petty Cash & Shop Overhead">💸 Expenses & Petty Cash</li>
       <li class="nav-item" onclick="switchTab('incidents')">🚨 Incident Reports</li>
       <li class="nav-item" onclick="switchTab('leave')">🏖️ Leave Requests</li>
       <li class="nav-item" onclick="switchTab('guards')">🛡️ Guard Directory</li>
@@ -2729,7 +2728,7 @@
 
             <!-- Table -->
             <div class="table-container">
-              <table class="data-table">
+              <table class="data-table expense-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -3377,6 +3376,11 @@
           <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:10px 12px; border-radius:8px;">
             <label style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer;">
               <input type="checkbox" id="new-guard-is-reliever"> 🔄 Mark Guard as Reliever (Floating Coverage Guard)
+            </label>
+          </div>
+          <div style="background:#F0FDF4; border:1px solid #BBF7D0; padding:10px 12px; border-radius:8px; margin-top:8px;">
+            <label style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer; color:#166534;">
+              <input type="checkbox" id="new-guard-is-super-guard" style="width:16px; height:16px; accent-color:#059669;"> ⭐ Designate as Site Super Guard (Mandate to clock in fellow guards)
             </label>
           </div>
           <div>
@@ -4083,6 +4087,14 @@
             <label style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer; color:#334155;">
               <input type="checkbox" id="amend-guard-is-reliever"> 🔄 Mark Guard as Reliever (Floating Coverage Guard)
             </label>
+          </div>
+          <div style="background:#F0FDF4; border:1px solid #BBF7D0; padding:10px 12px; border-radius:8px; margin-top:8px;">
+            <label style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer; color:#166534;">
+              <input type="checkbox" id="amend-guard-is-super-guard" style="width:16px; height:16px; accent-color:#059669;"> ⭐ Designated Site Super Guard (Mandate Active)
+            </label>
+            <div style="font-size:11px; color:#15803D; margin-top:3px; margin-left:24px;">
+              Uncheck this box to immediately remove this guard as a Super Guard and revoke all site clock-in mandates.
+            </div>
           </div>
           <div style="border-top:1px solid #E2E8F0; padding-top:12px;">
             <label style="font-size:13px; font-weight:800; display:block; margin-bottom:8px; color:#1E3A5F;">Payment &amp; Banking Details</label>
@@ -4851,12 +4863,15 @@
   </div>
 
   <!-- ========================================== -->
-  <!-- Modal: View & Preview Site Invoice (Official CorpSec Investigations Letterhead) -->
+  <!-- Modal: View & Preview Site Invoice (Official CorpSec Investigations Letterhead - 100% Database Driven) -->
   <!-- ========================================== -->
   <div id="modal-view-invoice" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target===this) closeViewInvoiceModal()">
-    <div class="modal-content" style="max-width: 800px; width:100%; margin:auto; background:#FFFFFF; padding:0; border-radius:12px; overflow:hidden; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+    <div class="modal-content" style="max-width: 860px; width:100%; margin:auto; background:#FFFFFF; padding:0; border-radius:14px; overflow:hidden; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.35); max-height:94vh; display:flex; flex-direction:column;">
       
-      <!-- Top Letterhead Curved Banner Ribbon -->
+      <!-- Scrollable Invoice Document Area (Allows smooth vertical scrolling with custom scrollbar) -->
+      <div id="modal-view-invoice-scroll-body" style="overflow-y:auto; overflow-x:hidden; flex:1 1 auto; max-height:calc(94vh - 68px); -webkit-overflow-scrolling:touch; scrollbar-width:thin; scrollbar-color:#94A3B8 #F1F5F9;">
+
+        <!-- Top Letterhead Curved Banner Ribbon -->
       <img src="/static/images/corpsec_banner_top.png" alt="CorpSec Letterhead Header" style="width:100%; height:52px; object-fit:cover; display:block;">
 
       <div id="printable-invoice-sheet" style="padding:20px 32px 28px 32px; position:relative; background:#FFFFFF;">
@@ -4866,24 +4881,24 @@
           <img src="/static/images/corpsec_watermark.png" alt="CorpSec Watermark" style="width:340px; height:340px; object-fit:contain;">
         </div>
 
-        <!-- Header Row: Official Logo Left | Official Contact Block Right -->
+        <!-- Header Row: Official Logo Left | Official Contact Block Right (Database Retained) -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; position:relative; z-index:1;">
           <div style="display:flex; align-items:center; gap:12px;">
             <img src="/static/images/corpsec_official_logo.png" alt="CorpSec Investigations Logo" style="height:68px; object-fit:contain;">
           </div>
           <div style="text-align:right; font-size:11px; color:#334155; line-height:1.45;">
-            <div style="font-weight:800; color:#0F2C59; font-size:11.5px;">📞 0726 058 358 / 0739 058 358</div>
-            <div>✉️ info@corpsecinvestigations.com</div>
-            <div>✉️ corpsec.investigations@gmail.com</div>
-            <div>🌐 www.corpsecinvestigations.com</div>
-            <div>📍 Nairobi, Kenya</div>
+            <div id="view-inv-comp-phone" style="font-weight:800; color:#0F2C59; font-size:11.5px;">📞 0726 058 358 / 0739 058 358</div>
+            <div id="view-inv-comp-email">✉️ info@corpsecinvestigations.com</div>
+            <div id="view-inv-comp-alt-email">✉️ corpsec.investigations@gmail.com</div>
+            <div id="view-inv-comp-web">🌐 www.corpsecinvestigations.com</div>
+            <div id="view-inv-comp-loc">📍 Nairobi, Kenya</div>
           </div>
         </div>
 
-        <!-- Center Company Division & Document Title -->
+        <!-- Center Company Division & Document Title (Database Retained) -->
         <div style="text-align:center; margin:10px 0 14px 0; position:relative; z-index:1;">
-          <h2 style="font-size:18px; font-weight:900; color:#0F2C59; margin:0 0 3px 0; letter-spacing:0.8px; text-transform:uppercase;">CORPSEC INVESTIGATIONS LIMITED</h2>
-          <div style="font-size:12px; color:#64748B; font-weight:600; letter-spacing:0.3px;">Guarding Services Division | Nairobi, Kenya</div>
+          <h2 id="view-inv-comp-name" style="font-size:18px; font-weight:900; color:#0F2C59; margin:0 0 3px 0; letter-spacing:0.8px; text-transform:uppercase;">CORPSEC INVESTIGATIONS LIMITED</h2>
+          <div id="view-inv-comp-div" style="font-size:12px; color:#64748B; font-weight:600; letter-spacing:0.3px;">Guarding Services Division | Nairobi, Kenya</div>
           <div style="font-size:15px; font-weight:900; color:#0F2C59; letter-spacing:1px; margin-top:8px; text-transform:uppercase;">TAX INVOICE</div>
         </div>
 
@@ -4891,26 +4906,27 @@
         <div style="height:2px; background:#0F2C59; margin-bottom:2px; position:relative; z-index:1;"></div>
         <div style="height:1px; background:#E67E22; margin-bottom:18px; position:relative; z-index:1;"></div>
 
-        <!-- Bill To & Metadata Section -->
+        <!-- Bill To & Metadata Section (All values dynamically sourced from Database) -->
         <div style="display:flex; justify-content:space-between; margin-bottom:22px; flex-wrap:wrap; gap:16px; position:relative; z-index:1;">
           <div style="max-width:360px;">
             <div style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">BILLED TO (CLIENT):</div>
             <div id="view-inv-client" style="font-size:15px; font-weight:800; color:#0F172A;">Client Name</div>
             <div id="view-inv-site" style="font-size:12.5px; color:#334155; margin-top:2px;">Site: Westlands Mall</div>
             <div id="view-inv-address" style="font-size:12px; color:#64748B;">Nairobi, Kenya</div>
+            <div style="font-size:11.5px; color:#334155; margin-top:2px;"><span style="color:#64748B;">CLIENT KRA PIN:</span> <strong id="view-inv-client-pin" style="color:#0F2C59;">P051288491A</strong></div>
             <div id="view-inv-period" style="font-size:12px; color:#0F2C59; font-weight:700; margin-top:4px;">Billing Period: November 2026</div>
           </div>
-          <div style="text-align:right; font-size:12px; min-width:210px;">
+          <div style="text-align:right; font-size:12px; min-width:220px;">
             <div style="margin-bottom:5px;"><span style="color:#64748B; font-weight:700;">REF #:</span> <strong id="view-inv-ref" style="color:#0F2C59; font-size:12.5px;">CSIL/INV/2026-0001</strong></div>
             <div style="margin-bottom:5px;"><span style="color:#64748B; font-weight:700;">TAX INVOICE NO:</span> <strong id="view-inv-number" style="color:#0F172A; font-size:12.5px;">INV-2026-0001</strong></div>
             <div style="margin-bottom:5px;"><span style="color:#64748B;">ISSUE DATE:</span> <span id="view-inv-issue-date" style="color:#0F172A; font-weight:600;">02/11/2026</span></div>
             <div style="margin-bottom:5px;"><span style="color:#64748B;">DUE DATE:</span> <span id="view-inv-due-date" style="color:#0F172A; font-weight:600;">16/11/2026</span></div>
-            <div style="margin-bottom:5px;"><span style="color:#64748B;">KRA PIN:</span> <strong style="color:#0F172A;">P051234567Z</strong></div>
+            <div style="margin-bottom:5px;"><span style="color:#64748B;">COMPANY PIN:</span> <strong id="view-inv-comp-pin" style="color:#0F172A;">P051234567Z</strong></div>
             <div style="margin-top:4px;"><span id="view-inv-status-badge" class="badge" style="background:#ECFDF5; color:#059669; font-size:11px; font-weight:800; padding:3px 10px; border-radius:4px;">ISSUED</span></div>
           </div>
         </div>
 
-        <!-- Line Items Table -->
+        <!-- Line Items Table (Retrieved directly from invoice_items table in database) -->
         <div style="border:1px solid #CBD5E1; border-radius:6px; overflow:hidden; margin-bottom:18px; position:relative; z-index:1;">
           <table style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead style="background:#0F2C59; color:#FFFFFF;">
@@ -4924,20 +4940,20 @@
               </tr>
             </thead>
             <tbody id="view-inv-items-body">
-              <!-- Dynamically populated -->
+              <!-- Dynamically populated from database line items -->
             </tbody>
           </table>
         </div>
 
-        <!-- Financial Summary & Payment Instructions -->
+        <!-- Financial Summary & Payment Instructions (Database Values) -->
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; gap:20px; flex-wrap:wrap; position:relative; z-index:1;">
           <div style="max-width:380px; font-size:11.5px; color:#334155; line-height:1.5;">
             <div style="font-weight:800; font-size:11.5px; color:#0F2C59; margin-bottom:4px; text-transform:uppercase;">Payment Instructions & Banking:</div>
             <div id="view-inv-notes" style="margin-bottom:6px; color:#475569;">Payment is due within 14 days of invoice date. Thank you for choosing CorpSec Investigations Limited.</div>
             <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:10px 12px; font-size:11px;">
-              <div><strong>Bank:</strong> KCB Bank Kenya Ltd | <strong>A/C Name:</strong> CorpSec Investigations Limited</div>
-              <div><strong>Account No:</strong> 1234567890 | <strong>Branch:</strong> Upper Hill, Nairobi</div>
-              <div style="margin-top:3px;"><strong>M-PESA Paybill:</strong> <strong style="color:#059669;">522522</strong> | <strong>Account No:</strong> <span id="view-inv-paybill-acc">INV-2026-0001</span></div>
+              <div><strong>Bank:</strong> <span id="view-inv-bank-name">KCB Bank Kenya Ltd</span> | <strong>A/C Name:</strong> <span id="view-inv-bank-acc-name">CorpSec Investigations Limited</span></div>
+              <div><strong>Account No:</strong> <span id="view-inv-bank-acc">1234567890</span> | <strong>Branch:</strong> <span id="view-inv-bank-branch">Upper Hill, Nairobi</span></div>
+              <div style="margin-top:3px;"><strong>M-PESA Paybill:</strong> <strong id="view-inv-paybill-num" style="color:#059669;">522522</strong> | <strong>Account No:</strong> <span id="view-inv-paybill-acc">INV-2026-0001</span></div>
             </div>
             <div id="view-inv-payment-terms" style="display:none;"></div>
           </div>
@@ -4958,13 +4974,13 @@
           </div>
         </div>
 
-        <!-- Authorized Signatory & Compliance Certification (Matching Letterhead Photo) -->
+        <!-- Authorized Signatory & Compliance Certification (Dynamic Director from Database) -->
         <div style="display:flex; justify-content:space-between; align-items:flex-end; padding-top:12px; border-top:1px solid #E2E8F0; position:relative; z-index:1; flex-wrap:wrap; gap:16px;">
           <div>
             <div style="font-size:12px; color:#334155; margin-bottom:2px;">Yours sincerely,</div>
             <img src="/static/images/corpsec_clean_signature.png" alt="Moses Alango Signature" style="height:36px; display:block; margin:2px 0;">
-            <div style="font-size:13px; font-weight:800; color:#0F172A;">Moses Alango</div>
-            <div style="font-size:11px; color:#64748B;">Director — CorpSec Investigations Limited</div>
+            <div id="view-inv-director" style="font-size:13px; font-weight:800; color:#0F172A;">Moses Alango</div>
+            <div id="view-inv-director-title" style="font-size:11px; color:#64748B;">Director — CorpSec Investigations Limited</div>
             <div style="font-size:11px; color:#64748B;" id="view-inv-sig-date">Date: 02/11/2026</div>
           </div>
 
@@ -4980,12 +4996,13 @@
 
       <!-- Bottom Letterhead Curved Banner Ribbon -->
       <img src="/static/images/corpsec_banner_bottom.png" alt="CorpSec Letterhead Footer" style="width:100%; height:44px; object-fit:cover; display:block;">
-      <div style="text-align:center; font-size:10px; font-weight:700; color:#0F2C59; padding:8px 0; background:#F8FAFC; border-top:1px solid #E2E8F0; letter-spacing:0.3px;">
+      <div id="view-inv-footer-legal" style="text-align:center; font-size:10px; font-weight:700; color:#0F2C59; padding:8px 0; background:#F8FAFC; border-top:1px solid #E2E8F0; letter-spacing:0.3px;">
         CORPSEC INVESTIGATIONS LIMITED • PSRA LICENSED • TRUST BUT VERIFY • NAIROBI, KENYA
       </div>
+      </div> <!-- End #modal-view-invoice-scroll-body -->
 
-      <!-- Modal Actions Footer (Hidden when printing) -->
-      <div class="no-print" style="padding:14px 28px; background:#F8FAFC; border-top:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+      <!-- Modal Actions Footer (Pinned at bottom, hidden when printing) -->
+      <div class="no-print" style="padding:14px 28px; background:#F8FAFC; border-top:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; z-index:10;">
         <button type="button" class="btn btn-secondary" onclick="closeViewInvoiceModal()">✕ Close</button>
         <div style="display:flex; gap:10px;">
           <button type="button" class="btn btn-secondary" onclick="window.print()">🖨️ Print Invoice</button>
