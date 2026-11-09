@@ -143,6 +143,7 @@ def read_portal_service_worker():
     return {"error": "service worker not found"}
 
 
+@app.get("/health")
 @app.get("/api/health")
 def health_check():
     return {
