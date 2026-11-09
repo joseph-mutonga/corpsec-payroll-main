@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,4 +44,14 @@ class SalaryAdvanceSummary(BaseModel):
     total_amount_disbursed: float
     total_amount_deducted: float
     total_amount_pending: float
+
+
+class BulkUploadAdvanceResult(BaseModel):
+    success: bool
+    total_rows: int
+    successful_records: int
+    failed_records: int
+    total_amount_processed: float
+    errors: List[str] = []
+    created_references: List[str] = []
 

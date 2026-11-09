@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css">
-  <script src="/static/js/app.js"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261109_v6">
+  <script src="/static/js/app.js?v=20261109_v6"></script>
 </head>
 <body>
 
@@ -238,6 +238,11 @@
           <div style="border-top:1px solid #F1F5F9; margin:4px 0;"></div>
           <div class="dropdown-item" style="color:#EF4444;" onclick="logout()">🚪 Sign Out</div>
         </div>
+
+        <!-- Header Quick Action: Bulk Upload Advances -->
+        <button class="btn btn-secondary" onclick="openUploadSalaryAdvancesModal(true)" style="background:#ECFDF5; border-color:#A7F3D0; color:#065F46; font-weight:700; display:inline-flex; align-items:center; gap:6px; padding:8px 14px; font-size:13px;" title="Bulk Upload Mid-Month Salary Advances Excel / CSV">
+          <span>📊</span> Upload Advances
+        </button>
 
         <!-- Primary CTA: Run Payroll -->
         <button class="btn btn-primary" id="btn-run-payroll-top" onclick="openRunPayrollModal()">▶ Run Payroll</button>
@@ -963,12 +968,20 @@
       <!-- Tab Panel 6: Guided Payroll Engine -->
       <section id="panel-payroll" style="display:none;">
         <div style="background:#FFF; padding:20px; border-radius:12px; border:1px solid #E2E8F0; margin-bottom:24px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
             <div>
-              <h2 style="font-size:18px; font-weight:700;">Guided Payroll Calculation Engine</h2>
-              <p style="font-size:13px; color:#64748B;">Calculates Gross Pay, Overtime, NSSF (6%), SHIF (2.75% min KES 300), Housing Levy (1.5%), and PAYE.</p>
+              <h2 style="font-size:18px; font-weight:700; margin:0;">Guided Payroll Calculation Engine</h2>
+              <p style="font-size:13px; color:#64748B; margin-top:4px; margin-bottom:0;">Calculates Gross Pay, Overtime, NSSF (6%), SHIF (2.75% min KES 300), Housing Levy (1.5%), and PAYE.</p>
             </div>
-            <button class="btn btn-primary" style="padding:12px 24px;" onclick="triggerPayrollCalculation()">▶ Execute Calculation</button>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="downloadSalaryAdvanceTemplate()" title="Download Excel template for salary advances" style="display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:10px 14px;">
+                <span>📥</span> Advance Template
+              </button>
+              <button class="btn btn-secondary" onclick="openUploadSalaryAdvancesModal(true)" title="Upload advances spreadsheet for automatic deduction" style="display:inline-flex; align-items:center; gap:6px; background:#ECFDF5; border-color:#A7F3D0; color:#065F46; font-weight:700; padding:10px 14px;">
+                <span>📊</span> Upload Advances
+              </button>
+              <button class="btn btn-primary" style="padding:10px 22px; font-weight:700;" onclick="triggerPayrollCalculation()">▶ Execute Calculation</button>
+            </div>
           </div>
         </div>
 
@@ -1004,9 +1017,19 @@
         </div>
 
         <div class="table-container" style="overflow-x: auto; width: 100%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-          <div style="padding:16px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
-            <span>Gross-to-Net Payroll Review Table</span>
-            <span style="font-size:11px; color:#64748B; font-weight:500;">👉 Scroll horizontally to view all columns & PDF payslips</span>
+          <div style="padding:14px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#FAFAFA;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+              <span style="font-size:15px; font-weight:800; color:#0F172A;">Gross-to-Net Payroll Review Table</span>
+              <div style="display:inline-flex; gap:8px; align-items:center;">
+                <button type="button" class="btn btn-secondary" onclick="downloadSalaryAdvanceTemplate()" title="Download Excel template for salary advances" style="font-size:12px; font-weight:700; padding:6px 12px; background:#FFFFFF; border-color:#CBD5E1; color:#334155; display:inline-flex; align-items:center; gap:6px;">
+                  <span>📥</span> Advance Template
+                </button>
+                <button type="button" class="btn btn-primary" onclick="openUploadSalaryAdvancesModal(true)" title="Upload advances spreadsheet for automatic deduction" style="font-size:12px; font-weight:700; padding:6px 14px; background:#059669; border-color:#059669; color:#FFFFFF; display:inline-flex; align-items:center; gap:6px;">
+                  <span>📊</span> Upload Advances (Excel)
+                </button>
+              </div>
+            </div>
+            <span style="font-size:11px; color:#64748B; font-weight:500;">👉 Scroll horizontally to view all columns &amp; PDF payslips</span>
           </div>
           <table class="data-table" style="min-width: 1450px; width: 100%;">
             <thead>
@@ -1025,6 +1048,7 @@
                 <th style="min-width: 110px; white-space: nowrap;">Unpaid Leave</th>
                 <th style="min-width: 130px; white-space: nowrap;">Off-Day / Absent</th>
                 <th style="min-width: 120px; white-space: nowrap;">Advance (KES)</th>
+                <th style="min-width: 130px; white-space: nowrap;">Damage Ded (KES)</th>
                 <th style="min-width: 110px; white-space: nowrap;">Net Pay</th>
                 <th style="min-width: 90px; white-space: nowrap;">Actions</th>
               </tr>
@@ -1047,9 +1071,15 @@
               Document advances disbursed to security guards and corporate staff. Approved advances are automatically deducted from monthly payroll.
             </div>
           </div>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
             <button class="btn btn-secondary" onclick="loadSalaryAdvances()">🔄 Refresh</button>
-            <button class="btn btn-primary" onclick="openIssueSalaryAdvanceModal()">+ Issue Salary Advance</button>
+            <button class="btn btn-secondary" onclick="downloadSalaryAdvanceTemplate()" title="Download official Excel template with column formatting" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
+              <span>📥</span> Download Excel Template
+            </button>
+            <button class="btn btn-primary" onclick="openUploadSalaryAdvancesModal(true)" style="display:inline-flex; align-items:center; gap:6px; background:#059669; border-color:#059669; font-weight:700;">
+              <span>📊</span> Upload Advances (Excel / CSV)
+            </button>
+            <button class="btn btn-primary" onclick="openIssueSalaryAdvanceModal()">+ Issue Advance</button>
           </div>
         </div>
 
@@ -1128,15 +1158,39 @@
 
 <!-- Tab Panel 7: Payment Schedules -->
       <section id="panel-payments" style="display:none;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h2 style="font-size:16px; font-weight:700;">Disbursement Schedules (Bank & M-Pesa)</h2>
-          <div style="display:flex; gap:12px;">
-            <button class="btn btn-secondary" onclick="exportBankScheduleExcel()">📊 Export Bank Excel</button>
-            <button class="btn btn-primary" onclick="exportMpesaScheduleExcel()">📱 Export M-Pesa Excel</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">Disbursement Schedules (Bank &amp; M-Pesa)</h2>
+            <div style="font-size:12px; color:#64748B; margin-top:3px;">
+              Manage and audit monthly employee salary disbursements. HR / Admin can place any salary on hold for any issue; held salaries are excluded from Excel exports until resolved.
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="loadPayments()" title="Reload payment status">🔄 Refresh</button>
+            <button class="btn btn-secondary" onclick="exportBankScheduleExcel()" style="display:inline-flex; align-items:center; gap:6px;">📊 Export Bank Excel</button>
+            <button class="btn btn-primary" onclick="exportMpesaScheduleExcel()" style="display:inline-flex; align-items:center; gap:6px; background:#059669; border-color:#059669;">📱 Export M-Pesa Excel</button>
           </div>
         </div>
 
-        <div class="table-container">
+        <div id="payments-recon-summary"></div>
+
+        <!-- Sub-Navigation Pills: Active Schedules vs Held Salaries -->
+        <div style="display:flex; gap:10px; margin-bottom:18px; border-bottom:1px solid #E2E8F0; padding-bottom:12px;">
+          <button type="button" id="btn-tab-payments-active" class="btn" onclick="switchPaymentsSubTab('active')" style="background:#2563EB; color:#FFF; font-weight:700; padding:8px 18px; font-size:13px; border-radius:8px;">
+            💳 Active Disbursement Schedules
+          </button>
+          <button type="button" id="btn-tab-payments-held" class="btn" onclick="switchPaymentsSubTab('held')" style="background:#F1F5F9; color:#475569; font-weight:700; padding:8px 18px; font-size:13px; border-radius:8px; display:inline-flex; align-items:center; gap:6px;">
+            <span>⏸️ Held Salaries &amp; Pay Holds</span>
+            <span id="badge-held-salaries-count" style="display:none; background:#DC2626; color:#FFF; font-size:11px; padding:2px 7px; border-radius:10px; font-weight:800;">0</span>
+          </button>
+        </div>
+
+        <!-- 1. Active Payments Table Container -->
+        <div id="payments-active-container" class="table-container">
+          <div style="padding:14px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; background:#FAFAFA;">
+            <span style="font-size:14px; font-weight:800; color:#0F172A;">Bank &amp; M-Pesa Approved Disbursement List</span>
+            <span style="font-size:12px; color:#64748B;">Ready for bank export / mobile disbursement</span>
+          </div>
           <table class="data-table">
             <thead>
               <tr>
@@ -1147,10 +1201,42 @@
                 <th>Account Number</th>
                 <th>Net Amount (KES)</th>
                 <th>Status</th>
+                <th style="min-width:110px;">Actions</th>
               </tr>
             </thead>
             <tbody id="payments-table-body">
               <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 2. Held Salaries Table Container (Handled Section) -->
+        <div id="payments-held-container" class="table-container" style="display:none;">
+          <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:16px; margin:16px 20px; font-size:13px; color:#92400E;">
+            <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+              <span>⏸️</span> Held Salaries Management Section
+            </div>
+            <div>
+              The employees listed below have had their salaries placed on <strong>HOLD</strong> by HR or the System Admin.
+              <strong>They are automatically excluded from the Bank and M-Pesa Excel export schedules.</strong>
+              Once the issue (e.g. damaged equipment, disciplinary investigation, or bank details) is resolved, click <em>"Release Hold &amp; Pay"</em> to restore them to the disbursement schedules.
+            </div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee ID</th>
+                <th>Guard Name</th>
+                <th>Payment Channel</th>
+                <th>Account / Phone</th>
+                <th>Net Amount (KES)</th>
+                <th style="min-width:240px;">Holding Reason &amp; Issue Description</th>
+                <th>Held By &amp; Date</th>
+                <th style="min-width:140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="payments-held-table-body">
+              <tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">No salaries currently on hold.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1523,18 +1609,18 @@
           </div>
         </div>
 
-        <div class="table-container">
+        <div class="table-container incidents-table-wrapper" style="max-height: calc(100vh - 280px); overflow-y: auto; overflow-x: auto;">
           <table class="data-table">
             <thead>
-              <tr>
-                <th>Ref No</th>
-                <th>Date & Time</th>
-                <th>Reporting Guard</th>
-                <th>Client Site</th>
-                <th>Incident Type</th>
-                <th>Description</th>
-                <th>Status</th>
-                <th>Actions</th>
+              <tr style="position: sticky; top: 0; z-index: 10; background: #F8FAFC;">
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 110px;">Ref No</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 120px;">Date & Time</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 140px;">Reporting Guard</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 120px;">Client Site</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 130px;">Incident Type</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 200px; max-width: 300px;">Description</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 130px;">Status</th>
+                <th style="position: sticky; top: 0; z-index: 10; background: #F8FAFC; border-bottom: 2px solid #E2E8F0; min-width: 220px;">Actions</th>
               </tr>
             </thead>
             <tbody id="incidents-table-body">
@@ -3243,6 +3329,11 @@
           <div>● Applies NSSF 6% + SHIF 2.75% + Housing Levy 1.5%</div>
           <div>● Computes progressive KRA PAYE tax bands & KES 2,400 relief</div>
           <div>● Calculates overtime multiplier rates (1.5x regular, 2.0x holiday)</div>
+          <div>● Automatically deducts approved mid-month salary advances</div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 12px;" onclick="closeRunPayrollModal(); downloadSalaryAdvanceTemplate();">📥 Download Advance Template</button>
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 12px; background:#ECFDF5; border-color:#A7F3D0; color:#065F46; font-weight:700;" onclick="closeRunPayrollModal(); openUploadSalaryAdvancesModal(true);">📊 Upload Advances Excel</button>
         </div>
       </div>
       <div class="modal-footer">
@@ -6320,19 +6411,39 @@
           </div>
           <div class="form-group">
             <label style="font-size:12px; font-weight:700;">Condition on Return *</label>
-            <select id="return-custody-condition" class="form-control" required>
+            <select id="return-custody-condition" class="form-control" onchange="handleReturnConditionChanged(this.value)" required>
               <option value="EXCELLENT">EXCELLENT</option>
               <option value="GOOD" selected>GOOD</option>
               <option value="FAIR">FAIR</option>
               <option value="POOR">POOR</option>
-              <option value="DAMAGED">DAMAGED</option>
+              <option value="DAMAGED">DAMAGED (Deduct Penalty from Salary)</option>
             </select>
+          </div>
+        </div>
+
+        <!-- Damage Assessment & Salary Deduction Group (Auto-shown when condition is DAMAGED or POOR) -->
+        <div id="return-damage-deduction-box" style="display:none; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:10px; padding:14px; margin-bottom:16px;">
+          <div style="font-size:13px; font-weight:700; color:#991B1B; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+            <span>⚠️</span> Property Damage Detected — Apply Salary Deduction
+          </div>
+          <p style="font-size:11px; color:#B91C1C; margin:0 0 10px 0;">
+            This belonging is marked as damaged. Enter the damage repair/replacement fee to be automatically deducted from the guard's monthly salary.
+          </p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:6px;">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#7F1D1D; display:block; margin-bottom:4px;">Damage Penalty Amount (KES) *</label>
+              <input type="number" id="return-damage-deduction-amount" class="form-control" placeholder="e.g. 1500" min="0" step="any" style="border-color:#F87171;">
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#7F1D1D; display:block; margin-bottom:4px;">Damage Description / Assessment</label>
+              <input type="text" id="return-damage-description" class="form-control" placeholder="e.g. Broken antenna / torn uniform" style="border-color:#F87171;">
+            </div>
           </div>
         </div>
 
         <div class="form-group" style="margin-bottom:16px;">
           <label style="font-size:12px; font-weight:700;">Receiving Officer Notes / Verification Details *</label>
-          <textarea id="return-custody-notes" class="form-control" rows="3" placeholder="e.g. Returned to central inventory store, inspected and functional." required></textarea>
+          <textarea id="return-custody-notes" class="form-control" rows="3" placeholder="e.g. Returned to central inventory store, inspected." required></textarea>
         </div>
 
         <div class="modal-footer" style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
@@ -6629,8 +6740,213 @@
       </form>
     </div>
   </div>
-</body>
-</html>
+
+  <!-- Modal: Bulk Upload Salary Advances via Excel / CSV -->
+  <div id="modal-upload-advances-excel" class="modal-overlay" style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;" onclick="if(event.target === this) closeUploadSalaryAdvancesModal()">
+    <div class="modal-content" style="max-width: 680px; width:100%; margin:auto; background:#FFFFFF; border-radius:16px; padding:28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+      
+      <!-- Modal Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:16px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:10px; background:#ECFDF5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:22px;">📊</div>
+          <div>
+            <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">Bulk Upload Salary Advances (Excel / CSV)</h3>
+            <div style="font-size:12px; color:#64748B; margin-top:2px;">Upload spreadsheet of employees who received mid-month salary advances for automatic payroll deduction.</div>
+          </div>
+        </div>
+        <button onclick="closeUploadSalaryAdvancesModal()" style="background:none; border:none; font-size:20px; color:#94A3B8; cursor:pointer; padding:4px 8px;">✕</button>
+      </div>
+
+      <!-- Instruction / Template Banner -->
+      <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:14px 18px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+          <div style="font-size:13px; font-weight:700; color:#166534; display:flex; align-items:center; gap:6px;">
+            <span>💡</span> Need the Excel template format?
+          </div>
+          <div style="font-size:12px; color:#15803D; margin-top:2px;">
+            Download the official CorpSec template with pre-filled sample employees and column headers.
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="downloadSalaryAdvanceTemplate()" style="font-size:12px; font-weight:700; padding:6px 14px; background:#FFFFFF; border-color:#86EFAC; color:#166534; display:inline-flex; align-items:center; gap:6px;">
+          <span>📥</span> Download Template (.xlsx)
+        </button>
+      </div>
+
+      <form id="form-upload-salary-advances" onsubmit="handleSalaryAdvancesExcelUpload(event)">
+        
+        <!-- Period and Default Payment Method Row -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Target Payroll Period for Deduction</label>
+            <select id="upload-adv-payroll-period-id" class="form-control" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;">
+              <option value="">Auto-detect by disbursement dates</option>
+            </select>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Period when advance will be deducted from net pay.</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Default Payment Method</label>
+            <select id="upload-adv-default-method" class="form-control" style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;">
+              <option value="M-PESA">📱 M-Pesa</option>
+              <option value="BANK">🏛️ Bank Transfer</option>
+              <option value="CASH">💵 Cash / Petty Cash</option>
+            </select>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Used if payment method column is empty in Excel.</div>
+          </div>
+        </div>
+
+        <!-- File Upload Dropzone -->
+        <div style="margin-bottom:20px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select or Drop Excel / CSV File *</label>
+          <div id="adv-upload-dropzone" style="border:2px dashed #94A3B8; border-radius:12px; padding:24px 20px; text-align:center; background:#F8FAFC; cursor:pointer; transition:all 0.2s;" onclick="triggerAdvFilePicker(event)">
+            <div style="font-size:36px; margin-bottom:8px;">📁</div>
+            <div style="font-size:15px; font-weight:700; color:#0F172A; margin-bottom:4px;">Retrieve Advance File from Your Computer</div>
+            <div style="font-size:12px; color:#64748B; margin-bottom:14px;">Supports Microsoft Excel (<code>.xlsx</code>, <code>.xls</code>) and CSV (<code>.csv</code>) files</div>
+            <button type="button" class="btn btn-primary" onclick="triggerAdvFilePicker(event)" style="background:#2563EB; border-color:#2563EB; font-weight:700; padding:10px 20px; font-size:13px; display:inline-flex; align-items:center; gap:8px;">
+              📂 Browse &amp; Retrieve File from Computer
+            </button>
+            <input type="file" id="adv-excel-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleAdvFileSelected(event)">
+          </div>
+
+          <!-- File Info Pill (Shown after file selected) -->
+          <div id="adv-selected-file-pill" style="display:none; margin-top:10px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 14px; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:20px;">📄</span>
+              <div>
+                <div id="adv-selected-file-name" style="font-size:13px; font-weight:700; color:#1E40AF;">filename.xlsx</div>
+                <div id="adv-selected-file-size" style="font-size:11px; color:#60A5FA;">15.4 KB</div>
+              </div>
+            </div>
+            <button type="button" onclick="clearSelectedAdvFile(event)" style="background:none; border:none; color:#EF4444; font-size:16px; cursor:pointer; font-weight:700;" title="Remove file">✕</button>
+          </div>
+        </div>
+
+        <!-- Results / Error Summary Container (Hidden by default) -->
+        <div id="adv-upload-results-box" style="display:none; margin-bottom:20px;"></div>
+
+        <!-- Submit Footer -->
+        <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #E2E8F0; padding-top:16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeUploadSalaryAdvancesModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-upload-advances" style="background:#059669; border-color:#059669; font-weight:700; padding:10px 20px;">
+            📤 Upload &amp; Record Advances
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Modal: Record Property / Belonging Damage Deduction -->
+  <div id="modal-record-damage-deduction" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeRecordDamageDeductionModal()">
+    <div class="modal-content" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⚠️ Record Property Damage Salary Deduction</h3>
+        <button onclick="closeRecordDamageDeductionModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-record-damage-deduction" onsubmit="handleRecordDamageDeductionSubmit(event)">
+        <input type="hidden" id="damage-ded-guard-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Guard / Employee *</label>
+            <div id="damage-ded-guard-name-display" style="font-weight:700; color:#1E3A8A; background:#EFF6FF; padding:10px 14px; border-radius:8px; border:1px solid #BFDBFE;">-</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damaged Item / Belonging Name *</label>
+            <input type="text" id="damage-ded-item-name" class="form-control" placeholder="e.g. Motorola Two-Way Radio / Baton / Uniform" required>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damage Deduction (KES) *</label>
+              <input type="number" id="damage-ded-amount" class="form-control" placeholder="e.g. 1500" min="1" step="any" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Incident Date *</label>
+              <input type="date" id="damage-ded-date" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damage Assessment Description *</label>
+            <textarea id="damage-ded-description" class="form-control" rows="2" placeholder="e.g. Antenna broken, casing damaged beyond repair upon return" required></textarea>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Target Payroll Period for Deduction</label>
+            <select id="damage-ded-period-select" class="form-control">
+              <option value="">Auto-deduct in next active payroll run</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRecordDamageDeductionModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-damage-deduction" style="background:#DC2626; border-color:#DC2626;">⚠️ Save &amp; Deduct in Salary</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Hold Salary Payment (Payment Schedules) -->
+  <div id="modal-hold-salary" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeHoldSalaryModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⏸️ Hold Employee Monthly Salary</h3>
+        <button onclick="closeHoldSalaryModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-hold-salary" onsubmit="handleHoldSalarySubmit(event)">
+        <input type="hidden" id="hold-salary-record-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:14px; font-size:13px; color:#92400E;">
+            <div style="font-weight:700; margin-bottom:4px;">Disbursement Hold Notice:</div>
+            Holding this salary will <strong>immediately exclude this employee from Bank and M-Pesa Excel payment exports</strong>. The funds remain protected until the issue is cleared.
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">EMPLOYEE DETAILS</div>
+            <div id="hold-salary-guard-info" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:3px;">-</div>
+            <div id="hold-salary-amount-info" style="font-size:13px; font-weight:700; color:#2563EB; margin-top:2px;">-</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Reason for Salary Holding *</label>
+            <textarea id="hold-salary-reason" class="form-control" rows="3" placeholder="Specify reason: e.g. Pending equipment damage reconciliation / Disciplinary case under investigation / Bank account verification issue..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeHoldSalaryModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-hold-salary" style="background:#D97706; border-color:#D97706; font-weight:700;">⏸️ Confirm Salary Hold</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Release Salary Hold (Payment Schedules) -->
+  <div id="modal-release-salary-hold" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeReleaseSalaryHoldModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">✅ Release Salary Hold &amp; Pay Employee</h3>
+        <button onclick="closeReleaseSalaryHoldModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-release-salary-hold" onsubmit="handleReleaseSalaryHoldSubmit(event)">
+        <input type="hidden" id="release-salary-record-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:14px; font-size:13px; color:#166534;">
+            <div style="font-weight:700; margin-bottom:4px;">Issue Resolution &amp; Payment Approval:</div>
+            Releasing this hold will immediately restore the employee to the <strong>active Bank / M-Pesa disbursement schedule</strong>, allowing them to be paid and included in subsequent Excel exports.
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">EMPLOYEE DETAILS</div>
+            <div id="release-salary-guard-info" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:3px;">-</div>
+            <div id="release-salary-amount-info" style="font-size:13px; font-weight:700; color:#059669; margin-top:2px;">-</div>
+            <div id="release-salary-current-reason" style="font-size:12px; color:#92400E; margin-top:6px; background:#FEF3C7; padding:6px 10px; border-radius:6px;">-</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Resolution Notes / Clearance Approval</label>
+            <textarea id="release-salary-resolution-notes" class="form-control" rows="2" placeholder="e.g. Missing equipment replaced, disciplinary inquiry cleared, approved for full bank disbursement."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeReleaseSalaryHoldModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-release-salary" style="background:#059669; border-color:#059669; font-weight:700;">✅ Release Hold &amp; Approve for Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 
   <!-- ======================================================== -->
   <!-- MODALS FOR EXPENSES & PETTY CASH                        -->
@@ -6884,3 +7200,182 @@
       </form>
     </div>
   </div>
+
+  <!-- INLINE FALLBACK SCRIPT FOR SALARY ADVANCES FILE RETRIEVAL & UPLOAD -->
+  <script>
+    window.triggerAdvFilePicker = function(e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+      const fileInput = document.getElementById('adv-excel-file-input');
+      if (fileInput) {
+        fileInput.click();
+      }
+    };
+
+    window.openUploadSalaryAdvancesModal = function(autoTriggerPicker) {
+      const modal = document.getElementById('modal-upload-advances-excel');
+      if (!modal) return;
+
+      const form = document.getElementById('form-upload-salary-advances');
+      if (form) form.reset();
+
+      const filePill = document.getElementById('adv-selected-file-pill');
+      if (filePill) filePill.style.display = 'none';
+
+      const resultsBox = document.getElementById('adv-upload-results-box');
+      if (resultsBox) {
+        resultsBox.style.display = 'none';
+        resultsBox.innerHTML = '';
+      }
+
+      const dropzone = document.getElementById('adv-upload-dropzone');
+      if (dropzone) dropzone.style.display = 'block';
+
+      const btn = document.getElementById('btn-submit-upload-advances');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '📤 Upload &amp; Record Advances';
+      }
+
+      if (typeof populateUploadPeriodDropdown === 'function') {
+        populateUploadPeriodDropdown();
+      }
+
+      modal.style.display = 'flex';
+
+      if (autoTriggerPicker) {
+        setTimeout(function() {
+          window.triggerAdvFilePicker();
+        }, 150);
+      }
+    };
+
+    window.closeUploadSalaryAdvancesModal = function() {
+      const modal = document.getElementById('modal-upload-advances-excel');
+      if (modal) modal.style.display = 'none';
+    };
+
+    // Damage Deduction & Salary Hold Fallback Stubs
+    window.handleReturnConditionChanged = window.handleReturnConditionChanged || function(val) {
+      const box = document.getElementById('return-damage-deduction-box');
+      if (box) box.style.display = (val === 'DAMAGED' || val === 'POOR') ? 'block' : 'none';
+    };
+
+    window.closeRecordDamageDeductionModal = window.closeRecordDamageDeductionModal || function() {
+      const modal = document.getElementById('modal-record-damage-deduction');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.openRecordDamageDeductionModal = window.openRecordDamageDeductionModal || async function(guardId, guardName, initialItemName, initialDesc, initialDate) {
+      const modal = document.getElementById('modal-record-damage-deduction');
+      if (!modal) return;
+      const form = document.getElementById('form-record-damage-deduction');
+      if (form) form.reset();
+      document.getElementById('damage-ded-guard-id').value = guardId;
+      const nameEl = document.getElementById('damage-ded-guard-name-display');
+      if (nameEl) nameEl.innerText = guardName || ('Guard #' + guardId);
+      document.getElementById('damage-ded-date').value = initialDate || new Date().toISOString().substring(0, 10);
+      if (initialItemName) {
+        const itemEl = document.getElementById('damage-ded-item-name');
+        if (itemEl) itemEl.value = initialItemName;
+      }
+      if (initialDesc) {
+        const descEl = document.getElementById('damage-ded-description');
+        if (descEl) descEl.value = initialDesc;
+      }
+      modal.style.display = 'flex';
+    };
+
+    window.handleRecordDamageDeductionSubmit = window.handleRecordDamageDeductionSubmit || async function(event) {
+      event.preventDefault();
+      const guardId = parseInt(document.getElementById('damage-ded-guard-id').value);
+      const itemName = document.getElementById('damage-ded-item-name').value.trim();
+      const amount = parseFloat(document.getElementById('damage-ded-amount').value);
+      const incidentDateVal = document.getElementById('damage-ded-date').value;
+      const incidentDate = incidentDateVal || new Date().toISOString().substring(0, 10);
+      const desc = document.getElementById('damage-ded-description').value.trim();
+      const periodIdVal = document.getElementById('damage-ded-period-select').value;
+      const periodId = periodIdVal ? parseInt(periodIdVal) : null;
+
+      const btn = document.getElementById('btn-submit-damage-deduction');
+      if (btn) { btn.disabled = true; btn.innerText = 'Saving Deduction...'; }
+
+      try {
+        const res = await apiFetch('/assets/damage-deductions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guard_id: guardId,
+            item_name: itemName,
+            damage_description: desc,
+            deduction_amount: amount,
+            incident_date: incidentDate,
+            payroll_period_id: periodId
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to record damage deduction');
+
+        if (typeof showToast === 'function') {
+          showToast('✅ Recorded damage deduction of KES ' + amount.toLocaleString() + ' for ' + itemName + '. It will be deducted from salary.', 'success');
+        } else {
+          alert('Recorded damage deduction of KES ' + amount.toLocaleString() + ' for ' + itemName);
+        }
+        window.closeRecordDamageDeductionModal();
+        if (typeof viewGuardFile === 'function') viewGuardFile(guardId);
+      } catch (err) {
+        console.error('handleRecordDamageDeductionSubmit error:', err);
+        if (typeof showToast === 'function') showToast(err.message || 'Error recording damage deduction', 'danger');
+        else alert('Error: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '⚠️ Save & Deduct in Salary'; }
+      }
+    };
+
+    window.openHoldSalaryModal = window.openHoldSalaryModal || function(recordId, guardName, empNo, amount, defaultReason) {
+      const modal = document.getElementById('modal-hold-salary');
+      if (!modal) return;
+      const form = document.getElementById('form-hold-salary');
+      if (form) form.reset();
+      document.getElementById('hold-salary-record-id').value = recordId;
+      const guardInfo = document.getElementById('hold-salary-guard-info');
+      if (guardInfo) guardInfo.innerText = `${guardName} (${empNo})`;
+      const amtInfo = document.getElementById('hold-salary-amount-info');
+      if (amtInfo) amtInfo.innerText = `Net Salary to Hold: KES ${Number(amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+      if (defaultReason) {
+        const reasonEl = document.getElementById('hold-salary-reason');
+        if (reasonEl) reasonEl.value = defaultReason;
+      }
+      modal.style.display = 'flex';
+    };
+
+    window.closeHoldSalaryModal = window.closeHoldSalaryModal || function() {
+      const modal = document.getElementById('modal-hold-salary');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.closeReleaseSalaryHoldModal = window.closeReleaseSalaryHoldModal || function() {
+      const modal = document.getElementById('modal-release-salary-hold');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.switchPaymentsSubTab = window.switchPaymentsSubTab || function(tab) {
+      const act = document.getElementById('payments-active-container');
+      const hld = document.getElementById('payments-held-container');
+      const bAct = document.getElementById('btn-tab-payments-active');
+      const bHld = document.getElementById('btn-tab-payments-held');
+      if (tab === 'held') {
+        if (act) act.style.display = 'none';
+        if (hld) hld.style.display = 'block';
+        if (bAct) { bAct.style.background = '#F1F5F9'; bAct.style.color = '#475569'; }
+        if (bHld) { bHld.style.background = '#D97706'; bHld.style.color = '#FFF'; }
+      } else {
+        if (act) act.style.display = 'block';
+        if (hld) hld.style.display = 'none';
+        if (bAct) { bAct.style.background = '#2563EB'; bAct.style.color = '#FFF'; }
+        if (bHld) { bHld.style.background = '#F1F5F9'; bHld.style.color = '#475569'; }
+      }
+    };
+  </script>
+</body>
+</html>

@@ -27,145 +27,188 @@ def get_db():
 
 
 def sync_db_schema():
-    """Ensure all required columns exist in SQLite database."""
-    import sqlite3
+    """Ensure all required columns exist in SQLite and MySQL databases."""
     import os
 
-    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-    if not os.path.exists(db_path) or db_path.startswith(":memory:"):
-        return
+    if settings.DATABASE_URL.startswith("sqlite"):
+        import sqlite3
+        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+        if os.path.exists(db_path) and not db_path.startswith(":memory:"):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
 
+                # 1. Guards table columns check
+                cursor.execute("PRAGMA table_info(guards);")
+                guard_cols = [c[1] for c in cursor.fetchall()]
+                if guard_cols and "primary_site_id" not in guard_cols:
+                    cursor.execute("ALTER TABLE guards ADD COLUMN primary_site_id INTEGER;")
+                    if "site_id" in guard_cols:
+                        cursor.execute("UPDATE guards SET primary_site_id = site_id WHERE primary_site_id IS NULL;")
+
+                # 2. Shifts table columns check
+                cursor.execute("PRAGMA table_info(shifts);")
+                shift_cols = [c[1] for c in cursor.fetchall()]
+                if shift_cols and "is_night_shift" not in shift_cols:
+                    cursor.execute("ALTER TABLE shifts ADD COLUMN is_night_shift BOOLEAN DEFAULT 0;")
+
+                # 3. Attendance table columns check
+                cursor.execute("PRAGMA table_info(attendance);")
+                att_cols = [c[1] for c in cursor.fetchall()]
+                if att_cols and "notes" not in att_cols:
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN notes TEXT;")
+
+                # 4. Sites table columns check
+                cursor.execute("PRAGMA table_info(sites);")
+                site_cols = [c[1] for c in cursor.fetchall()]
+                if site_cols:
+                    if "status" not in site_cols:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN status VARCHAR DEFAULT 'ACTIVE';")
+                    if "region_id" not in site_cols:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN region_id INTEGER;")
+                    if "basic_salary" not in site_cols:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN basic_salary FLOAT DEFAULT 15000.0;")
+                    if "supervisor_id" not in site_cols:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN supervisor_id INTEGER;")
+
+                # Guards additional columns check
+                if guard_cols:
+                    if "basic_salary" not in guard_cols:
+                        cursor.execute("ALTER TABLE guards ADD COLUMN basic_salary FLOAT;")
+                    if "is_reliever" not in guard_cols:
+                        cursor.execute("ALTER TABLE guards ADD COLUMN is_reliever BOOLEAN DEFAULT 0;")
+
+                    # If existing SQLite database has NOT NULL on basic_salary, migrate table schema
+                    cursor.execute("PRAGMA table_info(guards);")
+                    info = cursor.fetchall()
+                    basic_sal_col = next((c for c in info if c[1] == "basic_salary"), None)
+                    if basic_sal_col and basic_sal_col[3] == 1:
+                        cursor.execute("PRAGMA foreign_keys=OFF;")
+                        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='guards';")
+                        sql_row = cursor.fetchone()
+                        if sql_row and "basic_salary FLOAT NOT NULL" in sql_row[0]:
+                            new_sql = sql_row[0].replace("basic_salary FLOAT NOT NULL", "basic_salary FLOAT")
+                            cursor.execute("CREATE TABLE guards_migration_backup AS SELECT * FROM guards;")
+                            cursor.execute("DROP TABLE guards;")
+                            cursor.execute(new_sql)
+                            cursor.execute("INSERT INTO guards SELECT * FROM guards_migration_backup;")
+                            cursor.execute("DROP TABLE guards_migration_backup;")
+                        cursor.execute("PRAGMA foreign_keys=ON;")
+
+                # 5. Payroll Errors table columns check
+                cursor.execute("PRAGMA table_info(payroll_errors);")
+                err_cols = [c[1] for c in cursor.fetchall()]
+                if err_cols:
+                    if "error_code" not in err_cols:
+                        cursor.execute("ALTER TABLE payroll_errors ADD COLUMN error_code VARCHAR;")
+                    if "error_message" not in err_cols:
+                        cursor.execute("ALTER TABLE payroll_errors ADD COLUMN error_message TEXT;")
+                    if "resolution_notes" not in err_cols:
+                        cursor.execute("ALTER TABLE payroll_errors ADD COLUMN resolution_notes TEXT;")
+
+                # 6. Payroll Records table columns check
+                cursor.execute("PRAGMA table_info(payroll_records);")
+                rec_cols = [c[1] for c in cursor.fetchall()]
+                if rec_cols:
+                    if "employer_nssf_deduction" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN employer_nssf_deduction FLOAT DEFAULT 0.0;")
+                    if "employer_housing_levy_deduction" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN employer_housing_levy_deduction FLOAT DEFAULT 0.0;")
+                    if "paye_breakdown_json" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN paye_breakdown_json TEXT;")
+                    if "off_day_deduction" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN off_day_deduction FLOAT DEFAULT 0.0;")
+                    if "reliever_earnings" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN reliever_earnings FLOAT DEFAULT 0.0;")
+                    if "damage_deduction" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN damage_deduction FLOAT DEFAULT 0.0;")
+                    if "is_on_hold" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN is_on_hold BOOLEAN DEFAULT 0;")
+                    if "hold_reason" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN hold_reason TEXT;")
+                    if "held_by" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN held_by VARCHAR(255);")
+                    if "held_at" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN held_at DATETIME;")
+                    if "released_by" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN released_by VARCHAR(255);")
+                    if "released_at" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN released_at DATETIME;")
+                    if "release_notes" not in rec_cols:
+                        cursor.execute("ALTER TABLE payroll_records ADD COLUMN release_notes TEXT;")
+
+                # 7. Supervisor feature: supervisor_id on guards
+                cursor.execute("PRAGMA table_info(guards);")
+                guard_cols_v2 = [c[1] for c in cursor.fetchall()]
+                if guard_cols_v2 and "supervisor_id" not in guard_cols_v2:
+                    cursor.execute("ALTER TABLE guards ADD COLUMN supervisor_id INTEGER;")
+
+                # 8. Asset allocations columns check
+                cursor.execute("PRAGMA table_info(asset_allocations);")
+                alloc_cols = [c[1] for c in cursor.fetchall()]
+                if alloc_cols and "staff_id" not in alloc_cols:
+                    cursor.execute("ALTER TABLE asset_allocations ADD COLUMN staff_id INTEGER;")
+
+                # 9. Assets columns check
+                cursor.execute("PRAGMA table_info(assets);")
+                asset_cols = [c[1] for c in cursor.fetchall()]
+                if asset_cols and "assigned_to_staff_id" not in asset_cols:
+                    cursor.execute("ALTER TABLE assets ADD COLUMN assigned_to_staff_id INTEGER;")
+
+                # 10. Inventory transactions columns check
+                cursor.execute("PRAGMA table_info(inventory_transactions);")
+                inv_cols = [c[1] for c in cursor.fetchall()]
+                if inv_cols and "issued_to_staff_id" not in inv_cols:
+                    cursor.execute("ALTER TABLE inventory_transactions ADD COLUMN issued_to_staff_id INTEGER;")
+
+                # 11. Super Guard & Geofencing columns
+                cursor.execute("PRAGMA table_info(guards);")
+                guard_cols_v3 = [c[1] for c in cursor.fetchall()]
+                if guard_cols_v3 and "is_super_guard" not in guard_cols_v3:
+                    cursor.execute("ALTER TABLE guards ADD COLUMN is_super_guard BOOLEAN DEFAULT 0;")
+
+                cursor.execute("PRAGMA table_info(sites);")
+                site_cols_v2 = [c[1] for c in cursor.fetchall()]
+                if site_cols_v2:
+                    if "latitude" not in site_cols_v2:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN latitude FLOAT;")
+                    if "longitude" not in site_cols_v2:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN longitude FLOAT;")
+                    if "geofence_radius" not in site_cols_v2:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN geofence_radius FLOAT DEFAULT 200.0;")
+                    if "super_guard_id" not in site_cols_v2:
+                        cursor.execute("ALTER TABLE sites ADD COLUMN super_guard_id INTEGER;")
+
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"SQLite schema sync notice: {e}")
+
+    # Generic engine-level column synchronization (Supports MySQL & PostgreSQL)
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # 1. Guards table columns check
-        cursor.execute("PRAGMA table_info(guards);")
-        guard_cols = [c[1] for c in cursor.fetchall()]
-        if guard_cols and "primary_site_id" not in guard_cols:
-            cursor.execute("ALTER TABLE guards ADD COLUMN primary_site_id INTEGER;")
-            if "site_id" in guard_cols:
-                cursor.execute("UPDATE guards SET primary_site_id = site_id WHERE primary_site_id IS NULL;")
-
-        # 2. Shifts table columns check
-        cursor.execute("PRAGMA table_info(shifts);")
-        shift_cols = [c[1] for c in cursor.fetchall()]
-        if shift_cols and "is_night_shift" not in shift_cols:
-            cursor.execute("ALTER TABLE shifts ADD COLUMN is_night_shift BOOLEAN DEFAULT 0;")
-
-        # 3. Attendance table columns check
-        cursor.execute("PRAGMA table_info(attendance);")
-        att_cols = [c[1] for c in cursor.fetchall()]
-        if att_cols and "notes" not in att_cols:
-            cursor.execute("ALTER TABLE attendance ADD COLUMN notes TEXT;")
-
-        # 4. Sites table columns check
-        cursor.execute("PRAGMA table_info(sites);")
-        site_cols = [c[1] for c in cursor.fetchall()]
-        if site_cols:
-            if "status" not in site_cols:
-                cursor.execute("ALTER TABLE sites ADD COLUMN status VARCHAR DEFAULT 'ACTIVE';")
-            if "region_id" not in site_cols:
-                cursor.execute("ALTER TABLE sites ADD COLUMN region_id INTEGER;")
-            if "basic_salary" not in site_cols:
-                cursor.execute("ALTER TABLE sites ADD COLUMN basic_salary FLOAT DEFAULT 15000.0;")
-            if "supervisor_id" not in site_cols:
-                cursor.execute("ALTER TABLE sites ADD COLUMN supervisor_id INTEGER;")
-
-        # Guards additional columns check
-        if guard_cols:
-            if "basic_salary" not in guard_cols:
-                cursor.execute("ALTER TABLE guards ADD COLUMN basic_salary FLOAT;")
-            if "is_reliever" not in guard_cols:
-                cursor.execute("ALTER TABLE guards ADD COLUMN is_reliever BOOLEAN DEFAULT 0;")
-
-            # If existing SQLite database has NOT NULL on basic_salary, migrate table schema
-            cursor.execute("PRAGMA table_info(guards);")
-            info = cursor.fetchall()
-            basic_sal_col = next((c for c in info if c[1] == "basic_salary"), None)
-            if basic_sal_col and basic_sal_col[3] == 1:
-                cursor.execute("PRAGMA foreign_keys=OFF;")
-                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='guards';")
-                sql_row = cursor.fetchone()
-                if sql_row and "basic_salary FLOAT NOT NULL" in sql_row[0]:
-                    new_sql = sql_row[0].replace("basic_salary FLOAT NOT NULL", "basic_salary FLOAT")
-                    cursor.execute("CREATE TABLE guards_migration_backup AS SELECT * FROM guards;")
-                    cursor.execute("DROP TABLE guards;")
-                    cursor.execute(new_sql)
-                    cursor.execute("INSERT INTO guards SELECT * FROM guards_migration_backup;")
-                    cursor.execute("DROP TABLE guards_migration_backup;")
-                cursor.execute("PRAGMA foreign_keys=ON;")
-
-        # 5. Payroll Errors table columns check
-        cursor.execute("PRAGMA table_info(payroll_errors);")
-        err_cols = [c[1] for c in cursor.fetchall()]
-        if err_cols:
-            if "error_code" not in err_cols:
-                cursor.execute("ALTER TABLE payroll_errors ADD COLUMN error_code VARCHAR;")
-            if "error_message" not in err_cols:
-                cursor.execute("ALTER TABLE payroll_errors ADD COLUMN error_message TEXT;")
-            if "resolution_notes" not in err_cols:
-                cursor.execute("ALTER TABLE payroll_errors ADD COLUMN resolution_notes TEXT;")
-
-        # 6. Payroll Records table columns check
-        cursor.execute("PRAGMA table_info(payroll_records);")
-        rec_cols = [c[1] for c in cursor.fetchall()]
-        if rec_cols:
-            if "employer_nssf_deduction" not in rec_cols:
-                cursor.execute("ALTER TABLE payroll_records ADD COLUMN employer_nssf_deduction FLOAT DEFAULT 0.0;")
-            if "employer_housing_levy_deduction" not in rec_cols:
-                cursor.execute("ALTER TABLE payroll_records ADD COLUMN employer_housing_levy_deduction FLOAT DEFAULT 0.0;")
-            if "paye_breakdown_json" not in rec_cols:
-                cursor.execute("ALTER TABLE payroll_records ADD COLUMN paye_breakdown_json TEXT;")
-            if "off_day_deduction" not in rec_cols:
-                cursor.execute("ALTER TABLE payroll_records ADD COLUMN off_day_deduction FLOAT DEFAULT 0.0;")
-            if "reliever_earnings" not in rec_cols:
-                cursor.execute("ALTER TABLE payroll_records ADD COLUMN reliever_earnings FLOAT DEFAULT 0.0;")
-
-        # 7. Supervisor feature: supervisor_id on guards
-        cursor.execute("PRAGMA table_info(guards);")
-        guard_cols_v2 = [c[1] for c in cursor.fetchall()]
-        if guard_cols_v2 and "supervisor_id" not in guard_cols_v2:
-            cursor.execute("ALTER TABLE guards ADD COLUMN supervisor_id INTEGER;")
-
-        # 8. Asset allocations columns check
-        cursor.execute("PRAGMA table_info(asset_allocations);")
-        alloc_cols = [c[1] for c in cursor.fetchall()]
-        if alloc_cols and "staff_id" not in alloc_cols:
-            cursor.execute("ALTER TABLE asset_allocations ADD COLUMN staff_id INTEGER;")
-
-        # 9. Assets columns check
-        cursor.execute("PRAGMA table_info(assets);")
-        asset_cols = [c[1] for c in cursor.fetchall()]
-        if asset_cols and "assigned_to_staff_id" not in asset_cols:
-            cursor.execute("ALTER TABLE assets ADD COLUMN assigned_to_staff_id INTEGER;")
-
-        # 10. Inventory transactions columns check
-        cursor.execute("PRAGMA table_info(inventory_transactions);")
-        inv_cols = [c[1] for c in cursor.fetchall()]
-        if inv_cols and "issued_to_staff_id" not in inv_cols:
-            cursor.execute("ALTER TABLE inventory_transactions ADD COLUMN issued_to_staff_id INTEGER;")
-
-        # 11. Super Guard & Geofencing columns
-        cursor.execute("PRAGMA table_info(guards);")
-        guard_cols_v3 = [c[1] for c in cursor.fetchall()]
-        if guard_cols_v3 and "is_super_guard" not in guard_cols_v3:
-            cursor.execute("ALTER TABLE guards ADD COLUMN is_super_guard BOOLEAN DEFAULT 0;")
-
-        cursor.execute("PRAGMA table_info(sites);")
-        site_cols_v2 = [c[1] for c in cursor.fetchall()]
-        if site_cols_v2:
-            if "latitude" not in site_cols_v2:
-                cursor.execute("ALTER TABLE sites ADD COLUMN latitude FLOAT;")
-            if "longitude" not in site_cols_v2:
-                cursor.execute("ALTER TABLE sites ADD COLUMN longitude FLOAT;")
-            if "geofence_radius" not in site_cols_v2:
-                cursor.execute("ALTER TABLE sites ADD COLUMN geofence_radius FLOAT DEFAULT 200.0;")
-            if "super_guard_id" not in site_cols_v2:
-                cursor.execute("ALTER TABLE sites ADD COLUMN super_guard_id INTEGER;")
-
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"Database schema sync notice: {e}")
+        from sqlalchemy import inspect as sa_inspect, text
+        insp = sa_inspect(engine)
+        existing_tables = insp.get_table_names()
+        if "payroll_records" in existing_tables:
+            existing_cols = [c["name"] for c in insp.get_columns("payroll_records")]
+            cols_to_add = [
+                ("damage_deduction", "FLOAT DEFAULT 0.0"),
+                ("is_on_hold", "BOOLEAN DEFAULT 0"),
+                ("hold_reason", "TEXT"),
+                ("held_by", "VARCHAR(255)"),
+                ("held_at", "DATETIME"),
+                ("released_by", "VARCHAR(255)"),
+                ("released_at", "DATETIME"),
+                ("release_notes", "TEXT")
+            ]
+            with engine.connect() as db_conn:
+                for col_name, col_def in cols_to_add:
+                    if col_name not in existing_cols:
+                        try:
+                            db_conn.execute(text(f"ALTER TABLE payroll_records ADD COLUMN {col_name} {col_def};"))
+                            db_conn.commit()
+                        except Exception as ce:
+                            print(f"Notice adding column {col_name} to payroll_records: {ce}")
+    except Exception as ge:
+        print(f"Engine-level schema sync notice: {ge}")
 

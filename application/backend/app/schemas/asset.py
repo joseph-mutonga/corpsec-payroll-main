@@ -183,6 +183,9 @@ class AssetReturnRequest(BaseModel):
     return_date: date = Field(default_factory=date.today)
     condition_on_return: str = "GOOD"
     notes: Optional[str] = None
+    damage_deduction_amount: Optional[float] = 0.0
+    damage_description: Optional[str] = None
+    payroll_period_id: Optional[int] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -401,5 +404,43 @@ class InventoryTransactionResponse(BaseModel):
     @computed_field
     def transaction_date(self) -> datetime:
         return self.created_at
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssetDamageDeductionCreate(BaseModel):
+    guard_id: int
+    item_name: str
+    damage_description: str
+    deduction_amount: float = Field(..., gt=0, description="Penalty or repair/replacement cost to deduct from salary")
+    item_tag: Optional[str] = None
+    asset_id: Optional[int] = None
+    inventory_item_id: Optional[int] = None
+    allocation_id: Optional[int] = None
+    incident_date: Optional[date] = Field(default_factory=date.today)
+    payroll_period_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class AssetDamageDeductionResponse(BaseModel):
+    id: int
+    guard_id: int
+    guard_name: Optional[str] = None
+    employee_number: Optional[str] = None
+    asset_id: Optional[int] = None
+    inventory_item_id: Optional[int] = None
+    allocation_id: Optional[int] = None
+    item_name: str
+    item_tag: Optional[str] = None
+    damage_description: str
+    deduction_amount: float
+    incident_date: date
+    payroll_period_id: Optional[int] = None
+    payroll_period_name: Optional[str] = None
+    status: str
+    deducted_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -77,6 +77,7 @@ def build_payslip_dict(rec: PayrollRecord, guard: Guard, site: Optional[Site], p
         "unpaid_leave_deduction": getattr(rec, "unpaid_leave_deduction", 0.0),
         "off_day_deduction": getattr(rec, "off_day_deduction", 0.0),
         "salary_advance_deduction": getattr(rec, "salary_advance_deduction", 0.0),
+        "damage_deduction": getattr(rec, "damage_deduction", 0.0),
         "other_deductions": rec.other_deductions,
         "total_deductions": rec.total_deductions,
         "net_pay": rec.net_pay,

@@ -8,8 +8,10 @@ from application.backend.app.models.user import User
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.audit import AuditLog
+from application.backend.app.models.payroll import PayrollPeriod
 from application.backend.app.models.asset import (
-    AssetCategory, Asset, AssetAllocation, AssetMaintenance, InventoryItem, InventoryTransaction
+    AssetCategory, Asset, AssetAllocation, AssetMaintenance, InventoryItem, InventoryTransaction,
+    AssetDamageDeduction
 )
 from application.backend.app.schemas.asset import (
     AssetCategoryCreate, AssetCategoryResponse,
@@ -17,7 +19,8 @@ from application.backend.app.schemas.asset import (
     AssetAllocationCreate, AssetReturnRequest, AssetAllocationResponse,
     AssetMaintenanceCreate, AssetMaintenanceResponse,
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
-    InventoryTransactionCreate, InventoryTransactionResponse
+    InventoryTransactionCreate, InventoryTransactionResponse,
+    AssetDamageDeductionCreate, AssetDamageDeductionResponse
 )
 
 router = APIRouter(prefix="/assets", tags=["Company Assets & Inventory"])
@@ -387,6 +390,27 @@ def return_allocation_by_id(
         alloc.asset.location_branch = "Head Office Logistics"
         alloc.asset.updated_at = datetime.datetime.now()
 
+    # Automatically create salary damage deduction if item returned damaged and amount specified
+    if alloc.guard_id and payload.damage_deduction_amount and float(payload.damage_deduction_amount) > 0:
+        item_lbl = alloc.asset.name if alloc.asset else "Assigned Property"
+        tag_lbl = alloc.asset.asset_tag if alloc.asset else None
+        desc = payload.damage_description or payload.notes or f"Damage penalty for {item_lbl} returned in {payload.condition_on_return} condition"
+        dmg_ded = AssetDamageDeduction(
+            guard_id=alloc.guard_id,
+            asset_id=alloc.asset_id,
+            allocation_id=alloc.id,
+            item_name=item_lbl,
+            item_tag=tag_lbl,
+            damage_description=desc,
+            deduction_amount=float(payload.damage_deduction_amount),
+            incident_date=payload.return_date or datetime.date.today(),
+            payroll_period_id=payload.payroll_period_id,
+            status="PENDING",
+            created_by=current_user.email,
+            notes=f"Created upon property return (Condition: {payload.condition_on_return})"
+        )
+        db.add(dmg_ded)
+
     db.commit()
     db.refresh(alloc)
 
@@ -661,6 +685,93 @@ def list_inventory_transactions(
         res.issued_site_name = t.issued_site.site_name if t.issued_site else None
         out.append(res)
     return out
+
+
+# ==================== GUARD PROPERTY DAMAGE DEDUCTIONS ====================
+
+@router.post("/damage-deductions", response_model=AssetDamageDeductionResponse, status_code=status.HTTP_201_CREATED)
+def create_damage_deduction(
+    payload: AssetDamageDeductionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """Record a guard property/equipment damage deduction to be subtracted from monthly salary."""
+    guard = db.query(Guard).filter(Guard.id == payload.guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=404, detail="Guard not found")
+
+    ded = AssetDamageDeduction(
+        guard_id=payload.guard_id,
+        asset_id=payload.asset_id,
+        inventory_item_id=payload.inventory_item_id,
+        allocation_id=payload.allocation_id,
+        item_name=payload.item_name,
+        item_tag=payload.item_tag,
+        damage_description=payload.damage_description,
+        deduction_amount=round(float(payload.deduction_amount), 2),
+        incident_date=payload.incident_date or datetime.date.today(),
+        payroll_period_id=payload.payroll_period_id,
+        status="PENDING",
+        created_by=current_user.email,
+        notes=payload.notes
+    )
+    db.add(ded)
+    db.commit()
+    db.refresh(ded)
+
+    res = AssetDamageDeductionResponse.model_validate(ded)
+    res.guard_name = guard.full_name
+    res.employee_number = guard.employee_number
+    if ded.payroll_period_id and ded.payroll_period:
+        res.payroll_period_name = ded.payroll_period.period_name
+    return res
+
+
+@router.get("/damage-deductions", response_model=List[AssetDamageDeductionResponse])
+def list_damage_deductions(
+    guard_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
+    payroll_period_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """List all property & equipment damage deductions."""
+    q = db.query(AssetDamageDeduction)
+    if guard_id is not None:
+        q = q.filter(AssetDamageDeduction.guard_id == guard_id)
+    if status and status != "ALL":
+        q = q.filter(AssetDamageDeduction.status == status)
+    if payroll_period_id is not None:
+        q = q.filter(AssetDamageDeduction.payroll_period_id == payroll_period_id)
+
+    records = q.order_by(AssetDamageDeduction.id.desc()).all()
+    out = []
+    for d in records:
+        res = AssetDamageDeductionResponse.model_validate(d)
+        res.guard_name = d.guard.full_name if d.guard else None
+        res.employee_number = d.guard.employee_number if d.guard else None
+        res.payroll_period_name = d.payroll_period.period_name if d.payroll_period else None
+        out.append(res)
+    return out
+
+
+@router.post("/damage-deductions/{deduction_id}/waive")
+def waive_damage_deduction(
+    deduction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """Waive or dismiss a pending property damage deduction."""
+    d = db.query(AssetDamageDeduction).filter(AssetDamageDeduction.id == deduction_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Damage deduction record not found")
+    if d.status == "DEDUCTED":
+        raise HTTPException(status_code=400, detail="Cannot waive a deduction that has already been deducted in payroll.")
+
+    d.status = "WAIVED"
+    d.notes = f"{d.notes or ''}\nWaived by {current_user.email} on {datetime.date.today()}".strip()
+    db.commit()
+    return {"message": "Property damage deduction waived successfully", "status": "WAIVED"}
 
 
 # ==================== INDIVIDUAL ASSET BY ID ====================

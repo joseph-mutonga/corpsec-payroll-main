@@ -49,9 +49,17 @@ class PayrollRecordResponse(BaseModel):
     unpaid_leave_deduction: Optional[float] = 0.0
     off_day_deduction: Optional[float] = 0.0
     salary_advance_deduction: Optional[float] = 0.0
+    damage_deduction: Optional[float] = 0.0
     reliever_earnings: Optional[float] = 0.0
     total_deductions: float
     net_pay: float
+    is_on_hold: Optional[bool] = False
+    hold_reason: Optional[str] = None
+    held_by: Optional[str] = None
+    held_at: Optional[datetime] = None
+    released_by: Optional[str] = None
+    released_at: Optional[datetime] = None
+    release_notes: Optional[str] = None
     employer_nssf_deduction: Optional[float] = 0.0
     employer_housing_levy_deduction: Optional[float] = 0.0
     total_employer_statutory: Optional[float] = 0.0
@@ -89,6 +97,7 @@ class PayrollCalculationSummary(BaseModel):
     total_employer_housing_levy: Optional[float] = 0.0
     total_employer_statutory: Optional[float] = 0.0
     total_salary_advances: Optional[float] = 0.0
+    total_damage_deductions: Optional[float] = 0.0
     error_count: int
     status: str = "CALCULATED"
 
@@ -96,3 +105,12 @@ class PayrollCalculationSummary(BaseModel):
 class ResolveErrorRequest(BaseModel):
     status: str = "IGNORED" # FIXED, IGNORED
     reason: str
+
+
+class HoldSalaryRequest(BaseModel):
+    reason: str = Field(..., description="Reason for holding this employee's salary")
+    notes: Optional[str] = None
+
+
+class ReleaseHoldRequest(BaseModel):
+    resolution_notes: Optional[str] = Field(None, description="Notes on how the issue was resolved")

@@ -35,7 +35,8 @@ from application.backend.app.models.salary_advance import SalaryAdvance
 from application.backend.app.models.roster import RosterPattern, RosterAssignment
 from application.backend.app.models.invoice import SiteInvoice, InvoiceItem
 from application.backend.app.models.asset import (
-    AssetCategory, Asset, AssetAllocation, AssetMaintenance, InventoryItem, InventoryTransaction
+    AssetCategory, Asset, AssetAllocation, AssetMaintenance, InventoryItem, InventoryTransaction,
+    AssetDamageDeduction
 )
 from application.backend.app.models.client_contract import Client, ClientContract, ContractDeployment
 from application.backend.app.models.company_history import (
@@ -102,4 +103,5 @@ __all__ = [
     "RosterPattern",
     "RosterAssignment",
     "SalaryAdvance",
+    "AssetDamageDeduction",
 ]

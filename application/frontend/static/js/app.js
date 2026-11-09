@@ -497,19 +497,20 @@ async function loadDashboardData(forceReload = false) {
     statusSubtitle.innerText = `Real-time command center • Last synchronized: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}`;
   }
 
-  // 2. Fetch baseline data if missing or forced
+  // 2. Fetch live baseline data directly from database
   try {
-    const fetchPromises = [];
-    if (forceReload || !cachedGuards || !cachedGuards.length) fetchPromises.push(loadGuards());
-    if (forceReload || !cachedSites || !cachedSites.length) fetchPromises.push(loadSites());
-    if (forceReload || !cachedAttendance || !cachedAttendance.length) fetchPromises.push(loadAttendance());
-    if (forceReload || !allAdminIncidents || !allAdminIncidents.length) fetchPromises.push(loadAdminIncidents());
-    if (forceReload || !allAdminLeave || !allAdminLeave.length) fetchPromises.push(loadAdminLeave());
-    if (!isSupervisor && (forceReload || !cachedPayrollPeriodId)) fetchPromises.push(loadPayrollReview());
-
-    if (fetchPromises.length) {
-      await Promise.allSettled(fetchPromises);
+    const fetchPromises = [
+      loadGuards(),
+      loadSites(),
+      loadAttendance(),
+      loadAdminIncidents(),
+      loadAdminLeave()
+    ];
+    if (!isSupervisor) {
+      fetchPromises.push(loadPayrollReview());
     }
+
+    await Promise.allSettled(fetchPromises);
 
     // 3. If Admin or HR, fetch enterprise analytics, invoices, and asset KPIs
     let analyticsData = null;
@@ -1029,7 +1030,7 @@ function renderGuardLeaveHistoryRows(records) {
   }).join('');
 }
 
-function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shiftsList = [], allocations = [], inventoryTx = [], guardAdvances = [], payrollRecords = [], leaveRecords = []) {
+function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shiftsList = [], allocations = [], inventoryTx = [], guardAdvances = [], payrollRecords = [], leaveRecords = [], damageDeductions = []) {
   const site = g.site || sitesList.find(s => s.id === (g.site_id || g.primary_site_id)) || null;
   const shift = g.shift || shiftsList.find(s => s.id === g.shift_id) || null;
   const siteName = site ? site.site_name : 'Unassigned';
@@ -1471,6 +1472,43 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
     </div>
     ` : ''}
 
+    ${!isSupervisor ? `
+    <!-- Guard Property & Equipment Damage Deductions Section -->
+    <div class="guard-file-card" style="margin-top:20px; padding:20px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0; display:flex; align-items:center; gap:6px;">
+            <span>⚠️</span> Property &amp; Equipment Damage Deductions
+          </h4>
+          <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Record of damage or loss penalties assessed against this guard for issued company belongings, deducted directly from monthly salary.</p>
+        </div>
+        <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 14px; border-color:#FCA5A5; color:#991B1B; background:#FEF2F2; font-weight:700;" onclick="openRecordDamageDeductionModal(${g.id}, '${safeName}')">
+          + Record Damage Deduction
+        </button>
+      </div>
+
+      <div class="table-responsive" style="margin-top:16px; max-height: 260px; overflow-y: auto; overflow-x: auto;">
+        <table class="data-table" style="font-size:12px;">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>ITEM / BELONGING</th>
+              <th>DAMAGE DESCRIPTION</th>
+              <th>DEDUCTION (KES)</th>
+              <th>INCIDENT DATE</th>
+              <th>PAYROLL PERIOD</th>
+              <th>STATUS</th>
+              <th>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderGuardDamageDeductionsRows(damageDeductions)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
+
     <div style="margin-top:24px; padding:16px 0; display:flex; justify-content:space-between; align-items:center; border-top:1px solid #E2E8F0; flex-wrap:wrap; gap:12px;">
       <button type="button" class="back-to-guards-btn" onclick="backToGuardsList()">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -1535,7 +1573,7 @@ async function viewGuardFile(guardId) {
   }
 
   try {
-    const [gRes, aRes, sRes, shRes, allocRes, txRes, advRes, payRes, leaveRes] = await Promise.all([
+    const [gRes, aRes, sRes, shRes, allocRes, txRes, advRes, payRes, leaveRes, dmgRes] = await Promise.all([
       apiFetch(`/guards/${guardId}`),
       apiFetch(`/attendance?guard_id=${guardId}`).catch(() => ({ ok: false })),
       apiFetch('/sites').catch(() => ({ ok: false })),
@@ -1544,7 +1582,8 @@ async function viewGuardFile(guardId) {
       apiFetch(`/assets/inventory/transactions?guard_id=${guardId}`).catch(() => ({ ok: false })),
       isSupervisor ? Promise.resolve({ ok: false }) : apiFetch(`/salary-advances?advance_type=GUARD&guard_id=${guardId}`).catch(() => ({ ok: false })),
       isSupervisor ? Promise.resolve({ ok: false }) : apiFetch(`/payroll/guard/${guardId}/records`).catch(() => ({ ok: false })),
-      apiFetch(`/leave?guard_id=${guardId}`).catch(() => ({ ok: false }))
+      apiFetch(`/leave?guard_id=${guardId}`).catch(() => ({ ok: false })),
+      isSupervisor ? Promise.resolve({ ok: false }) : apiFetch(`/assets/damage-deductions?guard_id=${guardId}`).catch(() => ({ ok: false }))
     ]);
 
     if (!gRes.ok) throw new Error('Guard record not found in database');
@@ -1559,12 +1598,13 @@ async function viewGuardFile(guardId) {
     const guardAdvances = (advRes && advRes.ok) ? await advRes.json() : [];
     const payrollRecords = (payRes && payRes.ok) ? await payRes.json() : [];
     const leaveRecords = (leaveRes && leaveRes.ok) ? await leaveRes.json() : [];
+    const damageDeductions = (dmgRes && dmgRes.ok) ? await dmgRes.json() : [];
 
     currentGuardCustodyAllocations = allocations;
     currentGuardCustodyInventory = inventoryTx;
 
     const html = generateGuardFileHTML(
-      g, attendance, sites, shifts, allocations, inventoryTx, guardAdvances, payrollRecords, leaveRecords
+      g, attendance, sites, shifts, allocations, inventoryTx, guardAdvances, payrollRecords, leaveRecords, damageDeductions
     );
 
     if (fileViewContainer) {
@@ -2527,7 +2567,7 @@ async function loadPayrollReview(targetPeriodId = null) {
     const periods = await res.json();
     const tbody = document.getElementById('payroll-review-body');
     if (!periods.length) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="16" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found. Click 'Run Payroll' to calculate.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="17" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found. Click 'Run Payroll' to calculate.</td></tr>`;
       setPayrollMetricsZero();
       return;
     }
@@ -2553,7 +2593,7 @@ async function loadPayrollReview(targetPeriodId = null) {
     const records = await recRes.json();
     currentPayrollRecordsCache = records || [];
     if (!records || !records.length) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="16" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found for period #${periodId}. Click 'Run Payroll' to calculate.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="17" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found for period #${periodId}. Click 'Run Payroll' to calculate.</td></tr>`;
       setPayrollMetricsZero();
       return;
     }
@@ -2581,6 +2621,7 @@ async function loadPayrollReview(targetPeriodId = null) {
         const daysW = r.days_worked !== undefined ? r.days_worked : 0;
         const offDayDed = r.off_day_deduction || 0;
         const salAdvDed = r.salary_advance_deduction || 0;
+        const damageDed = r.damage_deduction || 0;
         const unpLeaveDed = r.unpaid_leave_deduction || 0;
         tr.innerHTML = `
           <td><b>${r.employee_number}</b></td>
@@ -2602,6 +2643,7 @@ async function loadPayrollReview(targetPeriodId = null) {
           <td style="color:${unpLeaveDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${unpLeaveDed > 0 ? '700' : '400'};">KES ${unpLeaveDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
           <td style="color:${offDayDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${offDayDed > 0 ? '700' : '400'};">KES ${offDayDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
           <td style="color:${salAdvDed > 0 ? '#D97706' : '#64748B'}; font-weight:${salAdvDed > 0 ? '700' : '400'};">KES ${salAdvDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+          <td style="color:${damageDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${damageDed > 0 ? '700' : '400'};">KES ${damageDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
           <td style="color:#3B5EDB; font-weight:700;">KES ${Number(r.net_pay || 0).toLocaleString()}</td>
           <td><button class="btn btn-secondary" style="padding:4px 10px; font-size:12px; white-space:nowrap;" onclick="downloadSinglePayslip(${r.id})">📄 Payslip</button></td>
         `;
@@ -2826,7 +2868,7 @@ async function loadPayments() {
       summaryBox.innerHTML = `
         ${unroutedHtml}
         ${dupHtml}
-        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px;">
           <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-radius:12px; padding:14px;">
             <div style="font-size:11px; color:#64748B; font-weight:600;">Total Payroll Net Pay</div>
             <div style="font-size:18px; font-weight:800; color:#0F172A;">KES ${recon.total_payroll_net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
@@ -2842,6 +2884,11 @@ async function loadPayments() {
             <div style="font-size:18px; font-weight:800; color:#064E3B;">KES ${recon.total_mpesa_amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
             <div style="font-size:11px; color:#047857;">${recon.mpesa_records_count} M-Pesa guards</div>
           </div>
+          <div style="background:#FFFBEB; border:1px solid #FCD34D; border-radius:12px; padding:14px;">
+            <div style="font-size:11px; color:#92400E; font-weight:600;">⏸️ Held Salaries (Protected)</div>
+            <div style="font-size:18px; font-weight:800; color:#B45309;">KES ${(recon.total_held_amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+            <div style="font-size:11px; color:#92400E;">${recon.held_records_count || 0} guard(s) on hold</div>
+          </div>
           <div style="background:${isReconciled ? '#F0FDF4' : '#FEF2F2'}; border:1px solid ${isReconciled ? '#86EFAC' : '#FCA5A5'}; border-radius:12px; padding:14px;">
             <div style="font-size:11px; color:${isReconciled ? '#166534' : '#991B1B'}; font-weight:600;">Reconciliation Audit</div>
             <div style="font-size:18px; font-weight:800; color:${isReconciled ? '#15803D' : '#DC2626'};">${isReconciled ? 'RECONCILED ✅' : 'DISCREPANCY ❌'}</div>
@@ -2849,6 +2896,18 @@ async function loadPayments() {
           </div>
         </div>
       `;
+    }
+
+    // Update Held Salaries sub-tab count badge
+    const badgeHeld = document.getElementById('badge-held-salaries-count');
+    if (badgeHeld) {
+      const heldCount = (recon.held_items || []).length;
+      if (heldCount > 0) {
+        badgeHeld.innerText = heldCount;
+        badgeHeld.style.display = 'inline-block';
+      } else {
+        badgeHeld.style.display = 'none';
+      }
     }
 
     const tbody = document.getElementById('payments-table-body');
@@ -2859,12 +2918,17 @@ async function loadPayments() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
-        <td>${item.guard_name}</td>
+        <td>${escapeHtml(item.guard_name)}</td>
         <td><span class="badge badge-active" style="background:#2563EB;">Bank Transfer</span></td>
-        <td>${item.bank_name}</td>
-        <td><code>${item.bank_account}</code></td>
+        <td>${escapeHtml(item.bank_name)}</td>
+        <td><code>${escapeHtml(item.bank_account)}</code></td>
         <td><b>KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
         <td><span class="badge badge-active">${item.status}</span></td>
+        <td>
+          <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
+            ⏸️ Hold
+          </button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -2873,12 +2937,17 @@ async function loadPayments() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
-        <td>${item.guard_name}</td>
+        <td>${escapeHtml(item.guard_name)}</td>
         <td><span class="badge badge-active" style="background:#059669;">M-Pesa</span></td>
         <td>Safaricom M-Pesa</td>
-        <td><code>${item.mpesa_number}</code></td>
+        <td><code>${escapeHtml(item.mpesa_number)}</code></td>
         <td><b>KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
         <td><span class="badge badge-active">${item.status}</span></td>
+        <td>
+          <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
+            ⏸️ Hold
+          </button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -2887,14 +2956,45 @@ async function loadPayments() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
-        <td>${item.guard_name}</td>
+        <td>${escapeHtml(item.guard_name)}</td>
         <td><span class="badge badge-inactive" style="background:#EF4444; color:white;">Unrouted</span></td>
-        <td colspan="2" style="color:#DC2626; font-size:12px;">⚠️ ${item.reason}</td>
+        <td colspan="2" style="color:#DC2626; font-size:12px;">⚠️ ${escapeHtml(item.reason)}</td>
         <td><b style="color:#DC2626;">KES ${item.net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
         <td><span class="badge badge-inactive" style="background:#F59E0B; color:white;">EXCLUDED</span></td>
+        <td><span style="font-size:11px; color:#94A3B8;">—</span></td>
       `;
       tbody.appendChild(tr);
     });
+
+    // Populate Held Salaries Table Section
+    const heldTbody = document.getElementById('payments-held-table-body');
+    if (heldTbody) {
+      if (!recon.held_items || recon.held_items.length === 0) {
+        heldTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">No salaries currently on hold.</td></tr>';
+      } else {
+        heldTbody.innerHTML = recon.held_items.map(item => `
+          <tr>
+            <td><b>${escapeHtml(item.employee_number)}</b></td>
+            <td><b>${escapeHtml(item.guard_name)}</b></td>
+            <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8;">${escapeHtml(item.payment_method)}</span></td>
+            <td><code>${escapeHtml(item.account_number)}</code></td>
+            <td style="color:#B45309; font-weight:800;">KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+            <td style="max-width:260px; white-space:normal; font-size:12px; color:#92400E; background:#FEF3C7; padding:8px 12px; border-radius:6px;">
+              <b>Reason:</b> ${escapeHtml(item.hold_reason || 'Pending clearance')}
+            </td>
+            <td style="font-size:11px; color:#64748B;">
+              ${escapeHtml(item.held_by || 'Admin')}<br>
+              ${item.held_at ? String(item.held_at).substring(0, 10) : '—'}
+            </td>
+            <td>
+              <button type="button" class="btn btn-primary" style="padding:5px 12px; font-size:12px; background:#059669; border-color:#059669; font-weight:700; white-space:nowrap;" onclick="openReleaseSalaryHoldModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount}, '${escapeHtml(item.hold_reason || '')}')" title="Clear issue and release salary for payment">
+                ✅ Release Hold &amp; Pay
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
 
   } catch (err) {
     console.error('loadPayments error:', err);
@@ -2940,6 +3040,153 @@ async function exportMpesaScheduleExcel() {
     a.remove();
   } catch (err) {
     alert('M-Pesa Excel export error: ' + err.message);
+  }
+}
+
+// --- Payment Schedules Sub-Navigation & Salary Hold Management ---
+function switchPaymentsSubTab(tab) {
+  const activeContainer = document.getElementById('payments-active-container');
+  const heldContainer = document.getElementById('payments-held-container');
+  const btnActive = document.getElementById('btn-tab-payments-active');
+  const btnHeld = document.getElementById('btn-tab-payments-held');
+
+  if (tab === 'held') {
+    if (activeContainer) activeContainer.style.display = 'none';
+    if (heldContainer) heldContainer.style.display = 'block';
+    if (btnActive) {
+      btnActive.style.background = '#F1F5F9';
+      btnActive.style.color = '#475569';
+    }
+    if (btnHeld) {
+      btnHeld.style.background = '#D97706';
+      btnHeld.style.color = '#FFF';
+    }
+  } else {
+    if (activeContainer) activeContainer.style.display = 'block';
+    if (heldContainer) heldContainer.style.display = 'none';
+    if (btnActive) {
+      btnActive.style.background = '#2563EB';
+      btnActive.style.color = '#FFF';
+    }
+    if (btnHeld) {
+      btnHeld.style.background = '#F1F5F9';
+      btnHeld.style.color = '#475569';
+    }
+  }
+}
+
+function openHoldSalaryModal(recordId, guardName, empNo, amount, defaultReason = '') {
+  const modal = document.getElementById('modal-hold-salary');
+  if (!modal) return;
+
+  const form = document.getElementById('form-hold-salary');
+  if (form) form.reset();
+
+  document.getElementById('hold-salary-record-id').value = recordId;
+  const guardInfo = document.getElementById('hold-salary-guard-info');
+  if (guardInfo) guardInfo.innerText = `${guardName} (${empNo})`;
+  const amtInfo = document.getElementById('hold-salary-amount-info');
+  if (amtInfo) amtInfo.innerText = `Net Salary to Hold: KES ${Number(amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+  if (defaultReason) {
+    const reasonEl = document.getElementById('hold-salary-reason');
+    if (reasonEl) reasonEl.value = defaultReason;
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeHoldSalaryModal() {
+  const modal = document.getElementById('modal-hold-salary');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleHoldSalarySubmit(event) {
+  event.preventDefault();
+  const recordId = document.getElementById('hold-salary-record-id').value;
+  const reason = document.getElementById('hold-salary-reason').value.trim();
+
+  if (!reason) {
+    showToast('Please specify a valid reason for placing this salary on hold.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btn-submit-hold-salary');
+  if (btn) { btn.disabled = true; btn.innerText = 'Holding Salary...'; }
+
+  try {
+    const res = await apiFetch(`/payments/records/${recordId}/hold`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to place salary on hold');
+    }
+
+    showToast('⏸️ Salary placed on HOLD! Excluded from Excel disbursement exports.', 'success');
+    closeHoldSalaryModal();
+    loadPayments();
+  } catch (err) {
+    console.error('handleHoldSalarySubmit error:', err);
+    showToast(err.message || 'Error placing salary on hold', 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '⏸️ Confirm Salary Hold'; }
+  }
+}
+
+function openReleaseSalaryHoldModal(recordId, guardName, empNo, amount, currentReason) {
+  const modal = document.getElementById('modal-release-salary-hold');
+  if (!modal) return;
+
+  const form = document.getElementById('form-release-salary-hold');
+  if (form) form.reset();
+
+  document.getElementById('release-salary-record-id').value = recordId;
+  const guardInfo = document.getElementById('release-salary-guard-info');
+  if (guardInfo) guardInfo.innerText = `${guardName} (${empNo})`;
+  const amtInfo = document.getElementById('release-salary-amount-info');
+  if (amtInfo) amtInfo.innerText = `Net Salary Approved for Payment: KES ${Number(amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+  const reasonInfo = document.getElementById('release-salary-current-reason');
+  if (reasonInfo) reasonInfo.innerText = `Current Hold Reason: ${currentReason || 'Administrative hold'}`;
+
+  modal.style.display = 'flex';
+}
+
+function closeReleaseSalaryHoldModal() {
+  const modal = document.getElementById('modal-release-salary-hold');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleReleaseSalaryHoldSubmit(event) {
+  event.preventDefault();
+  const recordId = document.getElementById('release-salary-record-id').value;
+  const notes = document.getElementById('release-salary-resolution-notes').value.trim();
+
+  const btn = document.getElementById('btn-submit-release-salary');
+  if (btn) { btn.disabled = true; btn.innerText = 'Releasing Hold & Approving...'; }
+
+  try {
+    const res = await apiFetch(`/payments/records/${recordId}/release`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolution_notes: notes || 'Hold resolved and approved for disbursement.' })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to release salary hold');
+    }
+
+    showToast('✅ Salary hold released! Employee restored to active disbursement schedules.', 'success');
+    closeReleaseSalaryHoldModal();
+    loadPayments();
+  } catch (err) {
+    console.error('handleReleaseSalaryHoldSubmit error:', err);
+    showToast(err.message || 'Error releasing salary hold', 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '✅ Release Hold & Approve for Payment'; }
   }
 }
 
@@ -3882,29 +4129,41 @@ function renderAdminIncidentsTable() {
       `;
     }
 
-    const shortDesc = inc.description && inc.description.length > 85 ? inc.description.substring(0, 85) + '...' : (inc.description || '—');
+    let extraActions = '';
+    if (inc.incident_type === 'Property Damage' || (inc.description && inc.description.toLowerCase().includes('damage'))) {
+      extraActions += `
+        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11px; color:#DC2626; border-color:#FECACA; background:#FEF2F2; font-weight:700;" onclick="openDamageDeductionForIncident(${inc.id})" title="Deduct damaged property penalty from guard salary">⚠️ Deduct Damage</button>
+      `;
+    }
+    if (inc.status === 'OPEN' || inc.status === 'INVESTIGATING') {
+      extraActions += `
+        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryForIncident(${inc.id})" title="Hold guard salary in Payment Schedules pending investigation">⏸️ Hold Pay</button>
+      `;
+    }
+
+    const shortDesc = inc.description && inc.description.length > 95 ? inc.description.substring(0, 95) + '...' : (inc.description || '—');
 
     tr.innerHTML = `
-      <td>
+      <td style="white-space:nowrap; vertical-align:middle;">
         <a href="javascript:void(0)" onclick="openIncidentDetailsModal(${inc.id})" style="font-family:monospace; font-weight:800; color:#7C3AED; text-decoration:underline;">
           ${inc.reference_number}
         </a>
       </td>
-      <td style="font-size:12px; color:#475569; white-space:nowrap;">
+      <td style="font-size:12px; color:#475569; white-space:nowrap; vertical-align:middle;">
         <strong>${inc.incident_date}</strong><br>
         <span style="font-size:11px; color:#64748B;">🕒 ${inc.incident_time}</span>
       </td>
-      <td>
+      <td style="white-space:nowrap; vertical-align:middle;">
         <strong style="color:#0F172A;">${inc.guard_name}</strong><br>
         <span style="font-size:11px; color:#64748B;">ID: ${inc.guard_employee_number}</span>
       </td>
-      <td><span style="font-weight:600; color:#334155;">${inc.site_name}</span></td>
-      <td><span class="badge" style="background:#F1F5F9; color:#334155; font-weight:600; border:1px solid #CBD5E1;">${inc.incident_type}</span></td>
-      <td style="max-width:260px; font-size:12px; color:#334155; line-height:1.4;" title="${inc.description || ''}">
+      <td style="white-space:nowrap; vertical-align:middle;"><span style="font-weight:600; color:#334155;">${inc.site_name}</span></td>
+      <td style="white-space:nowrap; vertical-align:middle;"><span class="badge" style="background:#F1F5F9; color:#334155; font-weight:600; border:1px solid #CBD5E1;">${inc.incident_type}</span></td>
+      <td style="white-space:normal; word-break:break-word; min-width:200px; max-width:280px; font-size:12px; color:#334155; line-height:1.45; vertical-align:middle;" title="${(inc.description || '').replace(/"/g, '&quot;')}">
         ${shortDesc}
       </td>
-      <td>${badgeHtml}</td>
-      <td><div style="display:flex; gap:4px; flex-wrap:nowrap;">${actionButtons}</div></td>
+      <td style="white-space:nowrap; vertical-align:middle;">${badgeHtml}</td>
+      <td style="white-space:nowrap; vertical-align:middle;"><div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">${actionButtons}${extraActions}</div></td>
     `;
     tbody.appendChild(tr);
   });
@@ -4098,6 +4357,24 @@ function openIncidentDetailsModal(incidentId) {
 ${inc.description}
         </div>
       </div>
+
+      <!-- Financial Safeguards & Salary Actions -->
+      <div style="background:#FFFBEB; border:1px solid #FCD34D; border-radius:8px; padding:14px; margin-bottom:16px;">
+        <div style="font-weight:800; color:#92400E; font-size:13px; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+          <span>⚡</span> Payroll & Disciplinary Safeguards
+        </div>
+        <p style="font-size:12px; color:#78350F; margin:0 0 10px 0; line-height:1.4;">
+          Financial controls for this case: deduct damaged property / facility penalties from this guard's salary, or hold monthly salary disbursement in Payment Schedules pending investigation.
+        </p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" style="background:#FEF2F2; color:#DC2626; border-color:#FECACA; font-weight:700; font-size:12px;" onclick="closeIncidentDetailsModal(); openDamageDeductionForIncident(${inc.id});">
+            ⚠️ Record Damage Deduction in Salary
+          </button>
+          <button type="button" class="btn btn-secondary" style="background:#FFFBEB; color:#B45309; border-color:#FCD34D; font-weight:700; font-size:12px;" onclick="closeIncidentDetailsModal(); openHoldSalaryForIncident(${inc.id});">
+            ⏸️ Place Guard Salary on Hold
+          </button>
+        </div>
+      </div>
     `;
   }
 
@@ -4140,6 +4417,48 @@ ${inc.description}
 function closeIncidentDetailsModal() {
   const modal = document.getElementById('modal-incident-details');
   if (modal) modal.style.display = 'none';
+}
+
+async function openDamageDeductionForIncident(incidentId) {
+  const inc = (allAdminIncidents || []).find(i => i.id === incidentId);
+  if (!inc) return;
+
+  const itemName = inc.incident_type === 'Property Damage' 
+    ? `Damaged Property / Facility (${inc.site_name || 'Site'})` 
+    : `Belonging / Property (${inc.incident_type})`;
+  const desc = `Incident Ref ${inc.reference_number}: ${inc.description || ''}`;
+  const incDate = inc.incident_date || new Date().toISOString().substring(0, 10);
+
+  await openRecordDamageDeductionModal(inc.guard_id, inc.guard_name, itemName, desc, incDate);
+}
+
+async function openHoldSalaryForIncident(incidentId) {
+  const inc = (allAdminIncidents || []).find(i => i.id === incidentId);
+  if (!inc) return;
+
+  const reason = `Pending investigation of Incident ${inc.reference_number} (${inc.incident_type}): ${(inc.description || '').substring(0, 110)}`;
+
+  try {
+    const res = await apiFetch(`/payments/guard/${inc.guard_id}/active-record`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.found && data.record_id) {
+        if (data.is_on_hold) {
+          showToast(`Guard ${inc.guard_name}'s monthly salary is already on hold. Reason: ${data.hold_reason}`, 'info');
+          if (typeof switchTab === 'function') switchTab('payments');
+          if (typeof switchPaymentsSubTab === 'function') switchPaymentsSubTab('held');
+          return;
+        }
+        openHoldSalaryModal(data.record_id, inc.guard_name, inc.guard_employee_number, data.net_pay, reason);
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching active record for incident hold:', err);
+  }
+
+  showToast(`Navigating to Payment Schedules to hold monthly salary for ${inc.guard_name}.`, 'info');
+  if (typeof switchTab === 'function') switchTab('payments');
 }
 
 async function deleteIncidentRecord(incidentId, refNumber) {
@@ -9938,6 +10257,16 @@ let currentGuardCustodyInventory = [];
 let currentQuickReturnItemsCache = [];
 
 // --- Return Custody Modal ---
+function handleReturnConditionChanged(val) {
+  const box = document.getElementById('return-damage-deduction-box');
+  if (!box) return;
+  if (val === 'DAMAGED' || val === 'POOR') {
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
 function openReturnCustodyModal(allocId, itemName, itemTag, targetType, targetId, itemKind = 'asset', itemId = null, qty = 1) {
   document.getElementById('return-custody-alloc-id').value = allocId || '';
   document.getElementById('return-custody-target-type').value = targetType || 'guard';
@@ -9951,6 +10280,13 @@ function openReturnCustodyModal(allocId, itemName, itemTag, targetType, targetId
   document.getElementById('return-custody-date').value = new Date().toISOString().substring(0, 10);
   document.getElementById('return-custody-condition').value = 'GOOD';
   document.getElementById('return-custody-notes').value = '';
+
+  const dmgBox = document.getElementById('return-damage-deduction-box');
+  if (dmgBox) dmgBox.style.display = 'none';
+  const dmgAmt = document.getElementById('return-damage-deduction-amount');
+  if (dmgAmt) dmgAmt.value = '';
+  const dmgDesc = document.getElementById('return-damage-description');
+  if (dmgDesc) dmgDesc.value = '';
 
   const selectContainer = document.getElementById('return-custody-select-container');
   if (selectContainer) selectContainer.style.display = 'none';
@@ -10012,6 +10348,13 @@ function openQuickReturnItemModal(targetType, targetId, targetName) {
   document.getElementById('return-custody-condition').value = 'GOOD';
   document.getElementById('return-custody-notes').value = '';
 
+  const dmgBox = document.getElementById('return-damage-deduction-box');
+  if (dmgBox) dmgBox.style.display = 'none';
+  const dmgAmt = document.getElementById('return-damage-deduction-amount');
+  if (dmgAmt) dmgAmt.value = '';
+  const dmgDesc = document.getElementById('return-damage-description');
+  if (dmgDesc) dmgDesc.value = '';
+
   onReturnItemSelectChange();
 
   const modal = document.getElementById('modal-return-custody-item');
@@ -10050,6 +10393,8 @@ async function handleReturnCustodySubmit(event) {
   const returnDate = document.getElementById('return-custody-date').value;
   const condition = document.getElementById('return-custody-condition').value;
   const notes = document.getElementById('return-custody-notes').value.trim();
+  const damageAmt = parseFloat(document.getElementById('return-damage-deduction-amount')?.value || '0');
+  const damageDesc = document.getElementById('return-damage-description')?.value?.trim() || '';
   const btn = document.getElementById('btn-confirm-return-custody');
 
   if (btn) { btn.disabled = true; btn.innerText = '⏳ Processing Return...'; }
@@ -10062,7 +10407,9 @@ async function handleReturnCustodySubmit(event) {
         body: JSON.stringify({
           return_date: returnDate,
           condition_on_return: condition,
-          notes: notes
+          notes: notes,
+          damage_deduction_amount: damageAmt > 0 ? damageAmt : null,
+          damage_description: damageDesc || null
         })
       });
 
@@ -10086,9 +10433,30 @@ async function handleReturnCustodySubmit(event) {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Failed to record inventory return');
+
+      // Record damage deduction for guard inventory/uniform item if damaged
+      if (targetType === 'guard' && damageAmt > 0) {
+        await apiFetch('/assets/damage-deductions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guard_id: parseInt(targetId),
+            inventory_item_id: parseInt(itemId),
+            item_name: document.getElementById('return-custody-item-name')?.innerText || 'Damaged Uniform / Equipment',
+            damage_description: damageDesc || `Returned damaged inventory item (${condition})`,
+            deduction_amount: damageAmt,
+            incident_date: returnDate,
+            notes: notes
+          })
+        });
+      }
     }
 
-    showToast('✅ Item return recorded and inventory updated in personnel file!', 'success');
+    if (damageAmt > 0) {
+      showToast(`✅ Item returned. Property damage penalty of KES ${damageAmt.toLocaleString()} recorded for salary deduction!`, 'success');
+    } else {
+      showToast('✅ Item return recorded and inventory updated in personnel file!', 'success');
+    }
     closeReturnCustodyModal();
 
     if (targetType === 'guard') {
@@ -10374,6 +10742,162 @@ function renderGuardAdvancesRows(advances = []) {
       </td>
     </tr>
   `).join('');
+}
+
+// Property Damage Deductions in Personnel File
+function renderGuardDamageDeductionsRows(records = []) {
+  if (!records || !records.length) {
+    return '<tr><td colspan="8" style="text-align:center; padding:18px; color:#64748B;">No property damage deductions recorded for this guard.</td></tr>';
+  }
+  return records.map(d => {
+    let statusBadge = '';
+    if (d.status === 'DEDUCTED') {
+      statusBadge = '<span class="badge" style="background:#ECFDF5; color:#065F46; font-weight:700;">✅ DEDUCTED IN PAYROLL</span>';
+    } else if (d.status === 'WAIVED') {
+      statusBadge = '<span class="badge" style="background:#F1F5F9; color:#64748B; font-weight:700;">DISMISSED / WAIVED</span>';
+    } else {
+      statusBadge = '<span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">⏳ PENDING PAYROLL</span>';
+    }
+
+    const actionHtml = d.status === 'PENDING'
+      ? `<button type="button" class="btn btn-secondary" style="padding:2px 8px; font-size:11px; color:#64748B;" onclick="waiveDamageDeduction(${d.id}, ${d.guard_id})" title="Waive damage deduction">Waive</button>`
+      : '<span style="font-size:11px; color:#94A3B8;">—</span>';
+
+    const periodName = d.payroll_period_name || (d.payroll_period_id ? `Period #${d.payroll_period_id}` : 'Next Active Run');
+
+    return `
+      <tr>
+        <td><b>#${d.id}</b></td>
+        <td><b>${escapeHtml(d.item_name)}</b> ${d.item_tag ? `<span style="font-size:11px; color:#64748B;">(${escapeHtml(d.item_tag)})</span>` : ''}</td>
+        <td style="max-width:220px; white-space:normal; font-size:11px; color:#475569;">${escapeHtml(d.damage_description)}</td>
+        <td style="color:#DC2626; font-weight:700;">KES ${Number(d.deduction_amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td>${d.incident_date ? String(d.incident_date).substring(0, 10) : '—'}</td>
+        <td><span style="font-size:11px; color:#3B82F6; font-weight:600;">${escapeHtml(periodName)}</span></td>
+        <td>${statusBadge}</td>
+        <td>${actionHtml}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function openRecordDamageDeductionModal(guardId, guardName, initialItemName = '', initialDesc = '', initialDate = '') {
+  const modal = document.getElementById('modal-record-damage-deduction');
+  if (!modal) return;
+
+  const form = document.getElementById('form-record-damage-deduction');
+  if (form) form.reset();
+
+  document.getElementById('damage-ded-guard-id').value = guardId;
+  const nameEl = document.getElementById('damage-ded-guard-name-display');
+  if (nameEl) nameEl.innerText = guardName || `Guard #${guardId}`;
+
+  document.getElementById('damage-ded-date').value = initialDate || new Date().toISOString().substring(0, 10);
+  if (initialItemName) {
+    const itemEl = document.getElementById('damage-ded-item-name');
+    if (itemEl) itemEl.value = initialItemName;
+  }
+  if (initialDesc) {
+    const descEl = document.getElementById('damage-ded-description');
+    if (descEl) descEl.value = initialDesc;
+  }
+
+  // Populate target payroll periods
+  const periodSelect = document.getElementById('damage-ded-period-select');
+  if (periodSelect) {
+    periodSelect.innerHTML = '<option value="">Auto-deduct in next active payroll run</option>';
+    try {
+      const res = await apiFetch('/payroll/periods');
+      if (res.ok) {
+        const periods = await res.json();
+        periods.forEach(p => {
+          if (p.status === 'DRAFT' || p.status === 'CALCULATED') {
+            periodSelect.innerHTML += `<option value="${p.id}">${p.period_name} (${p.status})</option>`;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Could not load payroll periods for damage deduction modal', e);
+    }
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeRecordDamageDeductionModal() {
+  const modal = document.getElementById('modal-record-damage-deduction');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleRecordDamageDeductionSubmit(event) {
+  event.preventDefault();
+  const guardId = parseInt(document.getElementById('damage-ded-guard-id').value);
+  const itemName = document.getElementById('damage-ded-item-name').value.trim();
+  const amount = parseFloat(document.getElementById('damage-ded-amount').value);
+  const incidentDateVal = document.getElementById('damage-ded-date').value;
+  const incidentDate = incidentDateVal || new Date().toISOString().substring(0, 10);
+  const desc = document.getElementById('damage-ded-description').value.trim();
+  const periodIdVal = document.getElementById('damage-ded-period-select').value;
+  const periodId = periodIdVal ? parseInt(periodIdVal) : null;
+
+  const btn = document.getElementById('btn-submit-damage-deduction');
+  if (btn) { btn.disabled = true; btn.innerText = 'Saving Deduction...'; }
+
+  try {
+    const res = await apiFetch('/assets/damage-deductions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        guard_id: guardId,
+        item_name: itemName,
+        damage_description: desc,
+        deduction_amount: amount,
+        incident_date: incidentDate,
+        payroll_period_id: periodId
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to record damage deduction');
+    }
+
+    showToast(`✅ Recorded damage deduction of KES ${amount.toLocaleString()} for ${itemName}. It will be deducted from salary.`, 'success');
+    closeRecordDamageDeductionModal();
+
+    // Reload active view
+    if (typeof currentTab !== 'undefined' && currentTab === 'incidents') {
+      if (typeof loadAdminIncidents === 'function') loadAdminIncidents();
+    } else if (typeof viewGuardFile === 'function') {
+      try { viewGuardFile(guardId); } catch(e) {}
+    }
+  } catch (err) {
+    console.error('handleRecordDamageDeductionSubmit error:', err);
+    showToast(err.message || 'Error recording damage deduction', 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerText = '⚠️ Save & Deduct in Salary'; }
+  }
+}
+
+async function waiveDamageDeduction(deductionId, guardId) {
+  if (!confirm('Are you sure you want to waive / dismiss this property damage deduction? It will not be deducted from the guard\'s salary.')) {
+    return;
+  }
+  try {
+    const res = await apiFetch(`/assets/damage-deductions/${deductionId}/waive`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to waive damage deduction');
+    }
+    showToast('Damage deduction waived successfully.', 'info');
+    if (guardId) {
+      viewGuardFile(guardId);
+    }
+  } catch (err) {
+    console.error('waiveDamageDeduction error:', err);
+    showToast(err.message || 'Error waiving deduction', 'danger');
+  }
 }
 
 async function loadSalaryAdvances() {
@@ -11591,3 +12115,256 @@ window.openAddServiceModal = openAddServiceModal;
 window.closeAddServiceModal = closeAddServiceModal;
 window.handleCreateServiceSubmit = handleCreateServiceSubmit;
 window.handleDeleteService = handleDeleteService;
+
+
+// ==================== SALARY ADVANCES EXCEL / CSV BULK UPLOAD ====================
+
+function triggerAdvFilePicker(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  const fileInput = document.getElementById('adv-excel-file-input');
+  if (fileInput) {
+    fileInput.click();
+  }
+}
+
+function openUploadSalaryAdvancesModal(autoTriggerPicker = false) {
+  const modal = document.getElementById('modal-upload-advances-excel');
+  if (!modal) return;
+
+  const form = document.getElementById('form-upload-salary-advances');
+  if (form) form.reset();
+
+  const filePill = document.getElementById('adv-selected-file-pill');
+  if (filePill) filePill.style.display = 'none';
+
+  const resultsBox = document.getElementById('adv-upload-results-box');
+  if (resultsBox) {
+    resultsBox.style.display = 'none';
+    resultsBox.innerHTML = '';
+  }
+
+  const dropzone = document.getElementById('adv-upload-dropzone');
+  if (dropzone) dropzone.style.display = 'block';
+
+  const btn = document.getElementById('btn-submit-upload-advances');
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '📤 Upload &amp; Record Advances';
+  }
+
+  populateUploadPeriodDropdown();
+  modal.style.display = 'flex';
+
+  if (autoTriggerPicker) {
+    setTimeout(() => {
+      triggerAdvFilePicker();
+    }, 150);
+  }
+}
+
+function closeUploadSalaryAdvancesModal() {
+  const modal = document.getElementById('modal-upload-advances-excel');
+  if (modal) modal.style.display = 'none';
+}
+
+async function populateUploadPeriodDropdown() {
+  const selectElem = document.getElementById('upload-adv-payroll-period-id');
+  if (!selectElem) return;
+
+  try {
+    const res = await apiFetch('/payroll/periods');
+    const periods = await res.json();
+    let opts = '<option value="">Auto-detect by disbursement dates</option>';
+    if (periods && periods.length) {
+      periods.forEach(p => {
+        const isLocked = (p.status === 'CONFIRMED' || p.status === 'CLOSED');
+        opts += `<option value="${p.id}" ${isLocked ? 'disabled' : ''}>${p.period_name} (${p.status})${isLocked ? ' - Locked' : ''}</option>`;
+      });
+    }
+    selectElem.innerHTML = opts;
+  } catch (err) {
+    console.error('populateUploadPeriodDropdown error:', err);
+  }
+}
+
+function handleAdvFileSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  const pill = document.getElementById('adv-selected-file-pill');
+  const nameElem = document.getElementById('adv-selected-file-name');
+  const sizeElem = document.getElementById('adv-selected-file-size');
+
+  if (nameElem) nameElem.innerText = file.name;
+  if (sizeElem) sizeElem.innerText = `${(file.size / 1024).toFixed(1)} KB`;
+  if (pill) pill.style.display = 'flex';
+}
+
+function clearSelectedAdvFile(e) {
+  if (e) e.stopPropagation();
+  const input = document.getElementById('adv-excel-file-input');
+  if (input) input.value = '';
+
+  const pill = document.getElementById('adv-selected-file-pill');
+  if (pill) pill.style.display = 'none';
+}
+
+async function downloadSalaryAdvanceTemplate() {
+  try {
+    showToast('Generating official Excel template...', 'info');
+    const res = await apiFetch('/salary-advances/template');
+    if (!res.ok) {
+      throw new Error('Failed to download salary advances template');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'CorpSec_Salary_Advances_Template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    showToast('Excel template downloaded successfully!', 'success');
+  } catch (err) {
+    console.error('downloadSalaryAdvanceTemplate error:', err);
+    showToast(err.message || 'Error downloading template', 'danger');
+  }
+}
+
+async function handleSalaryAdvancesExcelUpload(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const fileInput = document.getElementById('adv-excel-file-input');
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+    showToast('Please select or browse an Excel (.xlsx, .xls) or CSV file first.', 'warning');
+    const resultsBox = document.getElementById('adv-upload-results-box');
+    if (resultsBox) {
+      resultsBox.style.display = 'block';
+      resultsBox.innerHTML = `
+        <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:14px 18px; color:#92400E; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:700; display:flex; align-items:center; gap:6px;">
+              <span>⚠️</span> No spreadsheet file selected yet
+            </div>
+            <div style="font-size:12px; margin-top:3px; color:#B45309;">
+              Click below to browse your computer and retrieve the advances Excel file.
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="triggerAdvFilePicker(event)" style="background:#2563EB; border-color:#2563EB; font-size:12px; padding:6px 14px; font-weight:700; white-space:nowrap;">
+            📂 Browse &amp; Retrieve File
+          </button>
+        </div>
+      `;
+    }
+    triggerAdvFilePicker();
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const periodId = document.getElementById('upload-adv-payroll-period-id').value;
+  const defMethod = document.getElementById('upload-adv-default-method').value;
+
+  const btn = document.getElementById('btn-submit-upload-advances');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Processing File &amp; Validating Records...';
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  if (periodId) formData.append('payroll_period_id', periodId);
+  if (defMethod) formData.append('default_payment_method', defMethod);
+
+  try {
+    const res = await apiFetch('/salary-advances/upload-excel', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to process advances file');
+    }
+
+    const resultsBox = document.getElementById('adv-upload-results-box');
+    if (resultsBox) {
+      resultsBox.style.display = 'block';
+      let html = '';
+
+      if (data.successful_records > 0) {
+        html += `
+          <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:10px; padding:16px; margin-bottom:14px;">
+            <div style="font-size:14px; font-weight:800; color:#065F46; display:flex; align-items:center; gap:6px;">
+              <span>✅</span> Successfully Recorded ${data.successful_records} Advances!
+            </div>
+            <div style="font-size:12px; color:#047857; margin-top:4px;">
+              Total amount: <b>KES ${Number(data.total_amount_processed || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</b>.<br>
+              Status: <b>APPROVED</b> • These advances will be automatically deducted during monthly payroll calculation.
+            </div>
+          </div>
+        `;
+      }
+
+      if (data.errors && data.errors.length > 0) {
+        html += `
+          <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:10px; padding:14px;">
+            <div style="font-size:13px; font-weight:800; color:#991B1B; display:flex; align-items:center; gap:6px;">
+              <span>⚠️</span> ${data.failed_records} Rows Skipped / Require Review:
+            </div>
+            <ul style="font-size:11px; color:#B91C1C; margin:8px 0 0 0; padding-left:18px; max-height:140px; overflow-y:auto; line-height:1.6;">
+              ${data.errors.map(err => `<li>${err}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+
+      resultsBox.innerHTML = html;
+    }
+
+    showToast(`Bulk upload finished! ${data.successful_records} advances recorded.`, 'success');
+
+    // Refresh advances table & KPIs
+    if (typeof loadSalaryAdvances === 'function') {
+      loadSalaryAdvances();
+    }
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '📤 Upload Another File';
+    }
+  } catch (err) {
+    console.error('handleSalaryAdvancesExcelUpload error:', err);
+    showToast(err.message || 'Error processing Excel file', 'danger');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '📤 Upload &amp; Record Advances';
+    }
+  }
+}
+
+// Window exports for bulk upload
+window.triggerAdvFilePicker = triggerAdvFilePicker;
+window.openUploadSalaryAdvancesModal = openUploadSalaryAdvancesModal;
+window.closeUploadSalaryAdvancesModal = closeUploadSalaryAdvancesModal;
+window.populateUploadPeriodDropdown = populateUploadPeriodDropdown;
+window.handleAdvFileSelected = handleAdvFileSelected;
+window.clearSelectedAdvFile = clearSelectedAdvFile;
+window.downloadSalaryAdvanceTemplate = downloadSalaryAdvanceTemplate;
+window.handleSalaryAdvancesExcelUpload = handleSalaryAdvancesExcelUpload;
+
+// Window exports for Belonging Damage Deductions & Payment Schedule Salary Holds
+window.handleReturnConditionChanged = handleReturnConditionChanged;
+window.renderGuardDamageDeductionsRows = renderGuardDamageDeductionsRows;
+window.openRecordDamageDeductionModal = openRecordDamageDeductionModal;
+window.closeRecordDamageDeductionModal = closeRecordDamageDeductionModal;
+window.handleRecordDamageDeductionSubmit = handleRecordDamageDeductionSubmit;
+window.waiveDamageDeduction = waiveDamageDeduction;
+window.switchPaymentsSubTab = switchPaymentsSubTab;
+window.openHoldSalaryModal = openHoldSalaryModal;
+window.closeHoldSalaryModal = closeHoldSalaryModal;
+window.handleHoldSalarySubmit = handleHoldSalarySubmit;
+window.openReleaseSalaryHoldModal = openReleaseSalaryHoldModal;
+window.closeReleaseSalaryHoldModal = closeReleaseSalaryHoldModal;
+window.handleReleaseSalaryHoldSubmit = handleReleaseSalaryHoldSubmit;
+window.openDamageDeductionForIncident = openDamageDeductionForIncident;
+window.openHoldSalaryForIncident = openHoldSalaryForIncident;

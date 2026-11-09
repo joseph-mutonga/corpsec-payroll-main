@@ -14,6 +14,7 @@ from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.off_day import OffDayAllowance, OffDayRequest, RelieverAssignment
 from application.backend.app.models.salary_advance import SalaryAdvance
+from application.backend.app.models.asset import AssetDamageDeduction
 from sqlalchemy import or_, and_
 from application.backend.app.schemas.payroll import (
     PayrollPeriodCreate, PayrollPeriodResponse, PayrollRecordResponse,
@@ -109,6 +110,31 @@ def execute_payroll_calculation(
         p_adv.status = "APPROVED"
         p_adv.deducted_at = None
 
+    # Reset any property damage deductions previously deducted for this period back to PENDING
+    prev_damages = db.query(AssetDamageDeduction).filter(
+        AssetDamageDeduction.payroll_period_id == period.id,
+        AssetDamageDeduction.status == "DEDUCTED"
+    ).all()
+    for p_dmg in prev_damages:
+        p_dmg.status = "PENDING"
+        p_dmg.deducted_at = None
+
+    # Preserve any active salary holds or hold notes across recalculations
+    existing_holds = {}
+    for r in db.query(PayrollRecord).filter(
+        PayrollRecord.payroll_period_id == period.id,
+        PayrollRecord.is_on_hold == True
+    ).all():
+        existing_holds[r.guard_id] = {
+            "is_on_hold": r.is_on_hold,
+            "hold_reason": r.hold_reason,
+            "held_by": r.held_by,
+            "held_at": r.held_at,
+            "released_by": r.released_by,
+            "released_at": r.released_at,
+            "release_notes": r.release_notes
+        }
+
     # Clear previous draft records for this period
     db.query(PayrollRecord).filter(PayrollRecord.payroll_period_id == period.id).delete()
 
@@ -122,6 +148,7 @@ def execute_payroll_calculation(
     total_housing = 0.0
     total_paye = 0.0
     total_advances = 0.0
+    total_damages = 0.0
 
     # Check if this payroll period has any attendance tracking captured
     period_has_attendance = db.query(Attendance).filter(
@@ -311,11 +338,34 @@ def execute_payroll_calculation(
             a.payroll_period_id = period.id
             a.deducted_at = datetime.now()
 
+        # Query Mid-Month Property / Equipment Damage Deductions for this guard and period
+        guard_damage_deds = db.query(AssetDamageDeduction).filter(
+            AssetDamageDeduction.guard_id == guard.id,
+            AssetDamageDeduction.status.in_(["PENDING", "APPROVED"]),
+            or_(
+                AssetDamageDeduction.payroll_period_id == period.id,
+                and_(
+                    AssetDamageDeduction.payroll_period_id.is_(None),
+                    AssetDamageDeduction.incident_date <= period.end_date
+                )
+            )
+        ).all()
+
+        total_dmg_amount = sum(float(d.deduction_amount) for d in guard_damage_deds)
+        net_before_damage = max(0.0, net_before_advance - advance_deduction_amount)
+        damage_deduction_amount = min(round(total_dmg_amount, 2), net_before_damage)
+
+        for d in guard_damage_deds:
+            d.status = "DEDUCTED"
+            d.payroll_period_id = period.id
+            d.deducted_at = datetime.now()
+
         calc_result["unpaid_leave_deduction"] = unpaid_leave_amount
         calc_result["off_day_deduction"] = off_day_deduction_amount
         calc_result["salary_advance_deduction"] = advance_deduction_amount
+        calc_result["damage_deduction"] = damage_deduction_amount
         calc_result["reliever_earnings"] = reliever_earnings
-        calc_result["total_deductions"] = round(statutory_deds + unpaid_leave_amount + off_day_deduction_amount + advance_deduction_amount, 2)
+        calc_result["total_deductions"] = round(statutory_deds + unpaid_leave_amount + off_day_deduction_amount + advance_deduction_amount + damage_deduction_amount, 2)
         calc_result["net_pay"] = round(max(0.0, calc_result["gross_pay"] - calc_result["total_deductions"]), 2)
 
         import json
@@ -343,9 +393,17 @@ def execute_payroll_calculation(
             unpaid_leave_deduction=unpaid_leave_amount,
             off_day_deduction=off_day_deduction_amount,
             salary_advance_deduction=advance_deduction_amount,
+            damage_deduction=damage_deduction_amount,
             reliever_earnings=reliever_earnings,
             total_deductions=calc_result["total_deductions"],
-            net_pay=calc_result["net_pay"]
+            net_pay=calc_result["net_pay"],
+            is_on_hold=existing_holds.get(guard.id, {}).get("is_on_hold", False),
+            hold_reason=existing_holds.get(guard.id, {}).get("hold_reason"),
+            held_by=existing_holds.get(guard.id, {}).get("held_by"),
+            held_at=existing_holds.get(guard.id, {}).get("held_at"),
+            released_by=existing_holds.get(guard.id, {}).get("released_by"),
+            released_at=existing_holds.get(guard.id, {}).get("released_at"),
+            release_notes=existing_holds.get(guard.id, {}).get("release_notes")
         )
         calculated_records.append(rec)
 
@@ -356,6 +414,7 @@ def execute_payroll_calculation(
         total_housing += calc_result["housing_levy"]
         total_paye += calc_result["paye"]
         total_advances += advance_deduction_amount
+        total_damages += damage_deduction_amount
 
     db.add_all(calculated_records)
     db.commit()
@@ -393,6 +452,7 @@ def execute_payroll_calculation(
         total_employer_housing_levy=round(total_housing, 2),
         total_employer_statutory=round(total_nssf + total_housing, 2),
         total_salary_advances=round(total_advances, 2),
+        total_damage_deductions=round(total_damages, 2),
         error_count=len([e for e in errors if e.status in ["UNRESOLVED", "OPEN"]]),
         status=period.status
     )
@@ -459,9 +519,17 @@ def get_payroll_records(
             unpaid_leave_deduction=getattr(rec, 'unpaid_leave_deduction', 0.0),
             off_day_deduction=getattr(rec, 'off_day_deduction', 0.0),
             salary_advance_deduction=getattr(rec, 'salary_advance_deduction', 0.0),
+            damage_deduction=getattr(rec, 'damage_deduction', 0.0),
             reliever_earnings=getattr(rec, 'reliever_earnings', 0.0),
             total_deductions=rec.total_deductions,
             net_pay=rec.net_pay,
+            is_on_hold=getattr(rec, 'is_on_hold', False),
+            hold_reason=getattr(rec, 'hold_reason', None),
+            held_by=getattr(rec, 'held_by', None),
+            held_at=getattr(rec, 'held_at', None),
+            released_by=getattr(rec, 'released_by', None),
+            released_at=getattr(rec, 'released_at', None),
+            release_notes=getattr(rec, 'release_notes', None),
             employer_nssf_deduction=emp_nssf,
             employer_housing_levy_deduction=emp_housing,
             total_employer_statutory=total_emp_stat,
@@ -516,9 +584,17 @@ def get_guard_payroll_records(
             unpaid_leave_deduction=getattr(rec, 'unpaid_leave_deduction', 0.0),
             off_day_deduction=getattr(rec, 'off_day_deduction', 0.0),
             salary_advance_deduction=getattr(rec, 'salary_advance_deduction', 0.0),
+            damage_deduction=getattr(rec, 'damage_deduction', 0.0),
             reliever_earnings=getattr(rec, 'reliever_earnings', 0.0),
             total_deductions=rec.total_deductions,
             net_pay=rec.net_pay,
+            is_on_hold=getattr(rec, 'is_on_hold', False),
+            hold_reason=getattr(rec, 'hold_reason', None),
+            held_by=getattr(rec, 'held_by', None),
+            held_at=getattr(rec, 'held_at', None),
+            released_by=getattr(rec, 'released_by', None),
+            released_at=getattr(rec, 'released_at', None),
+            release_notes=getattr(rec, 'release_notes', None),
             employer_nssf_deduction=emp_nssf,
             employer_housing_levy_deduction=emp_housing,
             total_employer_statutory=total_emp_stat,

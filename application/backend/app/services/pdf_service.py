@@ -167,6 +167,11 @@ def generate_payslip_pdf(data: Dict[str, Any]) -> bytes:
         deductions_table_data.append(
             [Paragraph("<b>Mid-Month Salary Advance</b>", label_style), Paragraph(f"<b>{salary_adv_val:,.2f}</b>", label_style)]
         )
+    damage_ded_val = data.get('damage_deduction', 0.0)
+    if damage_ded_val > 0:
+        deductions_table_data.append(
+            [Paragraph("<b>Property / Belonging Damage Deduction</b>", label_style), Paragraph(f"<b>{damage_ded_val:,.2f}</b>", label_style)]
+        )
     deductions_table_data.extend([
         [Paragraph("Other Deductions", value_style), Paragraph(f"{data.get('other_deductions', 0.0):,.2f}", value_style)],
         [Paragraph("<b>Total Deductions</b>", label_style), Paragraph(f"<b>{data.get('total_deductions', 0.0):,.2f}</b>", label_style)],

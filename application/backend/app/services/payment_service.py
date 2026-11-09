@@ -71,6 +71,7 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
 
     bank_items: List[Dict[str, Any]] = []
     mpesa_items: List[Dict[str, Any]] = []
+    held_items: List[Dict[str, Any]] = []
     unrouted_items: List[Dict[str, Any]] = []
     duplicate_warnings: List[Dict[str, Any]] = []
 
@@ -92,6 +93,24 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
                 "net_pay": net_pay,
                 "reason": "GUARD_RECORD_MISSING",
                 "payment_method": "UNKNOWN"
+            })
+            continue
+
+        # Check if record is currently placed on hold by HR / Admin
+        if getattr(rec, "is_on_hold", False):
+            held_items.append({
+                "payroll_record_id": rec.id,
+                "guard_id": guard.id,
+                "employee_number": guard.employee_number,
+                "guard_name": guard.full_name,
+                "payment_method": guard.payment_method or "Bank Transfer",
+                "bank_name": guard.bank_name or "M-Pesa",
+                "account_number": guard.bank_account if (guard.payment_method or "").strip() == "Bank Transfer" else (guard.mpesa_number or guard.phone or "—"),
+                "amount": net_pay,
+                "hold_reason": getattr(rec, "hold_reason", None) or "Salary placed on hold pending review/resolution",
+                "held_by": getattr(rec, "held_by", None) or "HR/Admin",
+                "held_at": getattr(rec, "held_at", None).strftime("%Y-%m-%d %H:%M") if getattr(rec, "held_at", None) else None,
+                "status": "ON_HOLD"
             })
             continue
 
@@ -183,9 +202,10 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
 
     total_bank_amount = round(sum(item["amount"] for item in bank_items), 2)
     total_mpesa_amount = round(sum(item["amount"] for item in mpesa_items), 2)
+    total_held_amount = round(sum(item["amount"] for item in held_items), 2)
     total_unrouted_amount = round(sum(item["net_pay"] for item in unrouted_items), 2)
 
-    total_routed_and_unrouted = round(total_bank_amount + total_mpesa_amount + total_unrouted_amount, 2)
+    total_routed_and_unrouted = round(total_bank_amount + total_mpesa_amount + total_held_amount + total_unrouted_amount, 2)
     discrepancy = round(total_payroll_net_pay - total_routed_and_unrouted, 2)
     is_reconciled = (discrepancy == 0.0)
 
@@ -196,15 +216,18 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
         "total_records_count": len(records),
         "bank_records_count": len(bank_items),
         "mpesa_records_count": len(mpesa_items),
+        "held_records_count": len(held_items),
         "unrouted_records_count": len(unrouted_items),
         "total_payroll_net_pay": round(total_payroll_net_pay, 2),
         "total_bank_amount": total_bank_amount,
         "total_mpesa_amount": total_mpesa_amount,
+        "total_held_amount": total_held_amount,
         "total_unrouted_amount": total_unrouted_amount,
         "discrepancy": discrepancy,
         "is_reconciled": is_reconciled,
         "bank_items": bank_items,
         "mpesa_items": mpesa_items,
+        "held_items": held_items,
         "unrouted_items": unrouted_items,
         "duplicate_warnings": duplicate_warnings
     }

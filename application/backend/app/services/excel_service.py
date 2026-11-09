@@ -9,7 +9,11 @@ def generate_bank_schedule_excel(items: List[Dict[str, Any]], period_name: str) 
     """
     Generates CorpSec Bank Payment Schedule formatted Excel workbook matching Screen 14.
     Approved Columns: Guard ID | Full Name | Bank Name | Account Number | Net Amount (KES) | Reference | Status
+    Hard Guarantee: Excludes any employee whose salary is on hold.
     """
+    # Strict fail-safe: exclude any employee whose salary is currently on hold
+    items = [it for it in items if not it.get("is_on_hold") and it.get("status") != "ON_HOLD"]
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Bank Payment Schedule"
@@ -110,6 +114,9 @@ def generate_mpesa_schedule_excel(items: List[Dict[str, Any]], period_name: str)
     Generates CorpSec M-Pesa Payment Schedule formatted Excel workbook matching Screen 15.
     Approved Columns: Guard ID | Full Name | Phone Number | Net Amount (KES) | Reference | Status
     """
+    # Strict fail-safe: Held employees must NEVER be exported in payment schedules
+    items = [it for it in items if not it.get("is_on_hold") and it.get("status") != "ON_HOLD"]
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "M-Pesa Payment Schedule"

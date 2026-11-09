@@ -160,3 +160,34 @@ class InventoryTransaction(Base):
     issued_site = relationship("Site", foreign_keys=[issued_to_site_id])
     processed_by = relationship("User", foreign_keys=[processed_by_user_id])
 
+
+class AssetDamageDeduction(Base):
+    __tablename__ = "asset_damage_deductions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    guard_id = Column(Integer, ForeignKey("guards.id"), nullable=False, index=True)
+    asset_id = Column(Integer, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id", ondelete="SET NULL"), nullable=True)
+    allocation_id = Column(Integer, ForeignKey("asset_allocations.id", ondelete="SET NULL"), nullable=True)
+
+    item_name = Column(String(255), nullable=False)
+    item_tag = Column(String(100), nullable=True)
+    damage_description = Column(Text, nullable=False)
+    deduction_amount = Column(Float, nullable=False, default=0.0)
+    incident_date = Column(Date, default=datetime.date.today, nullable=False)
+
+    payroll_period_id = Column(Integer, ForeignKey("payroll_periods.id"), nullable=True, index=True)
+    status = Column(String(50), default="PENDING", nullable=False)  # PENDING, DEDUCTED, WAIVED, CANCELLED
+    deducted_at = Column(DateTime, nullable=True)
+
+    created_by = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+
+    guard = relationship("Guard", foreign_keys=[guard_id])
+    asset = relationship("Asset", foreign_keys=[asset_id])
+    inventory_item = relationship("InventoryItem", foreign_keys=[inventory_item_id])
+    allocation = relationship("AssetAllocation", foreign_keys=[allocation_id])
+    payroll_period = relationship("PayrollPeriod", foreign_keys=[payroll_period_id])
+
+

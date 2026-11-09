@@ -53,10 +53,20 @@ class PayrollRecord(Base):
     unpaid_leave_deduction = Column(Float, default=0.0, nullable=False)
     off_day_deduction = Column(Float, default=0.0, nullable=False)
     salary_advance_deduction = Column(Float, default=0.0, nullable=False)
+    damage_deduction = Column(Float, default=0.0, nullable=False)
     reliever_earnings = Column(Float, default=0.0, nullable=False)
     
     total_deductions = Column(Float, default=0.0, nullable=False)
     net_pay = Column(Float, default=0.0, nullable=False)
+    
+    # Salary Payment Hold & Investigation Tracking
+    is_on_hold = Column(Boolean, default=False, nullable=False)
+    hold_reason = Column(Text, nullable=True)
+    held_by = Column(String(255), nullable=True)
+    held_at = Column(DateTime, nullable=True)
+    released_by = Column(String(255), nullable=True)
+    released_at = Column(DateTime, nullable=True)
+    release_notes = Column(Text, nullable=True)
     
     # Employer-side statutory contributions (does not affect employee net pay)
     employer_nssf_deduction = Column(Float, default=0.0, nullable=False)
