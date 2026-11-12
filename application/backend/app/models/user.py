@@ -10,6 +10,7 @@ class UserRole(str, PyEnum):
     HR = "HR"
     SUPERVISOR = "SUPERVISOR"
     GUARD = "GUARD"
+    STAFF = "STAFF"
 
 
 class UserStatus(str, PyEnum):

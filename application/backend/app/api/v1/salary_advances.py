@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 
 from application.backend.app.api.deps import get_db, require_admin_or_hr, get_current_user
-from application.backend.app.models.user import User
+from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.payroll import PayrollPeriod
 from application.backend.app.models.salary_advance import SalaryAdvance
@@ -102,6 +102,12 @@ def issue_salary_advance(
     if adv_type not in ["GUARD", "STAFF"]:
         raise HTTPException(status_code=400, detail="advance_type must be either 'GUARD' or 'STAFF'")
 
+    if adv_type == "STAFF" and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Issuing salary advances to corporate staff is confidential and restricted to System Administrator only."
+        )
+
     if adv_type == "GUARD":
         if not payload.guard_id:
             raise HTTPException(status_code=400, detail="guard_id is required for guard advance")
@@ -188,7 +194,22 @@ def list_salary_advances(
     current_user: User = Depends(require_admin_or_hr)
 ):
     """List salary advances with filtering."""
+    if current_user.role != UserRole.ADMIN.value:
+        if staff_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Staff member personnel files and salary advances are confidential and restricted to System Administrator only."
+            )
+        if advance_type and advance_type.strip().upper() == "STAFF":
+            raise HTTPException(
+                status_code=403,
+                detail="Staff member personnel files and salary advances are confidential and restricted to System Administrator only."
+            )
+
     query = db.query(SalaryAdvance)
+
+    if current_user.role != UserRole.ADMIN.value:
+        query = query.filter(SalaryAdvance.advance_type == "GUARD")
 
     if advance_type:
         query = query.filter(SalaryAdvance.advance_type == advance_type.strip().upper())

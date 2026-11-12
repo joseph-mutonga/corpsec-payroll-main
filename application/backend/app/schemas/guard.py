@@ -4,7 +4,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
 class GuardCreate(BaseModel):
-    employee_number: str = Field(..., description="Unique Employee ID (e.g. CS-00452)")
+    employee_number: Optional[str] = Field(None, description="Unique Employee ID (e.g. 001, 002, CS-00462). Auto-generated if omitted.")
     full_name: str
     national_id: str
     phone: str
@@ -38,7 +38,14 @@ class GuardCreate(BaseModel):
     next_of_kin: Optional[str] = None
 
 
+class NextEmployeeNumberResponse(BaseModel):
+    next_employee_number: str
+    previous_employee_number: Optional[str] = None
+    suggested_pure_number: Optional[str] = "001"
+
+
 class GuardUpdate(BaseModel):
+    employee_number: Optional[str] = None
     full_name: Optional[str] = None
     national_id: Optional[str] = None
     phone: Optional[str] = None

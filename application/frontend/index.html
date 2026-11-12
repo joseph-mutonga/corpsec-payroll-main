@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261109_v9">
-  <script src="/static/js/app.js?v=20261109_v9"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261111_v17">
+  <script src="/static/js/app.js?v=20261112_v5"></script>
 </head>
 <body>
 
@@ -76,11 +76,77 @@
             </div>
           </div>
 
+          <!-- Location Verification Strip (Suspended for now; ready to reactivate later) -->
+          <div id="login-location-strip" style="display:none;"></div>
+
           <button type="submit" id="unified-login-btn" class="btn-login-submit">
             <span id="btn-login-text">Sign In to CorpSec</span>
             <span id="btn-login-spinner" class="login-spinner" style="display:none;"></span>
           </button>
         </form>
+
+        <!-- Role-Based Two-Factor OTP Verification Form (Enforced for Admin, Supervisor, Staff) -->
+        <div id="unified-otp-container" style="display:none;">
+          <div class="otp-verification-header" style="text-align:center; margin-bottom:20px;">
+            <div style="font-size:32px; margin-bottom:8px;">🔐</div>
+            <h2 style="font-size:18px; font-weight:800; color:#0f172a; margin:0 0 6px 0;">Security Verification Required</h2>
+            <p style="font-size:13px; color:#475569; margin:0; line-height:1.5;">
+              A 6-digit verification code has been dispatched to <br>
+              <strong id="otp-masked-email" style="color:#0284c7; word-break:break-all;">your registered email</strong>
+            </p>
+            <div style="display:inline-block; margin-top:8px; font-size:11px; background:#eff6ff; color:#1d4ed8; font-weight:600; padding:4px 10px; border-radius:9999px;">
+              ⏱️ Valid for 5 Minutes • One-Time Passcode
+            </div>
+          </div>
+
+          <form id="unified-otp-form" onsubmit="handleVerifyOTPSubmit(event)">
+            <div class="login-field-group">
+              <div class="login-field-label" style="justify-content:center;">
+                <label for="unified-otp-input" style="font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">6-Digit Security Code</label>
+              </div>
+              <div class="login-input-wrapper" style="position:relative;">
+                <input 
+                  type="text" 
+                  id="unified-otp-input" 
+                  class="login-text-input" 
+                  placeholder="• • • • • •" 
+                  maxlength="6" 
+                  inputmode="numeric" 
+                  pattern="[0-9]{6}" 
+                  autocomplete="one-time-code"
+                  style="text-align:center; font-size:26px; font-weight:800; letter-spacing:10px; font-family:monospace; padding:12px 16px;" 
+                  required
+                >
+              </div>
+              <div style="font-size:11px; color:#64748b; text-align:center; margin-top:6px;">
+                Input 6 numbers sent to your email inbox
+              </div>
+            </div>
+
+            <button type="submit" id="btn-verify-otp" class="btn-login-submit" style="margin-top:12px;">
+              <span id="btn-verify-otp-text">Verify & Access System</span>
+              <span id="btn-verify-otp-spinner" class="login-spinner" style="display:none;"></span>
+            </button>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12px;">
+              <button 
+                type="button" 
+                id="btn-resend-otp" 
+                onclick="handleResendOTP()" 
+                style="background:none; border:none; color:#0284c7; font-weight:600; cursor:pointer; padding:4px 0;"
+              >
+                🔄 Resend Code <span id="otp-timer-count"></span>
+              </button>
+              <button 
+                type="button" 
+                onclick="handleBackToLogin()" 
+                style="background:none; border:none; color:#64748b; font-weight:500; cursor:pointer; padding:4px 0;"
+              >
+                ← Back to Login
+              </button>
+            </div>
+          </form>
+        </div>
 
         <!-- Role-Based Auto-Dispatch Note -->
         <div class="login-routing-note">
@@ -113,7 +179,8 @@
     <ul class="nav-links">
       <div class="sidebar-section-title">MENU</div>
       <li class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</li>
-      <li class="nav-item" onclick="switchTab('reports')">📈 Analytics & Reports</li>
+      <li class="nav-item" onclick="switchTab('reports')">📈 Chart Analytics & Reports</li>
+      <li class="nav-item" id="nav-item-team-chat" onclick="switchTab('team-chat'); if (typeof initWhatsAppChat === 'function') initWhatsAppChat();" style="display:flex; align-items:center; justify-content:space-between;"><span>💬 Team Chat</span><span id="team-chat-nav-badge" class="wa-nav-badge" style="display:none;">0</span></li>
       <li class="nav-item" onclick="switchTab('documents')">📑 Company Documents</li>
       <li class="nav-item" onclick="switchTab('staff')">👥 Staff & HR</li>
       <li class="nav-item" onclick="switchTab('incidents')">🚨 Incident Reports</li>
@@ -138,6 +205,10 @@
       <div class="sidebar-section-title">TOOLS</div>
       <li class="nav-item" onclick="switchTab('audit')">📜 Audit Trail</li>
       <li class="nav-item" onclick="switchTab('settings')">⚙️ System Settings</li>
+      <li class="nav-item" id="nav-item-anonymous" onclick="switchTab('anonymous')" style="display:none; align-items:center; justify-content:space-between;">
+        <span>📬 Anonymous Guard Reports</span>
+        <span id="anon-reports-nav-badge" class="badge" style="display:none; background:#DC2626; color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">0</span>
+      </li>
       <li class="nav-item" onclick="switchTab('download-app')" id="nav-item-download-app" style="font-weight:700;">💻 Download App</li>
     </ul>
 
@@ -196,18 +267,18 @@
 
         <!-- Profile Avatar Badge & Dropdown -->
         <div class="user-avatar-badge" role="button" tabindex="0" aria-label="User Profile Menu" aria-expanded="false" onclick="toggleProfileDropdown(event)">
-          <img src="/static/images/corpsec_logo_badge.png" alt="Fiona Johnson" class="avatar-img">
+          <img src="/static/images/corpsec_logo_badge.png" alt="Profile" class="avatar-img" id="header-avatar-img">
           <div class="avatar-info">
-            <span class="avatar-name">Fiona Johnson</span>
-            <span class="avatar-role">System Admin</span>
+            <span class="avatar-name" id="header-user-name">Loading...</span>
+            <span class="avatar-role" id="header-user-role">System Admin</span>
           </div>
         </div>
 
         <!-- Floating Profile Dropdown Menu -->
         <div id="dropdown-profile" class="header-dropdown-menu" style="display:none; width:220px; right:140px;">
-          <div class="dropdown-header-title">Fiona Johnson</div>
-          <div class="dropdown-item" onclick="openProfileModal()">👤 Admin Profile</div>
-          <div class="dropdown-item" onclick="switchTab('settings')">⚙️ System Settings</div>
+          <div class="dropdown-header-title" id="dropdown-profile-name">User Profile</div>
+          <div class="dropdown-item" id="dropdown-profile-btn" onclick="openProfileModal()">👤 View Profile</div>
+          <div class="dropdown-item" id="dropdown-profile-settings-btn" onclick="switchTab('settings')">⚙️ System Settings</div>
           <div style="border-top:1px solid #F1F5F9; margin:4px 0;"></div>
           <div class="dropdown-item" style="color:#EF4444;" onclick="logout()">🚪 Sign Out</div>
         </div>
@@ -524,6 +595,16 @@
                     <div style="font-size:11px; color:#64748B; font-weight:400;">Record field occurrence or breach</div>
                   </div>
                 </button>
+                <button class="dash-action-btn" id="dash-btn-anon-reports" onclick="switchTab('anonymous')">
+                  <div class="dash-action-icon" style="background:#F0FDFA; color:#0D7682;">📬</div>
+                  <div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span>Anonymous Guard Reports</span>
+                      <span id="dash-anon-count-badge" style="display:none; background:#DC2626; color:#FFF; font-size:10px; font-weight:800; padding:1px 6px; border-radius:10px;">0</span>
+                    </div>
+                    <div style="font-size:11px; color:#64748B; font-weight:400;">Confidential reports &amp; whistleblower feed</div>
+                  </div>
+                </button>
               </div>
 
               <!-- Supervisor Quick Actions -->
@@ -547,6 +628,13 @@
                   <div>
                     <div>Report Field Incident</div>
                     <div style="font-size:11px; color:#64748B; font-weight:400;">Submit safety or theft report instantly</div>
+                  </div>
+                </button>
+                <button class="dash-action-btn" onclick="openAwardItemModal('guard', null, '')">
+                  <div class="dash-action-icon" style="background:#F0FDF4; color:#16A34A;">📦</div>
+                  <div>
+                    <div>Issue Inventory / Equipment to Guard</div>
+                    <div style="font-size:11px; color:#64748B; font-weight:400;">Assign equipment or duty supplies to a guard</div>
                   </div>
                 </button>
                 <button class="dash-action-btn" onclick="switchTab('leave')">
@@ -913,15 +1001,73 @@
         </div>
 
         <!-- Daily Attendance Logs Card -->
-        <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:12px; padding:16px 20px;">
-          <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin-bottom:12px;">📋 Daily Shift Attendance Logs</h3>
+        <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px 20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+            <div>
+              <h3 style="font-size:15px; font-weight:800; color:#0F172A; margin:0; display:flex; align-items:center; gap:8px;">
+                <span>📋 Daily Shift Attendance Logs</span>
+                <span id="att-badge-summary" class="badge" style="background:#F1F5F9; color:#475569; font-weight:700;">All Shifts</span>
+              </h3>
+              <p style="font-size:12px; color:#64748B; margin:3px 0 0 0;">Inspect verified clock-in/out records, filter day shifts vs night shifts, and audit site deployment coverage.</p>
+            </div>
+            <!-- Quick KPI Mini Badges -->
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <span style="font-size:11px; font-weight:700; background:#F8FAFC; border:1px solid #E2E8F0; padding:4px 10px; border-radius:20px; color:#334155;">
+                Total Logs: <strong id="att-count-total" style="color:#0F172A;">0</strong>
+              </span>
+              <span style="font-size:11px; font-weight:700; background:#FFFBEB; border:1px solid #FDE68A; padding:4px 10px; border-radius:20px; color:#B45309;">
+                ☀️ Day: <strong id="att-count-day">0</strong>
+              </span>
+              <span style="font-size:11px; font-weight:700; background:#EEF2FF; border:1px solid #C7D2FE; padding:4px 10px; border-radius:20px; color:#4338CA;">
+                🌙 Night: <strong id="att-count-night">0</strong>
+              </span>
+            </div>
+          </div>
+
+          <!-- Interactive Filter Toolbar: Sites, Day vs Night Shift, Date, Search -->
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 14px; margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <!-- 1. Site Filter -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="att-filter-site" style="font-size:12px; font-weight:700; color:#475569; white-space:nowrap;">Site:</label>
+              <select id="att-filter-site" class="form-control" onchange="filterAttendanceLogs()" style="font-size:12px; font-weight:600; min-width:180px; padding:6px 10px;">
+                <option value="">🏢 All Client Sites</option>
+              </select>
+            </div>
+
+            <!-- 2. Shift Type Pills (All / Day / Night) -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="font-size:12px; font-weight:700; color:#475569; white-space:nowrap;">Shift:</label>
+              <div style="display:flex; gap:3px; background:#E2E8F0; padding:2px; border-radius:8px;">
+                <button type="button" id="att-btn-shift-all" class="btn" onclick="setAttendanceShiftFilter('ALL')" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:6px; background:#FFFFFF; color:#0F172A; border:none; box-shadow:0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">All</button>
+                <button type="button" id="att-btn-shift-day" class="btn" onclick="setAttendanceShiftFilter('DAY')" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:6px; background:transparent; color:#92400E; border:none; cursor:pointer;">☀️ Day</button>
+                <button type="button" id="att-btn-shift-night" class="btn" onclick="setAttendanceShiftFilter('NIGHT')" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:6px; background:transparent; color:#3730A3; border:none; cursor:pointer;">🌙 Night</button>
+              </div>
+            </div>
+
+            <!-- 3. Date Picker & Quick Today Button -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="att-filter-date" style="font-size:12px; font-weight:700; color:#475569; white-space:nowrap;">Date:</label>
+              <input type="date" id="att-filter-date" class="form-control" onchange="filterAttendanceLogs()" style="font-size:12px; padding:5px 8px; max-width:140px;" title="Filter shift logs by specific date">
+              <button type="button" class="btn btn-secondary" onclick="setAttendanceTodayDate()" style="font-size:11px; font-weight:600; padding:5px 9px;">Today</button>
+            </div>
+
+            <!-- 4. Text Search -->
+            <div style="display:flex; align-items:center; gap:6px; flex:1; min-width:180px;">
+              <input type="text" id="att-filter-search" class="form-control" placeholder="Search guard name, ID, or site..." oninput="filterAttendanceLogs()" style="font-size:12px; padding:6px 10px; width:100%;">
+            </div>
+
+            <!-- 5. Reset Filters Button -->
+            <button type="button" class="btn btn-secondary" onclick="resetAttendanceFilters()" style="font-size:11px; font-weight:600; padding:6px 10px;" title="Reset all site and shift filters">↺ Reset</button>
+          </div>
+
           <div class="table-container" style="box-shadow:none; border:1px solid #E2E8F0;">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Guard Name</th>
-                  <th>Site Name</th>
+                  <th>Shift Date</th>
+                  <th>Guard Personnel</th>
+                  <th>Client Site</th>
+                  <th>Shift Type</th>
                   <th>Clock In</th>
                   <th>Clock Out</th>
                   <th>Reg Hours</th>
@@ -947,6 +1093,12 @@
               <p style="font-size:13px; color:#64748B; margin-top:4px; margin-bottom:0;">Calculates Gross Pay, Overtime, NSSF (6%), SHIF (2.75% min KES 300), Housing Levy (1.5%), and PAYE.</p>
             </div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <button class="btn btn-secondary" onclick="downloadStatutoryPayrollTemplate()" title="Download Official Statutory NHIF/SHIF Payroll Template (.xlsx)" style="display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:10px 14px;">
+                <span>📥</span> Blank Statutory Template
+              </button>
+              <button class="btn btn-secondary" onclick="exportStatutoryPayrollExcel()" title="Export Populated Statutory NHIF/SHIF Return (.xlsx)" style="display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:10px 14px;">
+                <span>📊</span> Export Statutory Excel
+              </button>
               <button class="btn btn-secondary" onclick="downloadSalaryAdvanceTemplate()" title="Download Excel template for salary advances" style="display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:10px 14px;">
                 <span>📥</span> Advance Template
               </button>
@@ -1146,8 +1298,10 @@
               </select>
             </div>
             <button class="btn btn-secondary" onclick="loadPayments()" title="Reload payment status">🔄 Refresh</button>
-            <button class="btn btn-secondary" onclick="exportBankScheduleExcel()" style="display:inline-flex; align-items:center; gap:6px;">📊 Export Bank Excel</button>
-            <button class="btn btn-primary" onclick="exportMpesaScheduleExcel()" style="display:inline-flex; align-items:center; gap:6px; background:#059669; border-color:#059669;">📱 Export M-Pesa Excel</button>
+            <button class="btn btn-secondary" onclick="downloadBankSalaryTemplate()" title="Download Corporate I&M Bank Salary Batch Template (.xlsx)" style="display:inline-flex; align-items:center; gap:6px;">📥 Bank Template</button>
+            <button class="btn btn-secondary" onclick="downloadMpesaSalaryTemplate()" title="Download Corporate I&M Bank Mobile Money Template (.xlsx)" style="display:inline-flex; align-items:center; gap:6px;">📥 M-Pesa Template</button>
+            <button class="btn btn-secondary" onclick="exportBankScheduleExcel('im_batch')" title="Export Corporate I&M Bank Salary Batch File (.xlsx)" style="display:inline-flex; align-items:center; gap:6px; font-weight:700;">📊 Export Bank Batch</button>
+            <button class="btn btn-primary" onclick="exportMpesaScheduleExcel('im_batch')" title="Export Corporate I&M Bank Mobile Money File (.xlsx)" style="display:inline-flex; align-items:center; gap:6px; background:#059669; border-color:#059669; font-weight:700;">📱 Export M-Pesa Batch</button>
           </div>
         </div>
 
@@ -1429,6 +1583,15 @@
           
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:20px;">
             <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
+              <h4 style="font-size:16px; font-weight:700; margin-bottom:6px;">Statutory NHIF/SHIF Template</h4>
+              <p style="font-size:12px; color:#64748B; margin-bottom:12px;">Official statutory payroll return workbook with identity type dropdown.</p>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="downloadStatutoryPayrollTemplate()">📥 Blank Template (.xlsx)</button>
+                <button class="btn btn-primary" style="width:100%; justify-content:center; background:#0B3056; border-color:#0B3056;" onclick="exportStatutoryPayrollExcel()">📊 Export Return (.xlsx)</button>
+              </div>
+            </div>
+
+            <div style="background:#FFF; padding:22px; border-radius:20px; border:1px solid #E2E8F0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.04);">
               <h4 style="font-size:16px; font-weight:700; margin-bottom:6px;">NSSF Monthly Return</h4>
               <p style="font-size:12px; color:#64748B; margin-bottom:16px;">Export 6% employee + 6% employer Tier I & Tier II return file.</p>
               <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="downloadNssfCsv()">📥 Download NSSF CSV</button>
@@ -1524,7 +1687,646 @@
           </div>
         </div>
 
+        <!-- 4. Operations Team Chat & Discussion (Admin, HR, Staff & Supervisors) -->
+        <div class="report-card" style="margin-top:24px; border:1px solid #CBD5E1; border-radius:14px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.04);">
+          <div class="report-card-header" style="border-bottom:1px solid #F1F5F9; padding-bottom:12px; margin-bottom:14px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, #0D7682 0%, #14B8A6 100%); color:#FFF; display:flex; align-items:center; justify-content:center; font-size:20px;">
+                💬
+              </div>
+              <div>
+                <h3 class="report-card-title" style="margin:0; font-size:16px;">Operations Team Chat &amp; Operational Briefings</h3>
+                <p class="report-card-subtitle" style="margin:2px 0 0; font-size:12px; color:#64748B;">
+                  Direct operational communication between System Admin, HR, Corporate Staff, and Field Supervisors
+                </p>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge" style="background:#ECFDF5; color:#065F46; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px;">
+                🟢 Active Channel
+              </span>
+              <button class="btn btn-secondary" onclick="loadTeamChat()" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:4px;">
+                🔄 Refresh Chat
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat Messages Container -->
+          <div id="team-chat-feed" style="max-height:360px; min-height:180px; overflow-y:auto; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;">
+            <div style="text-align:center; padding:30px; color:#64748B;">Loading team discussion...</div>
+          </div>
+
+          <!-- Chat Input Form -->
+          <form id="team-chat-form" onsubmit="sendTeamChatMessage(event)" style="display:flex; gap:10px; align-items:center;">
+            <input type="text" id="team-chat-input" placeholder="Type an operational note, directive, or query for Admin, HR, Staff &amp; Supervisors..."
+              required maxlength="3000"
+              style="flex:1; border:1px solid #CBD5E1; border-radius:8px; padding:10px 14px; font-size:13px; font-family:inherit; outline:none;"
+            />
+            <button type="submit" id="btn-team-chat-send" class="btn btn-primary" style="background:#0D7682; border-color:#0D7682; padding:10px 20px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+              <span id="btn-team-send-text">Send 💬</span>
+              <span id="btn-team-send-spinner" style="display:none;">⏳</span>
+            </button>
+          </form>
+        </div>
+
       </section>
+
+            
+      <!-- ==================== WHATSAPP-STYLE TEAM CHAT ==================== -->
+      <section id="panel-team-chat" style="display:none; margin-top:-10px;">
+        <style>
+          .wa-container {
+            display: flex;
+            height: calc(100vh - 130px);
+            min-height: 600px;
+            background-color: #111b21;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+            border: 1px solid #222e35;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #e9edef;
+          }
+          .wa-sidebar {
+            width: 360px;
+            min-width: 300px;
+            max-width: 400px;
+            border-right: 1px solid #222e35;
+            display: flex;
+            flex-direction: column;
+            background-color: #111b21;
+          }
+          .wa-sidebar-header {
+            height: 60px;
+            background-color: #202c33;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #222e35;
+          }
+          .wa-header-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: #00a884;
+            color: #111b21;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+          }
+          .wa-header-actions {
+            display: flex;
+            gap: 16px;
+            color: #aebac1;
+            font-size: 18px;
+            cursor: pointer;
+          }
+          .wa-search-wrap {
+            padding: 8px 12px;
+            background-color: #111b21;
+            border-bottom: 1px solid #222e35;
+          }
+          .wa-search-box {
+            display: flex;
+            align-items: center;
+            background-color: #202c33;
+            border-radius: 8px;
+            padding: 6px 12px;
+            gap: 10px;
+          }
+          .wa-search-input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #d1d7db;
+            font-size: 13px;
+            width: 100%;
+          }
+          .wa-filter-pills {
+            display: flex;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: #111b21;
+            border-bottom: 1px solid #222e35;
+          }
+          .wa-pill {
+            background-color: #202c33;
+            color: #aebac1;
+            border-radius: 16px;
+            padding: 5px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            border: none;
+            transition: 0.15s;
+          }
+          .wa-pill.active {
+            background-color: #00a884;
+            color: #111b21;
+            font-weight: 700;
+          }
+          .wa-contact-list {
+            flex: 1;
+            overflow-y: auto;
+          }
+          .wa-contact-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(134,150,160,0.1);
+            cursor: pointer;
+            transition: background 0.15s;
+          }
+          .wa-contact-item:hover {
+            background-color: #202c33;
+          }
+          .wa-contact-item.active {
+            background-color: #2a3942;
+          }
+          .wa-contact-avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background-color: #202c33;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            border: 1px solid #374248;
+          }
+          .wa-contact-info {
+            flex: 1;
+            min-width: 0;
+          }
+          .wa-contact-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 3px;
+          }
+          .wa-contact-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e9edef;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .wa-contact-time {
+            font-size: 11px;
+            color: #8696a0;
+          }
+          .wa-contact-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          .wa-contact-msg {
+            font-size: 12px;
+            color: #8696a0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 220px;
+          }
+          .wa-role-tag {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+          }
+          .wa-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #0b141a;
+            position: relative;
+          }
+          .wa-main-header {
+            height: 60px;
+            background-color: #202c33;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #222e35;
+          }
+          .wa-chat-target {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          .wa-doodle-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background-color: #0b141a;
+            background-image: radial-gradient(#222e35 0.75px, transparent 0.75px);
+            background-size: 20px 20px;
+          }
+          .wa-date-pill {
+            align-self: center;
+            background-color: #182229;
+            color: #8696a0;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 8px;
+            margin: 6px 0 10px 0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            text-transform: uppercase;
+          }
+          .wa-bubble-wrap {
+            display: flex;
+            flex-direction: column;
+            max-width: 70%;
+          }
+          .wa-bubble-wrap.in {
+            align-self: flex-start;
+          }
+          .wa-bubble-wrap.out {
+            align-self: flex-end;
+          }
+          .wa-bubble {
+            padding: 7px 12px;
+            border-radius: 8px;
+            font-size: 13.5px;
+            line-height: 1.45;
+            position: relative;
+            word-wrap: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+          }
+          .wa-bubble-in {
+            background-color: #202c33;
+            color: #e9edef;
+            border-top-left-radius: 0;
+          }
+          .wa-bubble-out {
+            background-color: #005c4b;
+            color: #e9edef;
+            border-top-right-radius: 0;
+          }
+          .wa-sender-lbl {
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 2px;
+            display: block;
+          }
+          .wa-bubble-meta {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            margin-top: 3px;
+            font-size: 10.5px;
+            color: #8696a0;
+          }
+          .wa-bubble-out .wa-bubble-meta {
+            color: rgba(255,255,255,0.7);
+          }
+          .wa-blue-ticks {
+            color: #53bdeb;
+            font-size: 13px;
+            font-weight: bold;
+          }
+          .wa-grey-ticks {
+            color: #8696a0;
+            font-size: 13px;
+            font-weight: bold;
+          }
+          .wa-unread-badge {
+            background-color: #00a884;
+            color: #111b21;
+            font-size: 11px;
+            font-weight: 800;
+            min-width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 5px;
+            margin-left: 6px;
+            flex-shrink: 0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+          }
+          .wa-nav-badge {
+            background-color: #00a884;
+            color: #111b21;
+            font-size: 10.5px;
+            font-weight: 800;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 5px;
+            margin-left: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          }
+          .wa-input-bar {
+            min-height: 62px;
+            background-color: #202c33;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-top: 1px solid #222e35;
+          }
+          .wa-input-field {
+            flex: 1;
+            background-color: #2a3942;
+            color: #d1d7db;
+            border: none;
+            outline: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+          }
+          .wa-send-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background-color: #00a884;
+            color: #111b21;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            transition: transform 0.1s, background 0.15s;
+          }
+          .wa-send-btn:hover {
+            background-color: #06cf9c;
+            transform: scale(1.05);
+          }
+          .wa-icon-btn {
+            background: transparent;
+            border: none;
+            color: #8696a0;
+            cursor: pointer;
+            font-size: 20px;
+            padding: 6px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.15s;
+          }
+          .wa-icon-btn:hover {
+            color: #e9edef;
+            background-color: rgba(255,255,255,0.05);
+          }
+          .wa-attachment-preview-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #182229;
+            padding: 8px 16px;
+            border-top: 1px solid #2a3942;
+            border-bottom: 1px solid #2a3942;
+          }
+          .wa-preview-thumb {
+            width: 44px;
+            height: 44px;
+            border-radius: 6px;
+            object-fit: cover;
+            border: 1px solid #374248;
+            background: #111b21;
+          }
+          .wa-preview-doc-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 6px;
+            background: #202c33;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            border: 1px solid #374248;
+          }
+          .wa-preview-info {
+            flex: 1;
+            margin-left: 12px;
+            min-width: 0;
+          }
+          .wa-preview-filename {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e9edef;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .wa-preview-meta {
+            font-size: 11px;
+            color: #00a884;
+            font-weight: 600;
+            margin-top: 2px;
+          }
+          .wa-preview-remove {
+            background: none;
+            border: none;
+            color: #8696a0;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 6px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.15s;
+          }
+          .wa-preview-remove:hover {
+            color: #ef4444;
+            background: rgba(239,68,68,0.15);
+          }
+          .wa-bubble-img-wrap {
+            margin: -4px -8px 6px -8px;
+            border-radius: 8px 8px 4px 4px;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+            max-width: 320px;
+            background-color: #0c1317;
+          }
+          .wa-bubble-img {
+            width: 100%;
+            max-height: 280px;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.2s ease;
+          }
+          .wa-bubble-img:hover {
+            transform: scale(1.02);
+          }
+          .wa-bubble-doc {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background-color: rgba(0,0,0,0.22);
+            border-radius: 8px;
+            margin: 2px 0 6px 0;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: background 0.15s;
+          }
+          .wa-bubble-doc:hover {
+            background-color: rgba(0,0,0,0.35);
+          }
+          .wa-bubble-doc-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 6px;
+            background: rgba(0,168,132,0.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+          }
+          .wa-bubble-doc-info {
+            flex: 1;
+            min-width: 0;
+          }
+          .wa-bubble-doc-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e9edef;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .wa-bubble-doc-meta {
+            font-size: 11px;
+            color: #8696a0;
+            margin-top: 2px;
+          }
+          .wa-bubble-out .wa-bubble-doc-meta {
+            color: rgba(255,255,255,0.7);
+          }
+          .wa-bubble-doc-dl {
+            color: #8696a0;
+            font-size: 16px;
+            padding: 4px;
+          }
+        </style>
+
+        <div class="wa-container">
+          <!-- Left Column: Chats List -->
+          <div class="wa-sidebar">
+            <!-- Top Header -->
+            <div class="wa-sidebar-header">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div class="wa-header-avatar" id="wa-my-avatar">👤</div>
+                <div>
+                  <div style="font-size:14px; font-weight:700;" id="wa-my-name">User</div>
+                  <div style="font-size:11px; color:#8696a0;" id="wa-my-role">Admin</div>
+                </div>
+              </div>
+              <div class="wa-header-actions">
+                <span title="Status" onclick="initWhatsAppChat()">🔄</span>
+                <span title="Options">⋮</span>
+              </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="wa-search-wrap">
+              <div class="wa-search-box">
+                <span style="color:#8696a0; font-size:14px;">🔍</span>
+                <input type="text" id="wa-contact-search" class="wa-search-input" placeholder="Search or start new chat" oninput="filterWhatsAppContacts(this.value)" />
+              </div>
+            </div>
+
+            <!-- Filter Pills -->
+            <div class="wa-filter-pills">
+              <button class="wa-pill active" onclick="setWaFilter('all', this)">All</button>
+              <button class="wa-pill" id="wa-pill-unread" onclick="setWaFilter('unread', this)">Unread <span id="wa-unread-filter-count" style="display:none; background:#00a884; color:#111b21; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:800; margin-left:4px;">0</span></button>
+              <button class="wa-pill" onclick="setWaFilter('group', this)">Groups</button>
+              <button class="wa-pill" onclick="setWaFilter('direct', this)">Direct</button>
+            </div>
+
+            <!-- Contacts / Chats List -->
+            <div class="wa-contact-list" id="wa-contact-list">
+              <div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading chats...</div>
+            </div>
+          </div>
+
+          <!-- Right Column: Active Chat Conversation -->
+          <div class="wa-main">
+            <!-- Active Chat Header -->
+            <div class="wa-main-header">
+              <div class="wa-chat-target">
+                <div class="wa-contact-avatar" id="wa-active-avatar">👥</div>
+                <div>
+                  <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team</div>
+                  <div style="font-size:12px; color:#8696a0;" id="wa-active-status">Admin, HR, Staff &amp; Supervisors • Online</div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <button class="wa-icon-btn" onclick="initWhatsAppChat()" title="Refresh Chat">🔄</button>
+                <button class="wa-icon-btn" title="Search in chat">🔍</button>
+                <button class="wa-icon-btn" title="More options">⋮</button>
+              </div>
+            </div>
+
+            <!-- Messages Stream (Doodle Background) -->
+            <div class="wa-doodle-body" id="wa-messages-body">
+              <div class="wa-date-pill">TODAY</div>
+              <div style="text-align:center; padding:40px; color:#8696a0; font-size:13px;">Loading conversation...</div>
+            </div>
+
+            <!-- Pending Attachment Preview Bar (Hidden by default) -->
+            <div id="wa-attachment-preview-bar" class="wa-attachment-preview-bar" style="display:none;">
+              <div style="display:flex; align-items:center; min-width:0; flex:1;">
+                <div id="wa-preview-thumb-wrap"></div>
+                <div class="wa-preview-info">
+                  <div class="wa-preview-filename" id="wa-preview-filename">File.pdf</div>
+                  <div class="wa-preview-meta" id="wa-preview-meta">0 KB • Ready to send</div>
+                </div>
+              </div>
+              <button type="button" class="wa-preview-remove" onclick="clearWhatsAppAttachment()" title="Remove attachment">✕</button>
+            </div>
+
+            <!-- Message Input Bar -->
+            <form id="wa-message-form" class="wa-input-bar" onsubmit="event.preventDefault(); sendWhatsAppMessage(event); return false;">
+              <input type="file" id="wa-file-input" style="display:none;" onchange="handleWhatsAppFileSelected(event)" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
+              <button type="button" class="wa-icon-btn" title="Emojis" onclick="insertWaEmoji('👍')">😊</button>
+              <button type="button" class="wa-icon-btn" title="Attach photo or document" onclick="document.getElementById('wa-file-input').click()">📎</button>
+              <input type="text" id="wa-msg-input" class="wa-input-field" placeholder="Type a message (or attach file with optional caption)" autocomplete="off" maxlength="5000" />
+              <button type="submit" id="wa-send-btn" class="wa-send-btn" title="Send message">
+                ➤
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Modal: High-Res Image Preview -->
+        <div id="modal-wa-image-preview" class="modal-overlay" style="display:none; background:rgba(11,20,26,0.92); z-index:9999;" onclick="if(event.target === this) closeWhatsAppImagePreview()">
+          <div style="position:relative; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; align-items:center;">
+            <div style="position:absolute; top:-45px; right:0; display:flex; gap:12px; align-items:center;">
+              <a id="wa-modal-download-link" href="#" download class="btn btn-sm btn-secondary" style="background:#202c33; color:#e9edef; border:none; padding:6px 14px;">⬇️ Download</a>
+              <button onclick="closeWhatsAppImagePreview()" style="background:#202c33; color:#e9edef; border:none; border-radius:50%; width:32px; height:32px; font-size:16px; cursor:pointer;">✕</button>
+            </div>
+            <img id="wa-modal-preview-img" src="" alt="Photo" style="max-width:88vw; max-height:82vh; border-radius:8px; box-shadow:0 12px 36px rgba(0,0,0,0.6); object-fit:contain;" />
+            <div id="wa-modal-preview-caption" style="color:#d1d7db; font-size:13px; margin-top:10px; font-weight:600;"></div>
+          </div>
+        </div>
+      </section>
+
 
             <!-- Tab Panel: Admin Incident Reports -->
       <section id="panel-incidents" style="display:none;">
@@ -1957,6 +2759,40 @@
           </div>
         </div>
 
+        <!-- Real-Time Location & System Hours Monitoring Hub Card (System Admin Only) -->
+        <div id="staff-monitoring-hub-card" class="card" style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:20px; margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <h3 style="margin:0; font-size:16px; font-weight:800; color:#0F172A;">🛰️ Live Staff Location &amp; System Hours Monitor</h3>
+                <span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Live Tracking</span>
+                <span class="badge" style="background:#FEF2F2; color:#991B1B; font-size:10px; font-weight:800; border:1px solid #FCA5A5;">CONFIDENTIAL — ADMIN ONLY</span>
+              </div>
+              <p style="margin:4px 0 0 0; font-size:12px; color:#64748B;">Live overview of corporate Staff, HR Managers, and Field Supervisors: verified login GPS locations, daily online hours, and last recorded actions in the system.</p>
+            </div>
+            <button class="btn btn-secondary" style="font-size:12px; padding:6px 12px;" onclick="loadStaffMonitoringOverview()">🔄 Refresh Live Status</button>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th>OFFICER / STAFF</th>
+                  <th>ROLE</th>
+                  <th>ONLINE STATUS</th>
+                  <th>TODAY'S SYSTEM HOURS</th>
+                  <th>LAST LOGIN TIME</th>
+                  <th>LAST VERIFIED LOCATION</th>
+                  <th>LAST ACTIVITY RECORDED</th>
+                  <th style="text-align:right;">ACTION</th>
+                </tr>
+              </thead>
+              <tbody id="staff-monitoring-table-body">
+                <tr><td colspan="8" style="text-align:center; padding:20px; color:#64748B;">Loading live staff monitoring data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="table-container">
           <div style="padding:16px 20px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -2337,7 +3173,7 @@
           <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:14px; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
             <div style="display:flex; gap:8px;">
               <button id="btn-subtab-assets-list" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="switchAssetsSubtab('assets')">📦 Asset Register</button>
-              <button id="btn-subtab-assets-inventory" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchAssetsSubtab('inventory')">👔 Uniforms & Supplies</button>
+              <button id="btn-subtab-assets-inventory" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchAssetsSubtab('inventory')">👔 Firm Inventory (Total, Issued &amp; In-Store)</button>
               <button id="btn-subtab-assets-transactions" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchAssetsSubtab('transactions')">📑 Stock Movement Ledger</button>
               <button id="btn-subtab-assets-maintenance" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchAssetsSubtab('maintenance')">🔧 Maintenance Logs</button>
             </div>
@@ -2370,18 +3206,71 @@
             </div>
           </div>
 
-          <!-- Subtab 2: Consumables & Uniforms Inventory -->
+          <!-- Subtab 2: Consumables & Uniforms Inventory (Total Firm Stock Audit) -->
           <div id="subtab-assets-inventory" style="display:none;">
+            <!-- Firm Stock Summary KPIs Banner -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:18px;">
+              <div style="background:linear-gradient(135deg, #1E293B 0%, #0F172A 100%); color:#FFFFFF; border-radius:10px; padding:16px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                <div style="font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.5px;">🏢 Total Inventory in Firm</div>
+                <div id="inv-kpi-total-combined" style="font-size:26px; font-weight:900; color:#FFFFFF; margin-top:4px;">0 Units</div>
+                <div style="font-size:11px; color:#38BDF8; font-weight:600; margin-top:2px;">Issued in field + remaining in store</div>
+              </div>
+
+              <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:16px;">
+                <div style="font-size:11px; font-weight:700; color:#1E40AF; text-transform:uppercase; letter-spacing:0.5px;">🛡️ Currently Issued in Field</div>
+                <div id="inv-kpi-total-issued" style="font-size:26px; font-weight:900; color:#1D4ED8; margin-top:4px;">0 Units</div>
+                <div id="inv-kpi-issued-pct" style="font-size:11px; color:#2563EB; font-weight:700; margin-top:2px;">0% in custody of guards & staff</div>
+              </div>
+
+              <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:10px; padding:16px;">
+                <div style="font-size:11px; font-weight:700; color:#065F46; text-transform:uppercase; letter-spacing:0.5px;">🏬 Remaining in Store / Warehouse</div>
+                <div id="inv-kpi-total-remaining" style="font-size:26px; font-weight:900; color:#059669; margin-top:4px;">0 Units</div>
+                <div id="inv-kpi-remaining-pct" style="font-size:11px; color:#047857; font-weight:700; margin-top:2px;">0% available for deployment</div>
+              </div>
+
+              <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                <div style="font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">💰 Total Inventory Capital Value</div>
+                <div id="inv-kpi-total-valuation" style="font-size:22px; font-weight:900; color:#0F172A; margin-top:4px;">KES 0.00</div>
+                <div id="inv-kpi-val-breakdown" style="font-size:11px; color:#64748B; margin-top:2px;">Issued: KES 0.00 • In Store: KES 0.00</div>
+              </div>
+            </div>
+
+            <!-- Category Filter Pills & Header Toolbar -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; background:#F8FAFC; padding:10px 14px; border-radius:8px; border:1px solid #E2E8F0;">
+              <div style="display:flex; gap:6px; flex-wrap:wrap;" id="inv-category-pills">
+                <button class="btn btn-sm btn-primary inv-cat-pill active" onclick="setInventoryCategoryFilter('ALL', this)">All Items</button>
+                <button class="btn btn-sm btn-secondary inv-cat-pill" onclick="setInventoryCategoryFilter('UNIFORMS', this)">👔 Uniforms & Apparel</button>
+                <button class="btn btn-sm btn-secondary inv-cat-pill" onclick="setInventoryCategoryFilter('BOOTS', this)">🥾 Boots & Footwear</button>
+                <button class="btn btn-sm btn-secondary inv-cat-pill" onclick="setInventoryCategoryFilter('REFLECTORS', this)">🦺 Reflectors & Raincoats</button>
+                <button class="btn btn-sm btn-secondary inv-cat-pill" onclick="setInventoryCategoryFilter('FLASH_LIGHTS', this)">🔦 Flashlights</button>
+                <button class="btn btn-sm btn-secondary inv-cat-pill" onclick="setInventoryCategoryFilter('ACCESSORIES', this)">📻 Radios & Batteries</button>
+                <button class="btn btn-sm btn-secondary inv-cat-pill" onclick="setInventoryCategoryFilter('OTHER', this)">📦 Other Supplies</button>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <select id="inv-stock-status-filter" class="form-control" style="font-size:12px; width:155px; padding:4px 8px;" onchange="filterInventoryTable()">
+                  <option value="ALL">All Stock Status</option>
+                  <option value="HEALTHY">Healthy Stock</option>
+                  <option value="LOW_IN_STORE">Low in Store Alert</option>
+                  <option value="FULLY_ISSUED">Fully Issued (0 In Store)</option>
+                </select>
+                <button class="btn btn-primary" style="font-size:12px; padding:5px 12px;" onclick="openInventoryTransactModal('', 'STOCK_OUT')">🤝 Issue Item</button>
+                <button class="btn btn-secondary" style="font-size:12px; padding:5px 12px; background:#059669; color:#FFF; border:none;" onclick="openInventoryTransactModal('', 'STOCK_IN')">📥 Stock In</button>
+              </div>
+            </div>
+
+            <!-- Master Table -->
             <div class="table-responsive">
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>SKU / CODE</th>
-                    <th>ITEM NAME</th>
+                    <th>ITEM NAME & DETAILS</th>
                     <th>CATEGORY</th>
                     <th style="text-align:center;">UOM</th>
-                    <th style="text-align:center;">CURRENT STOCK</th>
-                    <th style="text-align:center;">MIN ALERT</th>
+                    <th style="text-align:center; background:rgba(15,23,42,0.04);">TOTAL IN FIRM</th>
+                    <th style="text-align:center; background:rgba(37,99,235,0.06);">ISSUED / IN USE</th>
+                    <th style="text-align:center; background:rgba(5,150,105,0.06);">REMAINING IN STORE</th>
+                    <th style="text-align:center; min-width:130px;">ALLOCATION RATIO</th>
                     <th style="text-align:right;">UNIT COST</th>
                     <th style="text-align:right;">TOTAL VALUE</th>
                     <th style="text-align:center;">STATUS</th>
@@ -2389,7 +3278,7 @@
                   </tr>
                 </thead>
                 <tbody id="inventory-items-body">
-                  <tr><td colspan="10" style="text-align:center; padding:32px; color:#64748B;">Loading supplies inventory...</td></tr>
+                  <tr><td colspan="12" style="text-align:center; padding:32px; color:#64748B;">Loading supplies inventory...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -3172,6 +4061,59 @@
         </div>
       </section>
 
+      <!-- Section: Anonymous Guard Reports (Accessible Exclusively to System Admin) -->
+      <section id="panel-anonymous" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:14px;">
+          <div>
+            <h2 style="font-size:22px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:10px; margin:0;">
+              <span>📬</span> Anonymous Guard Reports &amp; Whistleblower Feed
+            </h2>
+            <div style="font-size:13px; color:#64748B; margin-top:4px;">
+              Direct submissions from security guards. Identities are strictly decoupled; submissions contain timestamps and raw text only.
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="loadAnonymousMessages()" style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; font-size:13px; font-weight:700;">
+              🔄 Refresh Feed
+            </button>
+            <button class="btn btn-danger" onclick="confirmClearAllAnonymousMessages()" style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; font-size:13px; font-weight:700; background:#DC2626; color:#FFF; border:none; border-radius:8px; cursor:pointer;">
+              🗑️ Clear All Reports
+            </button>
+          </div>
+        </div>
+
+        <!-- Privacy & Compliance Notice Card -->
+        <div style="background:#F0FDFA; border:1px solid #99F6E4; border-radius:12px; padding:16px 20px; margin-bottom:20px; display:flex; align-items:flex-start; gap:14px;">
+          <div style="font-size:24px;">🛡️</div>
+          <div>
+            <div style="font-size:14px; font-weight:800; color:#0D7682; margin-bottom:2px;">
+              Whistleblower Protection &amp; Anonymity Standard
+            </div>
+            <div style="font-size:12px; color:#115E59; line-height:1.5;">
+              In accordance with security and whistleblower guidelines, these messages are stored without any user account IDs, guard numbers, IP addresses, or device identifiers. Only the raw submission text and received timestamp exist in the database.
+            </div>
+          </div>
+        </div>
+
+        <!-- Anonymous Reports Counter & Feed Container -->
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:20px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.02);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #F1F5F9; padding-bottom:12px;">
+            <div style="font-size:14px; font-weight:800; color:#1E293B;">
+              Received Reports (<span id="anon-reports-count">0</span>)
+            </div>
+            <div style="font-size:12px; color:#64748B;">
+              Sorted latest first
+            </div>
+          </div>
+
+          <div id="anon-reports-feed">
+            <div style="text-align:center; padding:30px; color:#64748B;">
+              Loading anonymous reports...
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Modal: Mobile QR Code -->
       <div id="modal-mobile-qr" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeQrModal()">
         <div class="modal-content" style="max-width:420px; text-align:center; padding:24px;">
@@ -3349,18 +4291,25 @@
     </div>
   </div>
 
-  <!-- Modal 4: Admin Profile Details Modal -->
+  <!-- Modal 4: Dynamic User Profile Details Modal -->
   <div id="modal-profile" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeProfileModal()">
-    <div class="modal-content" style="max-width: 440px; text-align:center;">
-      <img src="/static/images/corpsec_logo_badge.png" alt="Fiona Johnson" style="width:72px; height:72px; border-radius:50%; border:3px solid var(--color-primary); margin-bottom:12px;">
-      <h3 style="font-size:20px; font-weight:800; color:#0F172A;">Fiona Johnson</h3>
-      <div style="font-size:13px; color:#64748B; margin-bottom:16px;">CorpSec System Administrator</div>
+    <div class="modal-content" style="max-width: 460px; text-align:center;">
+      <div style="display:flex; justify-content:center; margin-bottom:12px;">
+        <div id="profile-modal-avatar-badge" style="width:72px; height:72px; border-radius:50%; border:3px solid var(--color-primary); background:#2563EB; color:#FFF; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; box-shadow:0 4px 12px rgba(37,99,235,0.25);">
+          <span id="profile-modal-initials">CS</span>
+        </div>
+      </div>
+      <h3 id="profile-modal-name" style="font-size:20px; font-weight:800; color:#0F172A; margin:0 0 4px 0;">User Profile</h3>
+      <div id="profile-modal-title" style="font-size:13px; color:#64748B; margin-bottom:16px;">CorpSec Personnel</div>
 
       <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:16px; padding:16px; text-align:left; margin-bottom:20px; font-size:13px; display:flex; flex-direction:column; gap:8px;">
-        <div><strong>Email:</strong> admin@corpsec.co.ke</div>
-        <div><strong>Role:</strong> Super Admin (Full Read/Write Access)</div>
-        <div><strong>Security Level:</strong> Tier 1 Operations</div>
-        <div><strong>Active Session:</strong> JWT Bearer Token (24h validity)</div>
+        <div><strong>Email:</strong> <span id="profile-modal-email">Loading...</span></div>
+        <div><strong>Phone:</strong> <span id="profile-modal-phone">Loading...</span></div>
+        <div><strong>Role:</strong> <span id="profile-modal-role">Loading...</span></div>
+        <div><strong>Department:</strong> <span id="profile-modal-dept">Operations</span></div>
+        <div><strong>Security Clearance:</strong> <span id="profile-modal-clearance">Tier 1 Operations</span></div>
+        <div><strong>Last Login:</strong> <span id="profile-modal-last-login">Active</span></div>
+        <div><strong>Active Session:</strong> <span id="profile-modal-session">JWT Bearer Token (24h validity)</span></div>
       </div>
 
       <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="closeProfileModal()">Close Profile</button>
@@ -3375,6 +4324,10 @@
         <button onclick="closeExportReturnsModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
       </div>
       <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+        <button class="btn btn-secondary" style="justify-content:space-between; padding:14px 18px;" onclick="exportStatutoryPayrollExcel(); closeExportReturnsModal();">
+          <span>📑 Statutory NHIF/SHIF Return (.xlsx)</span>
+          <span>📥 Excel</span>
+        </button>
         <button class="btn btn-secondary" style="justify-content:space-between; padding:14px 18px;" onclick="downloadNssfCsv(); closeExportReturnsModal();">
           <span>🛡️ NSSF Monthly Return (6% + 6%)</span>
           <span>📥 CSV</span>
@@ -3405,8 +4358,22 @@
       <form onsubmit="handleAddGuardSubmit(event)">
         <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
           <div>
-            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Employee Number</label>
-            <input type="text" id="new-guard-emp-no" class="form-control" required placeholder="e.g. CS-00460" value="CS-00460">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="font-size:12px; font-weight:700; margin:0; color:#0F172A;">Employee Number <span style="color:#EF4444;">*</span></label>
+              <span id="new-guard-emp-badge" style="font-size:11px; color:#059669; font-weight:700; background:#ECFDF5; padding:2px 8px; border-radius:12px; border:1px solid #A7F3D0; display:inline-flex; align-items:center; gap:4px;">
+                <span>⚡ Auto-Generated</span>
+              </span>
+            </div>
+            <div style="position:relative; display:flex; align-items:center;">
+              <input type="text" id="new-guard-emp-no" class="form-control" required placeholder="Generating next number..." style="font-weight:700; letter-spacing:0.5px; padding-right:36px;">
+              <button type="button" onclick="refreshNextEmployeeNumber()" title="Recalculate next incremental employee number" style="position:absolute; right:8px; background:none; border:none; color:#64748B; cursor:pointer; font-size:14px; padding:4px;" aria-label="Refresh next number">🔄</button>
+            </div>
+            <div id="new-guard-emp-hint" style="font-size:11px; color:#64748B; margin-top:4px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px;">
+              <span id="new-guard-emp-hint-text">Auto-calculated from previously registered employee number.</span>
+              <span id="new-guard-emp-switch-container" style="display:none;">
+                <button type="button" class="btn" onclick="usePureNumericEmpNo()" style="padding:2px 6px; font-size:10px; background:#F1F5F9; border:1px solid #CBD5E1; border-radius:4px; cursor:pointer;" title="Start clean sequence from 001">🔢 Use 001 Sequence</button>
+              </span>
+            </div>
           </div>
           <div>
             <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Full Name</label>
@@ -5504,6 +6471,58 @@
     </div>
   </div>
 
+  <!-- Modal: Inventory Custody & Active Issuance Breakdown -->
+  <div id="modal-inventory-custody" class="modal-overlay" style="display:none;" onclick="if(event.target === this) closeInventoryCustodyModal()">
+    <div class="modal-content" style="max-width: 680px; max-height:90vh; display:flex; flex-direction:column;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;" id="inv-custody-modal-title">👥 Active Custody Breakdown</h3>
+          <p style="font-size:12px; color:#64748B; margin:4px 0 0 0;" id="inv-custody-modal-sub">Security guards and personnel currently holding this inventory item</p>
+        </div>
+        <button onclick="closeInventoryCustodyModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      
+      <!-- Metrics summary banner -->
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:16px; padding:12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px;">
+        <div style="text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">TOTAL IN FIRM</div>
+          <div id="inv-custody-total-firm" style="font-size:18px; font-weight:900; color:#0F172A;">-</div>
+        </div>
+        <div style="text-align:center; border-left:1px solid #E2E8F0; border-right:1px solid #E2E8F0;">
+          <div style="font-size:11px; font-weight:700; color:#2563EB;">CURRENTLY ISSUED</div>
+          <div id="inv-custody-total-issued" style="font-size:18px; font-weight:900; color:#2563EB;">-</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:#059669;">REMAINING IN STORE</div>
+          <div id="inv-custody-total-store" style="font-size:18px; font-weight:900; color:#059669;">-</div>
+        </div>
+      </div>
+
+      <div style="flex:1; overflow-y:auto; margin-bottom:12px;">
+        <table class="data-table" style="width:100%; font-size:12px;">
+          <thead>
+            <tr>
+              <th>RECIPIENT / HOLDER</th>
+              <th>TYPE</th>
+              <th style="text-align:center;">QTY HELD</th>
+              <th style="text-align:right;">VALUE (KES)</th>
+              <th>LAST ISSUED</th>
+              <th style="text-align:right;">ACTION</th>
+            </tr>
+          </thead>
+          <tbody id="inv-custody-table-body">
+            <tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading custody holders...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-footer" style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-secondary" onclick="openInventoryTransactModal(window.currentCustodyItemId, 'STOCK_OUT')">➕ Issue More Units</button>
+        <button type="button" class="btn btn-primary" onclick="closeInventoryCustodyModal()">Done / Close</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- ======================================================== -->
   <!-- MODALS FOR MODULE 2: CLIENT & CONTRACT MANAGEMENT       -->
@@ -6444,9 +7463,16 @@
         <input type="hidden" id="award-target-type">
         <input type="hidden" id="award-target-id">
 
-        <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:12px 16px; margin-bottom:16px;">
+        <div id="award-recipient-info-box" style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:12px 16px; margin-bottom:16px;">
           <div style="font-size:11px; font-weight:700; color:#1E40AF;">RECIPIENT PERSONNEL</div>
           <div id="award-recipient-name" style="font-size:15px; font-weight:800; color:#1E3A8A; margin-top:2px;">-</div>
+        </div>
+
+        <div id="award-guard-selector-group" class="form-group" style="display:none; margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:700;">Select Recipient Guard *</label>
+          <select id="award-guard-select" class="form-control" onchange="onAwardGuardSelected(this.value)">
+            <option value="">-- Choose Security Guard --</option>
+          </select>
         </div>
 
         <div class="form-group" style="margin-bottom:14px;">
@@ -6607,6 +7633,150 @@
             </thead>
             <tbody id="staff-advances-table-body">
               <tr><td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No advances recorded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Items Dispatched by this Staff/Supervisor to Guards Section -->
+      <div id="staff-dispatched-section" style="border:1px solid #E2E8F0; border-radius:12px; padding:20px; background:#FAFAFA; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📦 Equipment &amp; Inventory Issued by this Officer to Guards</h4>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Official custody trail of company assets, supplies, and equipment issued by this supervisor/staff officer to security guards.</p>
+          </div>
+          <span class="badge" id="staff-dispatched-badge" style="background:#EFF6FF; color:#1E40AF; font-weight:700;">0 Dispatches</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>ITEM / ASSET TAG &amp; NAME</th>
+                <th>CATEGORY</th>
+                <th>RECIPIENT GUARD</th>
+                <th>DATE ISSUED</th>
+                <th>CONDITION / DETAILS</th>
+                <th>STATUS</th>
+                <th>NOTES / PURPOSE</th>
+              </tr>
+            </thead>
+            <tbody id="staff-dispatched-table-body">
+              <tr><td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No items issued to guards by this officer.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SECTION: Daily System Hours & GPS Login Location Tracking (System Admin Only) -->
+      <div id="staff-location-hours-section" style="border:1px solid #CBD5E1; border-radius:12px; padding:20px; background:#F8FAFC; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📍 Device Location &amp; Daily System Hours Tracking</h4>
+              <span class="badge" style="background:#FEF2F2; color:#991B1B; font-size:10px; font-weight:800; border:1px solid #FCA5A5;">CONFIDENTIAL — ADMIN ONLY</span>
+            </div>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Mandatory GPS login locations recorded upon access and cumulative daily hours stayed active in the system.</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span id="staff-file-online-badge" class="badge" style="background:#ECFDF5; color:#065F46; font-weight:700;">Active Status</span>
+          </div>
+        </div>
+
+        <!-- Hours & Location Quick Metrics -->
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-bottom:16px;">
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">TODAY'S SYSTEM TIME</div>
+            <div id="staff-metric-today-time" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:2px;">0h 0m</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">TOTAL RECORDED DAYS</div>
+            <div id="staff-metric-total-days" style="font-size:15px; font-weight:800; color:#2563EB; margin-top:2px;">0 Days</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; grid-column: span 2;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">LAST VERIFIED GPS LOCATION</div>
+            <div id="staff-metric-last-location" style="font-size:12px; font-weight:700; color:#0D7682; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Acquiring...</div>
+          </div>
+        </div>
+
+        <!-- Daily Hours Breakdown Table -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:13px; font-weight:800; color:#1E293B; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+            <span>🕒 Daily Hours Stayed in System</span>
+            <span style="font-size:11px; font-weight:normal; color:#64748B;">(Aggregated active duration per day)</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th>DATE</th>
+                  <th>HOURS IN SYSTEM</th>
+                  <th>FIRST LOGIN</th>
+                  <th>LAST ACTIVE</th>
+                  <th>SESSIONS</th>
+                  <th>LOCATION(S) RECORDED</th>
+                  <th>SESSION STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="staff-daily-hours-table-body">
+                <tr><td colspan="7" style="text-align:center; padding:16px; color:#64748B;">Loading daily hours records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Login Sessions & Geolocation Log Table -->
+        <div>
+          <div style="font-size:13px; font-weight:800; color:#1E293B; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+            <span>🛰️ Login Sessions &amp; Device Geolocation Log</span>
+            <span style="font-size:11px; font-weight:normal; color:#64748B;">(Mandatory GPS verification records)</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th>LOGIN TIME</th>
+                  <th>GPS COORDINATES &amp; LOCATION</th>
+                  <th>ACCURACY</th>
+                  <th>IP ADDRESS</th>
+                  <th>DURATION</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="staff-sessions-table-body">
+                <tr><td colspan="6" style="text-align:center; padding:16px; color:#64748B;">Loading login sessions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION: Full Activity Audit Trail (Everything person did in system) -->
+      <div id="staff-activity-trail-section" style="border:1px solid #CBD5E1; border-radius:12px; padding:20px; background:#F8FAFC; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📜 Complete User Activity Trail</h4>
+              <span class="badge" style="background:#EFF6FF; color:#1E40AF; font-size:10px; font-weight:800; border:1px solid #BFDBFE;">AUDIT LOG</span>
+            </div>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Comprehensive chronological record of all actions, approvals, roster updates, deductions, and edits performed by this person in the system.</p>
+          </div>
+          <span class="badge" id="staff-activity-count-badge" style="background:#E2E8F0; color:#334155; font-weight:700;">0 Actions Logged</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th style="min-width:130px;">TIMESTAMP</th>
+                <th>ACTION EXECUTED</th>
+                <th>TARGET ENTITY</th>
+                <th>DETAILS &amp; MODIFICATIONS</th>
+                <th>IP ADDRESS</th>
+              </tr>
+            </thead>
+            <tbody id="staff-activity-table-body">
+              <tr><td colspan="5" style="text-align:center; padding:20px; color:#64748B;">Loading user activity trail...</td></tr>
             </tbody>
           </table>
         </div>

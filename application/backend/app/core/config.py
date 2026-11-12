@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     DEFAULT_SHIF_FLOOR: float = 300.0
     DEFAULT_HOUSING_LEVY_RATE: float = 0.015
     DEFAULT_PERSONAL_RELIEF: float = 2400.0
+
+    # SMTP Email & OTP Two-Factor Authentication
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = "CorpSec Security <no-reply@corpsec.co.ke>"
+    SMTP_TLS: bool = True
+    OTP_EXPIRE_MINUTES: int = 5
     
     model_config = SettingsConfigDict(
         env_file=(_root_env, _backend_env, ".env"),

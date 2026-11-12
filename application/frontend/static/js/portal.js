@@ -192,7 +192,7 @@ function switchPortalTab(tabName) {
     showLoginView('Session expired. Please log in again.');
     return;
   }
-  const tabs = ['home', 'leave', 'incidents', 'super-guard', 'profile'];
+  const tabs = ['home', 'leave', 'incidents', 'super-guard', 'profile', 'anonymous'];
   tabs.forEach(tab => {
     const sec = document.getElementById(`section-${tab}`);
     const nav = document.getElementById(`nav-tab-${tab}`);
@@ -386,7 +386,12 @@ async function handleClockIn(shiftId) {
 
         if (!res.ok) {
           const errMsg = data.detail || 'Clock-in rejected';
-          alert(`❌ Clock-In Failed (Geofence Check):\n\n${errMsg}\n\nNote: If you do not have a smartphone or device GPS is inaccurate, please request your Site Super Guard to clock you in.`);
+          const isGeofenceErr = errMsg.toLowerCase().includes('metres away') || errMsg.toLowerCase().includes('radius') || errMsg.toLowerCase().includes('geofence');
+          if (isGeofenceErr) {
+            alert(`❌ Clock-In Failed (Geofence Check):\n\n${errMsg}\n\nNote: If you do not have a smartphone or device GPS is inaccurate, please request your Site Super Guard to clock you in.`);
+          } else {
+            alert(`❌ Clock-In Failed:\n\n${errMsg}`);
+          }
           return;
         }
 
@@ -952,3 +957,77 @@ window.handleOffDaySubmit = handleOffDaySubmit;
 window.loadMyOffDayRequests = loadMyOffDayRequests;
 
 
+
+
+// -------------------------------------------------------------
+// ANONYMOUS GUARD REPORTING PIPELINE
+// -------------------------------------------------------------
+function updateAnonCharCounter(textarea) {
+  const counter = document.getElementById('anon-char-count');
+  if (counter) {
+    const len = (textarea.value || '').length;
+    counter.innerText = `${len} / 5000`;
+  }
+}
+
+async function submitAnonymousTip(e) {
+  if (e) e.preventDefault();
+  const msgInput = document.getElementById('anon-tip-message');
+  const alertEl = document.getElementById('anon-tip-alert');
+  const btn = document.getElementById('btn-submit-anon-tip');
+  const btnText = document.getElementById('btn-anon-text');
+  const btnSpinner = document.getElementById('btn-anon-spinner');
+
+  if (!msgInput) return;
+  const rawMsg = (msgInput.value || '').trim();
+  if (rawMsg.length < 5) {
+    if (alertEl) {
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#FEE2E2';
+      alertEl.style.color = '#991B1B';
+      alertEl.innerText = '⚠️ Please enter at least 5 characters for your report.';
+    }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.style.display = 'none';
+  if (btnSpinner) btnSpinner.style.display = 'inline';
+  if (alertEl) alertEl.style.display = 'none';
+
+  try {
+    const res = await apiFetch('/anonymous-reporting/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: rawMsg })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to submit report.');
+    }
+    msgInput.value = '';
+    const counter = document.getElementById('anon-char-count');
+    if (counter) counter.innerText = '0 / 5000';
+
+    if (alertEl) {
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#DEF7EC';
+      alertEl.style.color = '#03543F';
+      alertEl.innerHTML = '✅ <strong>Report Transmitted:</strong> ' + (data.message || 'Your anonymous report has been securely delivered to System Administration with zero identifying logs.');
+    }
+  } catch (err) {
+    if (alertEl) {
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#FEE2E2';
+      alertEl.style.color = '#991B1B';
+      alertEl.innerText = '❌ Error: ' + (err.message || 'Transmission failed.');
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.style.display = 'inline';
+    if (btnSpinner) btnSpinner.style.display = 'none';
+  }
+}
+
+window.updateAnonCharCounter = updateAnonCharCounter;
+window.submitAnonymousTip = submitAnonymousTip;

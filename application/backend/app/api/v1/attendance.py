@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
@@ -34,6 +34,36 @@ def calculate_haversine_meters(lat1: float, lon1: float, lat2: float, lon2: floa
     return R * c
 
 
+def auto_close_past_unclosed_shifts(db: Session, guard_id: int, current_date: date):
+    """
+    Automatically closes any stale unclosed attendance records from previous dates (< current_date).
+    Guards occasionally forget to clock out at shift completion; past forgotten shifts must never
+    prevent them from clocking in on a new day.
+    """
+    past_unclosed = db.query(Attendance).filter(
+        Attendance.guard_id == guard_id,
+        Attendance.shift_date < current_date,
+        Attendance.actual_clock_in.isnot(None),
+        Attendance.actual_clock_out.is_(None)
+    ).all()
+
+    for past_att in past_unclosed:
+        shift_duration = 12.0
+        if past_att.shift_id:
+            s_obj = db.query(Shift).filter(Shift.id == past_att.shift_id).first()
+            if s_obj and s_obj.duration_hours:
+                shift_duration = float(s_obj.duration_hours)
+
+        past_att.actual_clock_out = past_att.actual_clock_in + timedelta(hours=shift_duration)
+        past_att.regular_hours = shift_duration
+        past_att.overtime_hours = 0.0
+        prev_note = past_att.notes or ""
+        past_att.notes = f"{prev_note} | Auto-closed: previous unclosed shift upon next shift clock-in".strip(" |")
+
+    if past_unclosed:
+        db.commit()
+
+
 @router.post("/clock-in", response_model=AttendanceResponse)
 def clock_in(
     shift_id: Optional[int] = Query(None),
@@ -51,6 +81,22 @@ def clock_in(
     now = datetime.now()
 
     check_period_not_locked(db, today)
+
+    # 1. Automatically close any stale unclosed shifts from previous days
+    auto_close_past_unclosed_shifts(db, guard.id, today)
+
+    # 2. Check if guard already has an active clock-in for TODAY
+    today_active = db.query(Attendance).filter(
+        Attendance.guard_id == guard.id,
+        Attendance.shift_date == today,
+        Attendance.actual_clock_in.isnot(None),
+        Attendance.actual_clock_out.is_(None)
+    ).first()
+    if today_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Guard is already clocked in for today's shift (Clocked in at {today_active.actual_clock_in.strftime('%H:%M')}). Please clock out first before starting a new shift."
+        )
 
     # Query today's roster assignment for the guard
     today_asgn = db.query(RosterAssignment).filter(
@@ -80,17 +126,6 @@ def clock_in(
         first_shift = db.query(Shift).first()
         resolved_shift_id = first_shift.id if first_shift else 1
         resolved_site_id = guard.primary_site_id if guard.primary_site_id else 1
-
-    active_unclosed = db.query(Attendance).filter(
-        Attendance.guard_id == guard.id,
-        Attendance.actual_clock_in.isnot(None),
-        Attendance.actual_clock_out.is_(None)
-    ).first()
-    if active_unclosed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Guard has an active unclosed shift. Please clock out first before starting a new shift."
-        )
 
     existing = db.query(Attendance).filter(
         Attendance.guard_id == guard.id,
@@ -302,13 +337,22 @@ def correct_attendance_record(
 def list_attendance_records(
     guard_id: Optional[int] = Query(None),
     site_id: Optional[int] = Query(None),
+    shift_id: Optional[int] = Query(None),
+    shift_type: Optional[str] = Query(None),
+    is_night_shift: Optional[bool] = Query(None),
+    shift_date: Optional[date] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Fetch attendance records matching Screen 9."""
-    query = db.query(Attendance).options(joinedload(Attendance.guard), joinedload(Attendance.site))
+    """Fetch attendance records matching Screen 9 with site and shift type filtering."""
+    query = db.query(Attendance).options(
+        joinedload(Attendance.guard),
+        joinedload(Attendance.site),
+        joinedload(Attendance.shift)
+    )
 
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(Attendance.guard_id == current_user.guard_id)
@@ -320,12 +364,36 @@ def list_attendance_records(
 
     if site_id:
         query = query.filter(Attendance.site_id == site_id)
+    if shift_id:
+        query = query.filter(Attendance.shift_id == shift_id)
+
+    if is_night_shift is not None:
+        query = query.join(Attendance.shift).filter(Shift.is_night_shift == is_night_shift)
+    elif shift_type:
+        st = shift_type.strip().upper()
+        if st in ["NIGHT", "TRUE", "1"]:
+            query = query.join(Attendance.shift).filter(Shift.is_night_shift.is_(True))
+        elif st in ["DAY", "FALSE", "0"]:
+            query = query.join(Attendance.shift).filter(Shift.is_night_shift.is_(False))
+        else:
+            query = query.join(Attendance.shift).filter(Shift.shift_type == st)
+
+    if shift_date:
+        query = query.filter(Attendance.shift_date == shift_date)
     if start_date:
         query = query.filter(Attendance.shift_date >= start_date)
     if end_date:
         query = query.filter(Attendance.shift_date <= end_date)
 
-    return query.order_by(Attendance.shift_date.desc()).all()
+    if search:
+        search_term = f"%{search.strip()}%"
+        query = query.join(Attendance.guard).outerjoin(Attendance.site).filter(
+            (Guard.full_name.ilike(search_term)) |
+            (Guard.employee_number.ilike(search_term)) |
+            (Site.site_name.ilike(search_term))
+        )
+
+    return query.order_by(Attendance.shift_date.desc(), Attendance.id.desc()).all()
 
 
 
@@ -442,15 +510,20 @@ def super_guard_mandate_clock_in(
 
     check_period_not_locked(db, today)
 
-    active_unclosed = db.query(Attendance).filter(
+    # 1. Automatically close any stale unclosed shifts from previous days
+    auto_close_past_unclosed_shifts(db, target_guard.id, today)
+
+    # 2. Check if target guard already has an active clock-in for TODAY
+    today_active = db.query(Attendance).filter(
         Attendance.guard_id == target_guard.id,
+        Attendance.shift_date == today,
         Attendance.actual_clock_in.isnot(None),
         Attendance.actual_clock_out.is_(None)
     ).first()
-    if active_unclosed:
+    if today_active:
         raise HTTPException(
             status_code=400,
-            detail=f"Guard '{target_guard.full_name}' already has an active clock-in at {active_unclosed.actual_clock_in.strftime('%H:%M')}."
+            detail=f"Guard '{target_guard.full_name}' is already clocked in today at {today_active.actual_clock_in.strftime('%H:%M')}."
         )
 
     resolved_shift_id = target_guard.shift_id or 1

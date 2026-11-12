@@ -222,6 +222,7 @@ class AssetAllocationResponse(BaseModel):
     condition_on_return: Optional[str] = None
     notes: Optional[str] = None
     allocated_by_user_id: Optional[int] = None
+    allocated_by_name: Optional[str] = None
     created_at: datetime
 
     @computed_field
@@ -313,6 +314,18 @@ class InventoryItemResponse(InventoryItemBase):
     id: int
     item_code: str
     current_stock: int
+    remaining_stock: int = 0
+    issued_stock: int = 0
+    total_combined_stock: int = 0
+    issued_valuation: float = 0.0
+    remaining_valuation: float = 0.0
+    total_firm_valuation: float = 0.0
+    stock_health: str = "HEALTHY"
+    issued_percent: float = 0.0
+    remaining_percent: float = 0.0
+    issued_guards_count: int = 0
+    issued_staff_count: int = 0
+    issued_sites_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -325,6 +338,40 @@ class InventoryItemResponse(InventoryItemBase):
         return round(self.current_stock * self.unit_cost, 2)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InventoryCustodyHolderResponse(BaseModel):
+    recipient_type: str  # "GUARD", "STAFF", "SITE"
+    recipient_id: int
+    recipient_name: str
+    recipient_identifier: Optional[str] = None
+    quantity_held: int
+    unit_cost: float
+    total_cost: float
+    last_issued_date: Optional[datetime] = None
+    last_reference_no: Optional[str] = None
+
+
+class InventoryCategorySummary(BaseModel):
+    category: str
+    item_count: int
+    total_combined_stock: int
+    issued_stock: int
+    remaining_stock: int
+    total_firm_valuation: float
+
+
+class InventoryAuditSummaryResponse(BaseModel):
+    total_item_types: int
+    total_combined_units: int
+    total_issued_units: int
+    total_remaining_units: int
+    total_firm_valuation: float
+    total_issued_valuation: float
+    total_remaining_valuation: float
+    healthy_items_count: int
+    low_stock_items_count: int
+    categories: List[InventoryCategorySummary]
 
 
 class InventoryTransactionCreate(BaseModel):
@@ -381,6 +428,7 @@ class InventoryTransactionResponse(BaseModel):
     issued_site_name: Optional[str] = None
     reason_notes: Optional[str] = None
     processed_by_user_id: Optional[int] = None
+    processed_by_name: Optional[str] = None
     created_at: datetime
 
     current_stock: int = 0

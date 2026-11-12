@@ -3,8 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin_or_hr
-from application.backend.app.models.user import User
+from application.backend.app.api.deps import get_db, require_admin_or_hr, require_admin_or_supervisor, require_admin
+from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.audit import AuditLog
@@ -20,7 +20,8 @@ from application.backend.app.schemas.asset import (
     AssetMaintenanceCreate, AssetMaintenanceResponse,
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     InventoryTransactionCreate, InventoryTransactionResponse,
-    AssetDamageDeductionCreate, AssetDamageDeductionResponse
+    AssetDamageDeductionCreate, AssetDamageDeductionResponse,
+    InventoryCustodyHolderResponse, InventoryAuditSummaryResponse, InventoryCategorySummary
 )
 
 router = APIRouter(prefix="/assets", tags=["Company Assets & Inventory"])
@@ -213,14 +214,22 @@ def get_assets_kpi_summary(db: Session = Depends(get_db), current_user: User = D
 # ==================== ASSET ALLOCATIONS ====================
 
 @router.post("/allocations", response_model=AssetAllocationResponse)
-def allocate_asset_direct(payload: AssetAllocationCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+def allocate_asset_direct(payload: AssetAllocationCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_supervisor)):
     return allocate_asset(asset_id=payload.asset_id, payload=payload, db=db, current_user=current_user)
 
 @router.post("/{asset_id}/allocate", response_model=AssetAllocationResponse)
-def allocate_asset(asset_id: int, payload: AssetAllocationCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+def allocate_asset(asset_id: int, payload: AssetAllocationCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_supervisor)):
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+
+    alloc_type = payload.allocation_type.upper()
+    is_staff = alloc_type == "STAFF" or (payload.staff_id and not payload.guard_id)
+    is_guard = alloc_type in ["EMPLOYEE", "GUARD"] or (payload.guard_id and not payload.staff_id)
+
+    if current_user.role == UserRole.SUPERVISOR.value:
+        if is_staff or payload.staff_id or not is_guard or not payload.guard_id:
+            raise HTTPException(status_code=403, detail="Supervisors are authorized to issue equipment to security guards only.")
 
     # Deactivate existing active allocations for this asset
     existing_actives = db.query(AssetAllocation).filter(
@@ -230,10 +239,6 @@ def allocate_asset(asset_id: int, payload: AssetAllocationCreate, db: Session = 
     for prev in existing_actives:
         prev.status = "TRANSFERRED"
         prev.return_date = datetime.date.today()
-
-    alloc_type = payload.allocation_type.upper()
-    is_staff = alloc_type == "STAFF" or (payload.staff_id and not payload.guard_id)
-    is_guard = alloc_type in ["EMPLOYEE", "GUARD"] or (payload.guard_id and not payload.staff_id)
     
     alloc = AssetAllocation(
         asset_id=asset_id,
@@ -281,6 +286,7 @@ def allocate_asset(asset_id: int, payload: AssetAllocationCreate, db: Session = 
     res.staff_name = alloc.staff.full_name if alloc.staff else None
     res.staff_email = alloc.staff.email if alloc.staff else None
     res.site_name = alloc.site.site_name if alloc.site else None
+    res.allocated_by_name = current_user.full_name or current_user.email
     return res
 
 
@@ -333,9 +339,16 @@ def list_allocations(
     staff_id: Optional[int] = Query(None),
     asset_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    allocated_by_user_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_hr)
+    current_user: User = Depends(require_admin_or_supervisor)
 ):
+    if staff_id is not None and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Staff personnel files and custody records are restricted to System Administrator only."
+        )
+
     q = db.query(AssetAllocation)
     if guard_id is not None:
         q = q.filter(AssetAllocation.guard_id == guard_id)
@@ -343,6 +356,8 @@ def list_allocations(
         q = q.filter(AssetAllocation.staff_id == staff_id)
     if asset_id is not None:
         q = q.filter(AssetAllocation.asset_id == asset_id)
+    if allocated_by_user_id is not None:
+        q = q.filter(AssetAllocation.allocated_by_user_id == allocated_by_user_id)
     if status and status != "ALL":
         q = q.filter(AssetAllocation.status == status.upper())
 
@@ -358,6 +373,7 @@ def list_allocations(
         res.staff_name = al.staff.full_name if al.staff else None
         res.staff_email = al.staff.email if al.staff else None
         res.site_name = al.site.site_name if al.site else None
+        res.allocated_by_name = (al.allocated_by.full_name or al.allocated_by.email) if al.allocated_by else None
         out.append(res)
     return out
 
@@ -423,6 +439,7 @@ def return_allocation_by_id(
     res.staff_name = alloc.staff.full_name if alloc.staff else None
     res.staff_email = alloc.staff.email if alloc.staff else None
     res.site_name = alloc.site.site_name if alloc.site else None
+    res.allocated_by_name = current_user.full_name or current_user.email
     return res
 
 
@@ -504,7 +521,208 @@ def get_asset_maintenance_records(asset_id: int, db: Session = Depends(get_db), 
     return out
 
 
+def build_inventory_item_response(db: Session, item: InventoryItem) -> InventoryItemResponse:
+    """Enriches an inventory item with comprehensive firm stock audit metrics."""
+    txs = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == item.id).all()
+    issued_qty = sum(t.quantity for t in txs if t.transaction_type in ["ISSUED", "DISPATCH"])
+    returned_qty = sum(t.quantity for t in txs if t.transaction_type == "RETURNED")
+    net_issued = max(0, issued_qty - returned_qty)
+    remaining_stock = max(0, item.current_stock)
+    total_combined = remaining_stock + net_issued
+
+    unit_cost = float(item.unit_cost or 0.0)
+    issued_val = round(net_issued * unit_cost, 2)
+    remaining_val = round(remaining_stock * unit_cost, 2)
+    total_firm_val = round(total_combined * unit_cost, 2)
+
+    if total_combined == 0:
+        stock_health = "NO_STOCK"
+    elif remaining_stock == 0:
+        stock_health = "FULLY_ISSUED"
+    elif remaining_stock <= item.minimum_stock_level:
+        stock_health = "LOW_IN_STORE"
+    else:
+        stock_health = "HEALTHY"
+
+    issued_pct = round((net_issued / total_combined * 100), 1) if total_combined > 0 else 0.0
+    remaining_pct = round((remaining_stock / total_combined * 100), 1) if total_combined > 0 else 0.0
+
+    guard_ids = {t.issued_to_guard_id for t in txs if t.issued_to_guard_id}
+    staff_ids = {t.issued_to_staff_id for t in txs if t.issued_to_staff_id}
+    site_ids = {t.issued_to_site_id for t in txs if t.issued_to_site_id}
+
+    res = InventoryItemResponse.model_validate(item)
+    res.remaining_stock = remaining_stock
+    res.issued_stock = net_issued
+    res.total_combined_stock = total_combined
+    res.issued_valuation = issued_val
+    res.remaining_valuation = remaining_val
+    res.total_firm_valuation = total_firm_val
+    res.stock_health = stock_health
+    res.issued_percent = issued_pct
+    res.remaining_percent = remaining_pct
+    res.issued_guards_count = len(guard_ids)
+    res.issued_staff_count = len(staff_ids)
+    res.issued_sites_count = len(site_ids)
+    return res
+
+
 # ==================== INVENTORY MANAGEMENT ====================
+@router.get("/inventory/audit-summary", response_model=InventoryAuditSummaryResponse)
+def get_inventory_audit_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """Firm-wide stock audit summary: combined total, issued, remaining in store, and valuation."""
+    all_items = db.query(InventoryItem).all()
+    enriched = [build_inventory_item_response(db, it) for it in all_items]
+
+    total_combined_units = sum(it.total_combined_stock for it in enriched)
+    total_issued_units = sum(it.issued_stock for it in enriched)
+    total_remaining_units = sum(it.remaining_stock for it in enriched)
+    total_firm_val = round(sum(it.total_firm_valuation for it in enriched), 2)
+    total_issued_val = round(sum(it.issued_valuation for it in enriched), 2)
+    total_remaining_val = round(sum(it.remaining_valuation for it in enriched), 2)
+
+    healthy_count = sum(1 for it in enriched if it.stock_health == "HEALTHY")
+    low_stock_count = sum(1 for it in enriched if it.stock_health in ["LOW_IN_STORE", "FULLY_ISSUED", "NO_STOCK"])
+
+    from collections import defaultdict
+    cat_map = defaultdict(lambda: {
+        "item_count": 0,
+        "total_combined_stock": 0,
+        "issued_stock": 0,
+        "remaining_stock": 0,
+        "total_firm_valuation": 0.0
+    })
+
+    for it in enriched:
+        c = it.category or "OTHER"
+        cat_map[c]["item_count"] += 1
+        cat_map[c]["total_combined_stock"] += it.total_combined_stock
+        cat_map[c]["issued_stock"] += it.issued_stock
+        cat_map[c]["remaining_stock"] += it.remaining_stock
+        cat_map[c]["total_firm_valuation"] += it.total_firm_valuation
+
+    categories = [
+        InventoryCategorySummary(
+            category=cat_name,
+            item_count=data["item_count"],
+            total_combined_stock=data["total_combined_stock"],
+            issued_stock=data["issued_stock"],
+            remaining_stock=data["remaining_stock"],
+            total_firm_valuation=round(data["total_firm_valuation"], 2)
+        )
+        for cat_name, data in sorted(cat_map.items())
+    ]
+
+    return InventoryAuditSummaryResponse(
+        total_item_types=len(all_items),
+        total_combined_units=total_combined_units,
+        total_issued_units=total_issued_units,
+        total_remaining_units=total_remaining_units,
+        total_firm_valuation=total_firm_val,
+        total_issued_valuation=total_issued_val,
+        total_remaining_valuation=total_remaining_val,
+        healthy_items_count=healthy_count,
+        low_stock_items_count=low_stock_count,
+        categories=categories
+    )
+
+
+@router.get("/inventory/items/{item_id}/custody", response_model=List[InventoryCustodyHolderResponse])
+def get_inventory_item_custody(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    """
+    Returns active custody breakdown showing which guards, staff, or sites
+    currently hold issued units of this inventory item.
+    """
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+
+    from application.backend.app.models.guard import Guard
+    from application.backend.app.models.site import Site
+
+    txs = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == item.id).order_by(InventoryTransaction.id.asc()).all()
+
+    holders = {}
+    for t in txs:
+        rec_type = None
+        rec_id = None
+        if t.issued_to_guard_id:
+            rec_type = "GUARD"
+            rec_id = t.issued_to_guard_id
+        elif t.issued_to_staff_id:
+            rec_type = "STAFF"
+            rec_id = t.issued_to_staff_id
+        elif t.issued_to_site_id:
+            rec_type = "SITE"
+            rec_id = t.issued_to_site_id
+
+        if not rec_type:
+            continue
+
+        key = (rec_type, rec_id)
+        if key not in holders:
+            holders[key] = {
+                "recipient_type": rec_type,
+                "recipient_id": rec_id,
+                "qty": 0,
+                "last_date": t.created_at,
+                "last_ref": t.reference_no
+            }
+
+        if t.transaction_type in ["ISSUED", "DISPATCH"]:
+            holders[key]["qty"] += t.quantity
+            holders[key]["last_date"] = t.created_at
+            if t.reference_no:
+                holders[key]["last_ref"] = t.reference_no
+        elif t.transaction_type == "RETURNED":
+            holders[key]["qty"] = max(0, holders[key]["qty"] - t.quantity)
+
+    active_holders = []
+    unit_cost = float(item.unit_cost or 0.0)
+    for key, data in holders.items():
+        if data["qty"] > 0:
+            rec_type, rec_id = key
+            name = "Unknown"
+            ident = ""
+            if rec_type == "GUARD":
+                g = db.query(Guard).filter(Guard.id == rec_id).first()
+                if g:
+                    name = g.full_name
+                    ident = g.employee_number or f"ID #{g.id}"
+            elif rec_type == "STAFF":
+                u = db.query(User).filter(User.id == rec_id).first()
+                if u:
+                    name = u.full_name or u.email
+                    ident = u.role
+            elif rec_type == "SITE":
+                s = db.query(Site).filter(Site.id == rec_id).first()
+                if s:
+                    name = s.site_name
+                    ident = s.site_code or f"Site #{s.id}"
+
+            active_holders.append(InventoryCustodyHolderResponse(
+                recipient_type=rec_type,
+                recipient_id=rec_id,
+                recipient_name=name,
+                recipient_identifier=ident,
+                quantity_held=data["qty"],
+                unit_cost=unit_cost,
+                total_cost=round(data["qty"] * unit_cost, 2),
+                last_issued_date=data["last_date"],
+                last_reference_no=data["last_ref"]
+            ))
+
+    active_holders.sort(key=lambda x: x.quantity_held, reverse=True)
+    return active_holders
+
+
 @router.get("/inventory", response_model=List[InventoryItemResponse])
 @router.get("/inventory/items", response_model=List[InventoryItemResponse])
 def list_inventory_items(
@@ -527,7 +745,8 @@ def list_inventory_items(
             (InventoryItem.description.ilike(term)) |
             (InventoryItem.storage_location.ilike(term))
         )
-    return query.order_by(InventoryItem.item_name.asc()).all()
+    items = query.order_by(InventoryItem.item_name.asc()).all()
+    return [build_inventory_item_response(db, it) for it in items]
 
 
 @router.post("/inventory", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
@@ -573,7 +792,7 @@ def create_inventory_item(payload: InventoryItemCreate, db: Session = Depends(ge
         db.add(tx)
         db.commit()
 
-    return item
+    return build_inventory_item_response(db, item)
 
 
 @router.put("/inventory/items/{item_id}", response_model=InventoryItemResponse)
@@ -588,7 +807,7 @@ def update_inventory_item(item_id: int, payload: InventoryItemUpdate, db: Sessio
     item.updated_at = datetime.datetime.now()
     db.commit()
     db.refresh(item)
-    return item
+    return build_inventory_item_response(db, item)
 
 @router.delete("/inventory/items/{item_id}")
 def delete_inventory_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
@@ -603,7 +822,7 @@ def delete_inventory_item(item_id: int, db: Session = Depends(get_db), current_u
 
 @router.post("/inventory/transactions", response_model=InventoryTransactionResponse)
 @router.post("/inventory/transact", response_model=InventoryTransactionResponse)
-def transact_inventory_stock(payload: InventoryTransactionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+def transact_inventory_stock(payload: InventoryTransactionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_supervisor)):
     item = db.query(InventoryItem).filter(InventoryItem.id == payload.item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
@@ -613,11 +832,25 @@ def transact_inventory_stock(payload: InventoryTransactionCreate, db: Session = 
         raise HTTPException(status_code=400, detail="Transaction quantity must be greater than 0")
 
     tt = payload.transaction_type.upper()
+    if tt == "STOCK_OUT":
+        tt = "ISSUED"
+    elif tt == "STOCK_IN":
+        tt = "RECEIVED"
+    elif tt == "RETURN":
+        tt = "RETURNED"
+
+    if current_user.role == UserRole.SUPERVISOR.value:
+        if tt not in ["ISSUED", "DISPATCH"] or not payload.issued_to_guard_id or payload.issued_to_staff_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Supervisors are authorized to issue inventory items to security guards only."
+            )
+
     if tt in ["ISSUED", "DISPATCH"]:
         if item.current_stock < qty:
             raise HTTPException(status_code=400, detail=f"Insufficient stock! Available: {item.current_stock}, Requested: {qty}")
         item.current_stock -= qty
-    elif tt in ["RECEIVED", "STOCK_IN", "RETURNED"]:
+    elif tt in ["RECEIVED", "RETURNED"]:
         item.current_stock += qty
     elif tt == "ADJUSTMENT":
         item.current_stock = qty  # for direct physical stock reconciliation
@@ -651,6 +884,7 @@ def transact_inventory_stock(payload: InventoryTransactionCreate, db: Session = 
     res.issued_guard_name = tx.issued_guard.full_name if tx.issued_guard else None
     res.issued_staff_name = tx.issued_staff.full_name if tx.issued_staff else None
     res.issued_site_name = tx.issued_site.site_name if tx.issued_site else None
+    res.processed_by_name = current_user.full_name or current_user.email
     res.current_stock = item.current_stock
     return res
 
@@ -660,10 +894,17 @@ def list_inventory_transactions(
     item_id: Optional[int] = Query(None),
     guard_id: Optional[int] = Query(None),
     staff_id: Optional[int] = Query(None),
+    processed_by_user_id: Optional[int] = Query(None),
     transaction_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_hr)
+    current_user: User = Depends(require_admin_or_supervisor)
 ):
+    if staff_id is not None and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Staff personnel files and inventory records are restricted to System Administrator only."
+        )
+
     query = db.query(InventoryTransaction)
     if item_id:
         query = query.filter(InventoryTransaction.item_id == item_id)
@@ -671,6 +912,8 @@ def list_inventory_transactions(
         query = query.filter(InventoryTransaction.issued_to_guard_id == guard_id)
     if staff_id is not None:
         query = query.filter(InventoryTransaction.issued_to_staff_id == staff_id)
+    if processed_by_user_id is not None:
+        query = query.filter(InventoryTransaction.processed_by_user_id == processed_by_user_id)
     if transaction_type and transaction_type != "ALL":
         query = query.filter(InventoryTransaction.transaction_type == transaction_type.upper())
 
@@ -683,6 +926,8 @@ def list_inventory_transactions(
         res.issued_guard_name = t.issued_guard.full_name if t.issued_guard else None
         res.issued_staff_name = t.issued_staff.full_name if t.issued_staff else None
         res.issued_site_name = t.issued_site.site_name if t.issued_site else None
+        res.processed_by_name = (t.processed_by.full_name or t.processed_by.email) if t.processed_by else None
+        res.current_stock = t.item.current_stock if t.item else 0
         out.append(res)
     return out
 

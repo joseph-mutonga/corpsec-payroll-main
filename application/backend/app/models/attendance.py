@@ -40,6 +40,20 @@ class Attendance(Base):
     def site_name(self):
         return self.site.site_name if self.site else None
 
+    @property
+    def shift_name(self):
+        return self.shift.name if self.shift else None
+
+    @property
+    def shift_type(self):
+        if self.shift:
+            return self.shift.shift_type or ("NIGHT" if self.shift.is_night_shift else "DAY")
+        return "DAY"
+
+    @property
+    def is_night_shift(self):
+        return bool(self.shift.is_night_shift) if self.shift else False
+
 
 class OvertimeClaim(Base):
     __tablename__ = "overtime_claims"

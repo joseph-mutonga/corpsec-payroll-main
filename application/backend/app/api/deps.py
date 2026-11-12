@@ -96,3 +96,53 @@ def require_admin_or_hr(current_user: User = Depends(get_current_user)) -> User:
             detail="Administrative privileges required (Admin or HR)."
         )
     return current_user
+
+
+def authorizeRoles(*allowed_roles: str):
+    """
+    Role-Based Access Control (RBAC) dependency factory.
+    Explicitly checks user role against permitted roles.
+    Throws strict HTTP 403 Forbidden with clean JSON response if unauthorized.
+
+    Supported Roles:
+    - "System Admin" (ADMIN)
+    - "HR" (HR)
+    - "Supervisor" (SUPERVISOR)
+    - "Staff" (STAFF)
+    - "Guard" (GUARD)
+    """
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        role_map = {
+            "System Admin": "ADMIN",
+            "ADMIN": "ADMIN",
+            "HR": "HR",
+            "Supervisor": "SUPERVISOR",
+            "SUPERVISOR": "SUPERVISOR",
+            "Staff": "STAFF",
+            "STAFF": "STAFF",
+            "Guard": "GUARD",
+            "GUARD": "GUARD",
+        }
+        user_role_raw = (current_user.role or "").strip()
+        normalized_user_role = role_map.get(user_role_raw, user_role_raw.upper())
+        normalized_allowed = [role_map.get(r, r.upper()) for r in allowed_roles]
+
+        if normalized_user_role not in normalized_allowed:
+            if normalized_user_role == "GUARD":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Guard role is not authorized to access chart analytics or administrative tools."
+                )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: Required role ({', '.join(allowed_roles)}) not possessed."
+            )
+        return current_user
+    return role_checker
+
+
+# Explicit RBAC dependencies for compliance & static analysis scanners:
+authorize_chart_analytics = authorizeRoles("System Admin", "HR", "Supervisor", "Staff")
+require_system_admin = authorizeRoles("System Admin")
+require_guard_role = authorizeRoles("Guard")
+

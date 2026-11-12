@@ -27,7 +27,26 @@ def get_supervisor_headers(client: TestClient, db: Session) -> dict:
         json={"email": sup_email, "password": "SupervisorPass123!"}
     )
     assert login_res.status_code == 200, f"Supervisor login failed: {login_res.text}"
-    token = login_res.json()["access_token"]
+    login_data = login_res.json()
+    token = login_data.get("access_token")
+
+    # If supervisor enforces OTP verification, complete 2FA verification step
+    if not token and login_data.get("otp_required"):
+        from application.backend.app.models.email_otp import EmailOTP
+        otp_rec = (
+            db.query(EmailOTP)
+            .filter(EmailOTP.email == sup_email, EmailOTP.is_used == False)
+            .order_by(EmailOTP.id.desc())
+            .first()
+        )
+        assert otp_rec is not None
+        verify_res = client.post(
+            "/api/v1/auth/verify-otp",
+            json={"email": sup_email, "otp_code": otp_rec.otp_code}
+        )
+        assert verify_res.status_code == 200
+        token = verify_res.json()["access_token"]
+
     return {"Authorization": f"Bearer {token}"}
 
 

@@ -179,6 +179,59 @@ def sync_db_schema():
                     if "super_guard_id" not in site_cols_v2:
                         cursor.execute("ALTER TABLE sites ADD COLUMN super_guard_id INTEGER;")
 
+                # 12. Anonymous reporting & Team chat table verification
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS anonymous_messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        message TEXT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    );
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS team_messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        receiver_id INTEGER,
+                        channel VARCHAR(255) DEFAULT 'all',
+                        sender_name VARCHAR(255) NOT NULL,
+                        sender_role VARCHAR(255) NOT NULL,
+                        message TEXT,
+                        attachment_url VARCHAR(500),
+                        attachment_name VARCHAR(255),
+                        attachment_type VARCHAR(100),
+                        attachment_size INTEGER,
+                        is_read BOOLEAN DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    );
+                """)
+                cursor.execute("PRAGMA table_info(team_messages);")
+                tm_cols = [c[1] for c in cursor.fetchall()]
+                if tm_cols:
+                    if "receiver_id" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN receiver_id INTEGER;")
+                    if "channel" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN channel VARCHAR(255) DEFAULT 'all';")
+                    if "attachment_url" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN attachment_url VARCHAR(500);")
+                    if "attachment_name" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN attachment_name VARCHAR(255);")
+                    if "attachment_type" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN attachment_type VARCHAR(100);")
+                    if "attachment_size" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN attachment_size INTEGER;")
+                    if "is_read" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN is_read BOOLEAN DEFAULT 0;")
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS team_chat_reads (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        channel VARCHAR(255) DEFAULT 'group_operations' NOT NULL,
+                        last_read_message_id INTEGER DEFAULT 0 NOT NULL,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    );
+                """)
+
                 conn.commit()
                 conn.close()
             except Exception as e:
@@ -209,6 +262,27 @@ def sync_db_schema():
                             db_conn.commit()
                         except Exception as ce:
                             print(f"Notice adding column {col_name} to payroll_records: {ce}")
+
+        if "team_messages" in existing_tables:
+            existing_tm_cols = [c["name"] for c in insp.get_columns("team_messages")]
+            tm_cols_to_add = [
+                ("receiver_id", "INTEGER NULL"),
+                ("channel", "VARCHAR(255) DEFAULT 'all'"),
+                ("attachment_url", "VARCHAR(500) NULL"),
+                ("attachment_name", "VARCHAR(255) NULL"),
+                ("attachment_type", "VARCHAR(100) NULL"),
+                ("attachment_size", "INT NULL"),
+                ("is_read", "BOOLEAN DEFAULT FALSE")
+            ]
+            with engine.connect() as db_conn:
+                for col_name, col_def in tm_cols_to_add:
+                    if col_name not in existing_tm_cols:
+                        try:
+                            db_conn.execute(text(f"ALTER TABLE team_messages ADD COLUMN {col_name} {col_def};"))
+                            db_conn.commit()
+                        except Exception as ce:
+                            print(f"Notice adding column {col_name} to team_messages: {ce}")
+        Base.metadata.create_all(bind=engine)
     except Exception as ge:
         print(f"Engine-level schema sync notice: {ge}")
 

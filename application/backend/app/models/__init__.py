@@ -44,10 +44,19 @@ from application.backend.app.models.company_history import (
     CompanyRecommendation, CompanyService
 )
 from application.backend.app.models.expense import Expense, PettyCashTransaction
+from application.backend.app.models.user_session import UserSession
+from application.backend.app.models.email_otp import EmailOTP
+from application.backend.app.models.anonymous_message import AnonymousMessage
+from application.backend.app.models.team_message import TeamMessage, TeamChatRead
 
 __all__ = [
     "Base",
     "User",
+    "UserSession",
+    "EmailOTP",
+    "AnonymousMessage",
+    "TeamMessage",
+    "TeamChatRead",
     "UserRole",
     "UserStatus",
     "Region",

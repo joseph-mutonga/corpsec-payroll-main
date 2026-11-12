@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from typing import List, Dict, Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, Response, Query, status
 from sqlalchemy.orm import Session
 
 from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr
@@ -9,7 +9,12 @@ from application.backend.app.models.user import User
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.schemas.payroll import HoldSalaryRequest, ReleaseHoldRequest
 from application.backend.app.services.payment_service import build_payment_schedules_and_reconciliation, mask_sensitive_account
-from application.backend.app.services.excel_service import generate_bank_schedule_excel, generate_mpesa_schedule_excel
+from application.backend.app.services.excel_service import (
+    generate_bank_schedule_excel,
+    generate_mpesa_schedule_excel,
+    generate_im_salary_batch_excel,
+    generate_im_mobile_money_excel
+)
 
 router = APIRouter(prefix="/payments", tags=["Payment Schedules"])
 
@@ -47,6 +52,34 @@ def get_payment_reconciliation(
     return recon_data
 
 
+@router.get("/bank/template")
+def download_bank_salary_template(
+    admin: User = Depends(require_admin_or_hr)
+):
+    """Download Corporate I&M Bank Salary Batch Excel template (.xlsx) matching User Reference Image 2."""
+    excel_bytes = generate_im_salary_batch_excel([], period_name="Template")
+    filename = "IM_Bank_Salary_Batch_Template.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/mpesa/template")
+def download_mpesa_salary_template(
+    admin: User = Depends(require_admin_or_hr)
+):
+    """Download Corporate I&M Bank Mobile Money Excel template (.xlsx) matching User Reference Image 3."""
+    excel_bytes = generate_im_mobile_money_excel([], period_name="Template")
+    filename = "IM_Mobile_Money_Template.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @router.get("/bank/{period_id}")
 def get_bank_schedule(
     period_id: int,
@@ -74,6 +107,7 @@ def get_bank_schedule(
 @router.get("/bank/{period_id}/export-excel")
 def export_bank_schedule_excel(
     period_id: int,
+    template: Optional[str] = Query("standard", description="Format: 'standard' or 'im_batch'"),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin_or_hr)
 ):
@@ -84,7 +118,13 @@ def export_bank_schedule_excel(
 
     recon_data = build_payment_schedules_and_reconciliation(db, period_id)
     items = recon_data["bank_items"]
-    excel_bytes = generate_bank_schedule_excel(items, period.period_name)
+
+    if template == "im_batch":
+        excel_bytes = generate_im_salary_batch_excel(items, period.period_name)
+        filename = f"IM_Salary_Batch_{period.period_name.replace(' ', '_')}.xlsx"
+    else:
+        excel_bytes = generate_bank_schedule_excel(items, period.period_name)
+        filename = f"Bank_Payment_Schedule_{period.period_name.replace(' ', '_')}.xlsx"
 
     audit_entry = AuditLog(
         user_id=admin.id,
@@ -93,18 +133,27 @@ def export_bank_schedule_excel(
         action="EXPORT_BANK_SCHEDULE",
         target_entity="PaymentSchedule",
         target_id=str(period.id),
-        new_values=f"Exported {len(items)} bank payment items (Total: KES {recon_data['total_bank_amount']:,.2f})",
+        new_values=f"Exported {len(items)} bank payment items (Template: {template}, Total: KES {recon_data['total_bank_amount']:,.2f})",
         reason="Exported Bank Payment Schedule Excel"
     )
     db.add(audit_entry)
     db.commit()
 
-    filename = f"Bank_Payment_Schedule_{period.period_name.replace(' ', '_')}.xlsx"
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/bank/{period_id}/export-im-batch")
+def export_bank_im_batch_excel(
+    period_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin_or_hr)
+):
+    """Dedicated endpoint to export Corporate I&M Bank Salary Batch Excel matching Image 2."""
+    return export_bank_schedule_excel(period_id=period_id, template="im_batch", db=db, admin=admin)
 
 
 @router.get("/mpesa/{period_id}")
@@ -134,6 +183,7 @@ def get_mpesa_schedule(
 @router.get("/mpesa/{period_id}/export-excel")
 def export_mpesa_schedule_excel(
     period_id: int,
+    template: Optional[str] = Query("standard", description="Format: 'standard' or 'im_batch'"),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin_or_hr)
 ):
@@ -144,7 +194,13 @@ def export_mpesa_schedule_excel(
 
     recon_data = build_payment_schedules_and_reconciliation(db, period_id)
     items = recon_data["mpesa_items"]
-    excel_bytes = generate_mpesa_schedule_excel(items, period.period_name)
+
+    if template == "im_batch":
+        excel_bytes = generate_im_mobile_money_excel(items, period.period_name)
+        filename = f"IM_Mobile_Money_{period.period_name.replace(' ', '_')}.xlsx"
+    else:
+        excel_bytes = generate_mpesa_schedule_excel(items, period.period_name)
+        filename = f"M-Pesa_Payment_Schedule_{period.period_name.replace(' ', '_')}.xlsx"
 
     audit_entry = AuditLog(
         user_id=admin.id,
@@ -153,18 +209,27 @@ def export_mpesa_schedule_excel(
         action="EXPORT_MPESA_SCHEDULE",
         target_entity="PaymentSchedule",
         target_id=str(period.id),
-        new_values=f"Exported {len(items)} M-Pesa payment items (Total: KES {recon_data['total_mpesa_amount']:,.2f})",
+        new_values=f"Exported {len(items)} M-Pesa payment items (Template: {template}, Total: KES {recon_data['total_mpesa_amount']:,.2f})",
         reason="Exported M-Pesa Payment Schedule Excel"
     )
     db.add(audit_entry)
     db.commit()
 
-    filename = f"M-Pesa_Payment_Schedule_{period.period_name.replace(' ', '_')}.xlsx"
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/mpesa/{period_id}/export-im-mobile")
+def export_mpesa_im_mobile_excel(
+    period_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin_or_hr)
+):
+    """Dedicated endpoint to export Corporate I&M Bank Mobile Money Excel matching Image 3."""
+    return export_mpesa_schedule_excel(period_id=period_id, template="im_batch", db=db, admin=admin)
 
 
 # ==================== SALARY PAYMENT HOLD & RELEASE ====================

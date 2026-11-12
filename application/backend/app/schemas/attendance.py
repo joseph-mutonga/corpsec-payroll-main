@@ -46,6 +46,9 @@ class AttendanceResponse(BaseModel):
     site_id: Optional[int] = None
     site_name: Optional[str] = None
     shift_id: Optional[int] = None
+    shift_name: Optional[str] = None
+    shift_type: Optional[str] = None
+    is_night_shift: Optional[bool] = False
     shift_date: date
     actual_clock_in: Optional[datetime] = None
     actual_clock_out: Optional[datetime] = None

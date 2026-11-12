@@ -1,6 +1,7 @@
+import re
 import secrets
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
@@ -12,10 +13,93 @@ from application.backend.app.models.shift import Shift
 from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.schemas.guard import (
-    GuardCreate, GuardUpdate, GuardDeactivateRequest, GuardResponse, GuardDetailResponse
+    GuardCreate, GuardUpdate, GuardDeactivateRequest, GuardResponse, GuardDetailResponse, NextEmployeeNumberResponse
 )
 
 router = APIRouter(prefix="/guards", tags=["Guards Workforce Management"])
+
+
+def compute_next_candidate(emp_no: str) -> Tuple[str, int, int]:
+    """
+    Extracts prefix, next integer value, and padding width.
+    E.g.:
+      '001' -> ('', 2, 3) -> '002'
+      '002' -> ('', 3, 3) -> '003'
+      '010' -> ('', 11, 3) -> '011'
+      '099' -> ('', 100, 3) -> '100'
+      'CS-00461' -> ('CS-', 462, 5) -> 'CS-00462'
+      'CS-001' -> ('CS-', 2, 3) -> 'CS-002'
+      '1' -> ('', 2, 3) -> '002'
+    """
+    match = re.search(r"^(.*?)(\d+)$", str(emp_no).strip())
+    if not match:
+        return ("", 1, 3)
+    prefix = match.group(1)
+    num_str = match.group(2)
+    next_val = int(num_str) + 1
+    # Maintain original padding width, or at least 3 digits if no prefix or short padding
+    pad_width = max(len(num_str), 3 if not prefix else len(num_str))
+    return prefix, next_val, pad_width
+
+
+def get_last_registered_guard(db: Session) -> Optional[Guard]:
+    """
+    Finds the most recently registered guard with a valid employee number.
+    Filters out accidental national ID entries (pure 7-9 digits without letters matching national ID).
+    """
+    guards = db.query(Guard).order_by(Guard.id.desc()).all()
+    for g in guards:
+        emp = (g.employee_number or "").strip()
+        if not emp:
+            continue
+        if emp.isdigit() and int(emp) >= 1000000:
+            nat = (g.national_id or "").strip()
+            if emp in nat or nat in emp or len(emp) >= 7:
+                continue
+        if re.search(r"\d+$", emp):
+            return g
+    return None
+
+
+def generate_next_employee_number(db: Session, base_emp_no: Optional[str] = None) -> str:
+    """
+    Calculates the next incremental unique employee number.
+    Ensures strict uniqueness by advancing if a collision already exists in the database.
+    """
+    if base_emp_no:
+        prefix, next_val, pad_width = compute_next_candidate(base_emp_no)
+    else:
+        last_guard = get_last_registered_guard(db)
+        if not last_guard:
+            prefix, next_val, pad_width = ("", 1, 3)
+        else:
+            prefix, next_val, pad_width = compute_next_candidate(last_guard.employee_number)
+
+    candidate = f"{prefix}{next_val:0{pad_width}d}"
+
+    while db.query(Guard).filter(Guard.employee_number == candidate).first() is not None:
+        next_val += 1
+        candidate = f"{prefix}{next_val:0{pad_width}d}"
+
+    return candidate
+
+
+def calculate_next_pure_number(db: Session) -> str:
+    """Calculates the next pure numeric employee number (e.g. '001', '002'...)."""
+    pure_guards = [
+        g for g in db.query(Guard).all()
+        if (g.employee_number or "").strip().isdigit() and int((g.employee_number or "").strip()) < 1000000
+    ]
+    if not pure_guards:
+        candidate = "001"
+    else:
+        highest = max(int(g.employee_number.strip()) for g in pure_guards)
+        candidate = f"{highest + 1:03d}"
+
+    while db.query(Guard).filter(Guard.employee_number == candidate).first() is not None:
+        num = int(candidate) + 1
+        candidate = f"{num:03d}"
+    return candidate
 
 
 def _format_guard(guard: Guard) -> dict:
@@ -68,13 +152,17 @@ def create_guard_profile(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """Create a new guard profile."""
-    existing_emp = db.query(Guard).filter(Guard.employee_number == payload.employee_number).first()
-    if existing_emp:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Guard with Employee Number '{payload.employee_number}' already exists."
-        )
+    """Create a new guard profile with automatic incremental employee number."""
+    emp_no = (payload.employee_number or "").strip()
+    if not emp_no:
+        emp_no = generate_next_employee_number(db)
+    else:
+        existing_emp = db.query(Guard).filter(Guard.employee_number == emp_no).first()
+        if existing_emp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Guard with Employee Number '{emp_no}' already exists."
+            )
 
     existing_nat = db.query(Guard).filter(Guard.national_id == payload.national_id).first()
     if existing_nat:
@@ -83,7 +171,7 @@ def create_guard_profile(
             detail=f"Guard with National ID '{payload.national_id}' already exists."
         )
 
-    user_email = payload.email or f"{payload.employee_number.lower()}@corpsec.co.ke"
+    user_email = payload.email or f"{emp_no.lower()}@corpsec.co.ke"
     existing_user_email = db.query(User).filter(User.email == user_email).first()
     if existing_user_email:
         raise HTTPException(
@@ -109,7 +197,7 @@ def create_guard_profile(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned shift not found")
 
     guard = Guard(
-        employee_number=payload.employee_number,
+        employee_number=emp_no,
         full_name=payload.full_name,
         national_id=payload.national_id,
         phone=payload.phone,
@@ -208,6 +296,28 @@ def list_guards(
     return [_format_guard(g) for g in guards]
 
 
+@router.get("/next-employee-number", response_model=NextEmployeeNumberResponse)
+def get_next_guard_employee_number(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns the next auto-incremental Employee Number based on the most recently registered guard.
+    If previous was '001', returns '002'.
+    If previous was 'CS-00461', returns 'CS-00462'.
+    Guarantees strict uniqueness in the database.
+    """
+    last_guard = get_last_registered_guard(db)
+    next_emp = generate_next_employee_number(db)
+    prev_emp = last_guard.employee_number if last_guard else None
+    suggested_pure = calculate_next_pure_number(db)
+    return {
+        "next_employee_number": next_emp,
+        "previous_employee_number": prev_emp,
+        "suggested_pure_number": suggested_pure
+    }
+
+
 @router.get("/{guard_id}", response_model=GuardDetailResponse)
 def get_guard_detail(
     guard_id: int,
@@ -245,6 +355,16 @@ def update_guard_profile(
 
     update_data = payload.model_dump(exclude_unset=True)
     
+    if "employee_number" in update_data and update_data["employee_number"]:
+        new_emp = update_data["employee_number"].strip()
+        existing = db.query(Guard).filter(Guard.employee_number == new_emp, Guard.id != guard_id).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Guard with Employee Number '{new_emp}' already exists."
+            )
+        update_data["employee_number"] = new_emp
+
     if "site_id" in update_data:
         update_data["primary_site_id"] = update_data.pop("site_id")
         if ("supervisor_id" not in update_data or not update_data["supervisor_id"]) and update_data["primary_site_id"]:

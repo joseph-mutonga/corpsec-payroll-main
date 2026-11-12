@@ -21,6 +21,7 @@ from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.shift import Shift
 from application.backend.app.models.audit import AuditLog
+from application.backend.app.api.v1.attendance import auto_close_past_unclosed_shifts
 
 router = APIRouter(prefix="/supervisors", tags=["Supervisor Management"])
 
@@ -621,15 +622,20 @@ def supervisor_guard_clock_in(
     today = date.today()
     now = datetime.now()
 
-    active_unclosed = db.query(Attendance).filter(
+    # 1. Automatically close any stale unclosed shifts from previous days
+    auto_close_past_unclosed_shifts(db, guard.id, today)
+
+    # 2. Check if guard already has an active clock-in for TODAY
+    today_active = db.query(Attendance).filter(
         Attendance.guard_id == guard.id,
+        Attendance.shift_date == today,
         Attendance.actual_clock_in.isnot(None),
         Attendance.actual_clock_out.is_(None)
     ).first()
-    if active_unclosed:
+    if today_active:
         raise HTTPException(
             status_code=400,
-            detail=f"Guard '{guard.full_name}' already has an active clock-in at {active_unclosed.actual_clock_in.strftime('%H:%M')}."
+            detail=f"Guard '{guard.full_name}' is already clocked in today at {today_active.actual_clock_in.strftime('%H:%M')}."
         )
 
     resolved_shift_id = guard.shift_id or 1

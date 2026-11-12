@@ -1,6 +1,7 @@
 from datetime import datetime, date
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
+from application.backend.app.services.excel_service import generate_statutory_payroll_template_excel
 from sqlalchemy.orm import Session, joinedload
 
 from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, get_current_user
@@ -757,3 +758,76 @@ def confirm_and_lock_payroll(
     db.commit()
 
     return {"status": "CONFIRMED", "message": f"Payroll period '{period.period_name}' successfully confirmed and locked."}
+
+
+@router.get("/template/statutory-nhif")
+@router.get("/template/statutory-payroll")
+def download_payroll_statutory_template(
+    admin: User = Depends(require_admin_or_hr)
+):
+    """Download official blank Statutory Payroll Template (.xlsx) matching User Reference Image 1."""
+    excel_bytes = generate_statutory_payroll_template_excel([], period_name="Template")
+    filename = "Payroll_Template_Statutory.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/{period_id}/export-statutory-template")
+def export_payroll_statutory_template(
+    period_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin_or_hr)
+):
+    """Export populated official Statutory NHIF/SHIF Payroll Template (.xlsx) matching User Reference Image 1."""
+    period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()
+    if not period:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Period not found")
+
+    records = db.query(PayrollRecord).filter(PayrollRecord.payroll_period_id == period.id).all()
+    records_data = []
+
+    for rec in records:
+        guard = db.query(Guard).filter(Guard.id == rec.guard_id).first()
+        if not guard:
+            continue
+
+        records_data.append({
+            "employee_number": guard.employee_number,
+            "payroll_number": guard.employee_number,
+            "full_name": guard.full_name,
+            "guard_name": guard.full_name,
+            "identity_type": "National ID",
+            "national_id": guard.national_id,
+            "id_no": guard.national_id,
+            "kra_pin": guard.kra_pin or "",
+            "nhif_no": guard.shif_number or guard.national_id or "",
+            "shif_number": guard.shif_number or "",
+            "contribution_amount": rec.shif_deduction or 0.0,
+            "shif_deduction": rec.shif_deduction or 0.0,
+            "phone": guard.phone or ""
+        })
+
+    excel_bytes = generate_statutory_payroll_template_excel(records_data, period_name=period.period_name)
+
+    audit_entry = AuditLog(
+        user_id=admin.id,
+        user_name=admin.email,
+        role=admin.role,
+        action="EXPORT_PAYROLL_STATUTORY_TEMPLATE",
+        target_entity="PayrollPeriod",
+        target_id=str(period.id),
+        new_values=f"Exported {len(records_data)} statutory payroll records for '{period.period_name}'",
+        reason="Exported Statutory Payroll Return Excel matching Image 1"
+    )
+    db.add(audit_entry)
+    db.commit()
+
+    filename = f"Statutory_Payroll_Return_{period.period_name.replace(' ', '_')}.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

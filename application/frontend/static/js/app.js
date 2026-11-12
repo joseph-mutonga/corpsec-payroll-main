@@ -61,7 +61,7 @@ function checkAuthStatus() {
   const mainContent = document.getElementById('main-content');
   const token = localStorage.getItem('corpsec_token');
 
-  if (token) {
+  if (token && token !== 'null' && token !== 'undefined' && token.trim() !== '' && token.length > 20) {
     authToken = token;
     if (loginOverlay) loginOverlay.style.display = 'none';
     if (sidebar) sidebar.style.display = '';
@@ -70,12 +70,20 @@ function checkAuthStatus() {
     const storedUser = localStorage.getItem('corpsec_user');
     if (storedUser) {
       try {
-        updateUserProfileDisplay(JSON.parse(storedUser));
+        const u = JSON.parse(storedUser);
+        if (u && (u.role === 'GUARD' || u.role === 'Guard')) {
+          window.location.href = '/portal';
+          return;
+        }
+        updateUserProfileDisplay(u);
       } catch (e) {}
     }
+    startSessionHeartbeat();
     initApp();
   } else {
     authToken = '';
+    localStorage.removeItem('corpsec_token');
+    localStorage.removeItem('corpsec_user');
     if (loginOverlay) loginOverlay.style.display = 'flex';
     if (sidebar) sidebar.style.display = 'none';
     if (mainContent) mainContent.style.display = 'none';
@@ -96,6 +104,42 @@ function checkAuthStatus() {
   }
 }
 
+
+let sessionHeartbeatTimer = null;
+
+function startSessionHeartbeat() {
+  if (sessionHeartbeatTimer) clearInterval(sessionHeartbeatTimer);
+  sendHeartbeatPing();
+  sessionHeartbeatTimer = setInterval(sendHeartbeatPing, 60000);
+  if (typeof startTeamChatUnreadPoller === 'function') {
+    startTeamChatUnreadPoller();
+  }
+}
+
+function stopSessionHeartbeat() {
+  if (sessionHeartbeatTimer) {
+    clearInterval(sessionHeartbeatTimer);
+    sessionHeartbeatTimer = null;
+  }
+  if (typeof waGlobalUnreadTimer !== 'undefined' && waGlobalUnreadTimer) {
+    clearInterval(waGlobalUnreadTimer);
+    waGlobalUnreadTimer = null;
+  }
+}
+
+async function sendHeartbeatPing() {
+  const token = localStorage.getItem('corpsec_token') || authToken;
+  if (!token) return;
+
+  const sessId = localStorage.getItem('corpsec_session_id');
+  const payload = { session_id: sessId ? parseInt(sessId) : null, active_seconds: 60 };
+
+  apiFetch('/auth/heartbeat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
+}
 
 async function handleUnifiedLogin(e) {
   if (e) e.preventDefault();
@@ -137,6 +181,28 @@ async function handleUnifiedLogin(e) {
       return;
     }
 
+    // -------------------------------------------------------------------------
+    // Role-Based Two-Factor OTP Requirement (Admin, Supervisor, Staff)
+    // -------------------------------------------------------------------------
+    if (data.otp_required) {
+      authToken = '';
+      localStorage.removeItem('corpsec_token');
+      localStorage.removeItem('corpsec_user');
+
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.innerText = 'Sign In to CorpSec';
+      if (btnSpinner) btnSpinner.style.display = 'none';
+
+      pendingOTPAuth = {
+        email: data.email || loginId,
+        role: data.role,
+        full_name: data.full_name
+      };
+
+      transitionToOTPScreen(pendingOTPAuth.email, data.message);
+      return;
+    }
+
     // Role-based automatic dispatch:
     if (data.role === 'GUARD') {
       // Security Guard Account: Save guard session and redirect to Mobile Guard Portal
@@ -158,10 +224,22 @@ async function handleUnifiedLogin(e) {
       return;
     }
 
-    // Administrator / Supervisor Account:
+    if (data.session_id) {
+      localStorage.setItem('corpsec_session_id', data.session_id);
+    }
+
+    // Administrator / Supervisor / HR Account:
+    if (!data.access_token || data.access_token === 'null' || data.access_token === 'undefined') {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.innerText = 'Sign In to CorpSec';
+      if (btnSpinner) btnSpinner.style.display = 'none';
+      return;
+    }
+
     authToken = data.access_token;
     localStorage.setItem('corpsec_token', authToken);
     localStorage.setItem('corpsec_user', JSON.stringify(data));
+    startSessionHeartbeat();
 
     updateUserProfileDisplay(data);
 
@@ -214,6 +292,246 @@ function quickFillCredentials(id, pass, autoSubmit = true) {
 window.quickFillCredentials = quickFillCredentials;
 window.handleUnifiedLogin = handleUnifiedLogin;
 window.togglePasswordVisibility = togglePasswordVisibility;
+window.handleVerifyOTPSubmit = handleVerifyOTPSubmit;
+window.handleResendOTP = handleResendOTP;
+window.handleBackToLogin = handleBackToLogin;
+
+// -----------------------------------------------------------------------------
+// Two-Factor Email OTP Verification Controllers
+// -----------------------------------------------------------------------------
+let pendingOTPAuth = null;
+let otpResendTimer = null;
+let otpResendSecondsLeft = 0;
+
+function transitionToOTPScreen(email, message) {
+  const loginForm = document.getElementById('unified-login-form');
+  const otpContainer = document.getElementById('unified-otp-container');
+  const maskedEmailEl = document.getElementById('otp-masked-email');
+  const otpInput = document.getElementById('unified-otp-input');
+  const alertEl = document.getElementById('unified-login-alert');
+
+  if (loginForm) loginForm.style.display = 'none';
+  if (otpContainer) otpContainer.style.display = 'block';
+
+  if (maskedEmailEl && email) {
+    const parts = email.split('@');
+    let masked = email;
+    if (parts.length === 2) {
+      const u = parts[0];
+      const m = u.length > 2 ? u[0] + '***' + u[u.length - 1] : u + '***';
+      masked = `${m}@${parts[1]}`;
+    }
+    maskedEmailEl.innerText = masked;
+  }
+
+  if (otpInput) {
+    otpInput.value = '';
+    setTimeout(() => otpInput.focus(), 100);
+  }
+
+  if (alertEl) {
+    alertEl.className = 'login-alert-banner alert-success';
+    alertEl.innerHTML = `✉️ <strong>Verification Code Sent:</strong> ${message || 'Please check your email inbox and enter the 6-digit code.'}`;
+    alertEl.style.display = 'block';
+  }
+
+  startResendCountdown(60);
+}
+
+function startResendCountdown(seconds = 60) {
+  clearInterval(otpResendTimer);
+  otpResendSecondsLeft = seconds;
+  const resendBtn = document.getElementById('btn-resend-otp');
+  const countEl = document.getElementById('otp-timer-count');
+
+  if (resendBtn) {
+    resendBtn.disabled = true;
+    resendBtn.style.opacity = '0.6';
+    resendBtn.style.cursor = 'not-allowed';
+  }
+
+  const update = () => {
+    if (otpResendSecondsLeft <= 0) {
+      clearInterval(otpResendTimer);
+      if (resendBtn) {
+        resendBtn.disabled = false;
+        resendBtn.style.opacity = '1';
+        resendBtn.style.cursor = 'pointer';
+      }
+      if (countEl) countEl.innerText = '';
+    } else {
+      if (countEl) countEl.innerText = `(${otpResendSecondsLeft}s)`;
+      otpResendSecondsLeft--;
+    }
+  };
+
+  update();
+  otpResendTimer = setInterval(update, 1000);
+}
+
+async function handleVerifyOTPSubmit(e) {
+  if (e) e.preventDefault();
+  const otpInput = document.getElementById('unified-otp-input');
+  const alertEl = document.getElementById('unified-login-alert');
+  const btn = document.getElementById('btn-verify-otp');
+  const btnText = document.getElementById('btn-verify-otp-text');
+  const btnSpinner = document.getElementById('btn-verify-otp-spinner');
+
+  if (!otpInput) return;
+  const rawCode = otpInput.value.replace(/\D/g, '').trim();
+
+  if (rawCode.length !== 6) {
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Please enter a complete 6-digit numeric verification code.';
+      alertEl.style.display = 'block';
+    }
+    otpInput.focus();
+    return;
+  }
+
+  const emailToVerify = pendingOTPAuth ? pendingOTPAuth.email : (document.getElementById('unified-login-id')?.value.trim() || '');
+
+  if (alertEl) alertEl.style.display = 'none';
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.innerText = 'Verifying Code...';
+  if (btnSpinner) btnSpinner.style.display = 'inline-block';
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: emailToVerify,
+        otp_code: rawCode
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.innerText = 'Verify & Access System';
+      if (btnSpinner) btnSpinner.style.display = 'none';
+      if (alertEl) {
+        alertEl.className = 'login-alert-banner alert-error';
+        alertEl.innerText = data.detail || 'Verification code failed. Please check the code and try again.';
+        alertEl.style.display = 'block';
+      }
+      otpInput.focus();
+      return;
+    }
+
+    // Two-factor OTP verification successful!
+    if (btnText) btnText.innerText = 'Verified! Accessing System...';
+
+    // Store tokens and complete session initialization
+    authToken = data.access_token;
+    localStorage.setItem('corpsec_token', authToken);
+    localStorage.setItem('corpsec_user', JSON.stringify(data));
+    if (data.session_id) {
+      localStorage.setItem('corpsec_session_id', data.session_id);
+    }
+    startSessionHeartbeat();
+    updateUserProfileDisplay(data);
+
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-success';
+      alertEl.innerHTML = `✅ <strong>Identity Confirmed:</strong> Welcome, ${data.full_name || 'CorpSec Administrator'}! Initializing management workspace...`;
+      alertEl.style.display = 'block';
+    }
+
+    setTimeout(() => {
+      const loginOverlay = document.getElementById('unified-login-overlay');
+      const sidebar = document.getElementById('sidebar');
+      const mainContent = document.getElementById('main-content');
+      if (loginOverlay) loginOverlay.style.display = 'none';
+      if (sidebar) sidebar.style.display = '';
+      if (mainContent) mainContent.style.display = '';
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.innerText = 'Verify & Access System';
+      if (btnSpinner) btnSpinner.style.display = 'none';
+      initApp();
+    }, 400);
+
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.innerText = 'Verify & Access System';
+    if (btnSpinner) btnSpinner.style.display = 'none';
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Network error while verifying OTP: ' + err.message;
+      alertEl.style.display = 'block';
+    }
+  }
+}
+
+async function handleResendOTP() {
+  if (otpResendSecondsLeft > 0) return;
+  const alertEl = document.getElementById('unified-login-alert');
+  const resendBtn = document.getElementById('btn-resend-otp');
+  const emailToVerify = pendingOTPAuth ? pendingOTPAuth.email : (document.getElementById('unified-login-id')?.value.trim() || '');
+
+  if (!emailToVerify) {
+    handleBackToLogin();
+    return;
+  }
+
+  if (resendBtn) {
+    resendBtn.disabled = true;
+    resendBtn.innerText = 'Sending new code...';
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailToVerify })
+    });
+
+    const data = await res.json();
+    if (resendBtn) resendBtn.innerText = '🔄 Resend Code';
+
+    if (res.ok) {
+      if (alertEl) {
+        alertEl.className = 'login-alert-banner alert-success';
+        alertEl.innerHTML = `✉️ <strong>New Code Dispatched:</strong> ${data.message || 'Check your email inbox for the fresh 6-digit verification code.'}`;
+        alertEl.style.display = 'block';
+      }
+      startResendCountdown(60);
+    } else {
+      if (alertEl) {
+        alertEl.className = 'login-alert-banner alert-error';
+        alertEl.innerText = data.detail || 'Could not resend verification code. Please wait a moment.';
+        alertEl.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (resendBtn) resendBtn.innerText = '🔄 Resend Code';
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Error resending code: ' + err.message;
+      alertEl.style.display = 'block';
+    }
+  }
+}
+
+function handleBackToLogin() {
+  clearInterval(otpResendTimer);
+  pendingOTPAuth = null;
+  const loginForm = document.getElementById('unified-login-form');
+  const otpContainer = document.getElementById('unified-otp-container');
+  const alertEl = document.getElementById('unified-login-alert');
+  const idInput = document.getElementById('unified-login-id');
+
+  if (otpContainer) otpContainer.style.display = 'none';
+  if (loginForm) loginForm.style.display = 'block';
+  if (alertEl) alertEl.style.display = 'none';
+
+  if (idInput) {
+    idInput.focus();
+  }
+}
 
 function togglePasswordVisibility() {
   const passInput = document.getElementById('unified-login-password');
@@ -238,8 +556,37 @@ function updateUserProfileDisplay(userData) {
     }
   });
 
+  const dropName = document.getElementById('dropdown-profile-name');
+  if (dropName) dropName.innerText = userData.full_name || (userData.email ? userData.email.split('@')[0].replace('.', ' ').toUpperCase() : 'User Profile');
+
+  const profileOption = document.getElementById('user-profile-option-label');
+  if (profileOption) {
+    if (userData.role === 'ADMIN') profileOption.innerText = 'Admin Profile';
+    else if (userData.role === 'HR') profileOption.innerText = 'HR Profile';
+    else if (userData.role === 'SUPERVISOR') profileOption.innerText = 'Supervisor Profile';
+    else if (userData.role === 'GUARD') profileOption.innerText = 'Guard Profile';
+    else profileOption.innerText = 'My Profile';
+  }
+
+  const sysSettingsOpt = document.getElementById('user-dropdown-system-settings');
+  if (sysSettingsOpt) {
+    sysSettingsOpt.style.display = userData.role === 'ADMIN' ? '' : 'none';
+  }
+
   // Reset all nav-items and supervisor sections
   document.querySelectorAll('.nav-item').forEach(el => el.style.display = '');
+  const isAdminUser = (userData.role === 'ADMIN' || userData.role === 'Admin' || userData.role === 'System Admin');
+  const navAnon = document.getElementById('nav-item-anonymous');
+  if (navAnon) {
+    navAnon.style.display = isAdminUser ? 'flex' : 'none';
+  }
+  const dashBtnAnon = document.getElementById('dash-btn-anon-reports');
+  if (dashBtnAnon) {
+    dashBtnAnon.style.display = isAdminUser ? 'flex' : 'none';
+  }
+  if (isAdminUser) {
+    refreshAnonymousReportsCount();
+  }
   const promoCard = document.querySelector('.sidebar-promo-card');
   if (promoCard) promoCard.style.display = 'block';
   const supNav = document.querySelector(`.nav-item[onclick="switchTab('supervisors')"]`);
@@ -258,6 +605,8 @@ function updateUserProfileDisplay(userData) {
   if (astCard) astCard.style.display = 'flex';
   const invWatchCard = document.getElementById('dash-inventory-watchlist-card');
   if (invWatchCard) invWatchCard.style.display = 'block';
+  const expCard = document.getElementById('dash-card-expenses');
+  if (expCard) expCard.style.display = 'flex';
 
   const qaAdmin = document.getElementById('dash-quick-actions-admin');
   if (qaAdmin) qaAdmin.style.display = 'flex';
@@ -273,7 +622,7 @@ function updateUserProfileDisplay(userData) {
 
   // Adjust for SUPERVISOR
   if (userData.role === 'SUPERVISOR') {
-    const adminOnlyTabs = ['payroll', 'payments', 'salary-advances', 'statutory', 'settings', 'audit', 'reports', 'documents', 'staff', 'sites', 'shifts', 'invoices', 'clients', 'assets', 'company-history'];
+    const adminOnlyTabs = ['payroll', 'payments', 'salary-advances', 'statutory', 'settings', 'audit', 'documents', 'staff', 'sites', 'shifts', 'invoices', 'clients', 'assets', 'company-history', 'expenses'];
     adminOnlyTabs.forEach(tab => {
       const navItem = document.querySelector(`.nav-item[onclick="switchTab('${tab}')"]`);
       if (navItem) navItem.style.display = 'none';
@@ -283,12 +632,13 @@ function updateUserProfileDisplay(userData) {
     if (promoCard) promoCard.style.display = 'none';
     currentRollCallSupervisorFilter = userData.id;
 
-    // Supervisor Dashboard customization
+    // Supervisor Dashboard customization - strictly hide all financial, payroll, and petty cash cards
     if (gpCard) gpCard.style.display = 'none'; // Supervisors cannot see corporate payroll gross
     if (cCard) cCard.style.display = 'none';
     if (invCard) invCard.style.display = 'none';
     if (astCard) astCard.style.display = 'none';
     if (invWatchCard) invWatchCard.style.display = 'none';
+    if (expCard) expCard.style.display = 'none'; // Strictly hide expenses and petty cash from supervisor dashboard
     if (qaAdmin) qaAdmin.style.display = 'none';
     if (qaSup) qaSup.style.display = 'flex';
 
@@ -306,6 +656,16 @@ function updateUserProfileDisplay(userData) {
 }
 
 function logout() {
+  stopSessionHeartbeat();
+  const sessId = localStorage.getItem('corpsec_session_id');
+  if (sessId) {
+    apiFetch('/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: parseInt(sessId) })
+    }).catch(() => {});
+  }
+  localStorage.removeItem('corpsec_session_id');
   localStorage.removeItem('corpsec_token');
   localStorage.removeItem('corpsec_user');
   sessionStorage.removeItem('company_documents_vault_unlocked');
@@ -345,8 +705,12 @@ async function initApp() {
 
 function switchTab(tabId) {
   const user = getLoggedInUser();
-  if (user && user.role === 'SUPERVISOR' && (tabId === 'payroll' || tabId === 'payments' || tabId === 'salary-advances' || tabId === 'reports' || tabId === 'statutory' || tabId === 'staff' || tabId === 'audit' || tabId === 'documents' || tabId === 'invoices' || tabId === 'clients' || tabId === 'assets' || tabId === 'company-history')) {
-    showToast('Access Denied: Analytics, statutory reports, payroll, and salary advance management are restricted to Admin & HR.', 'danger');
+  if (user && user.role === 'SUPERVISOR' && (tabId === 'payroll' || tabId === 'payments' || tabId === 'salary-advances' || tabId === 'statutory' || tabId === 'staff' || tabId === 'audit' || tabId === 'documents' || tabId === 'invoices' || tabId === 'clients' || tabId === 'assets' || tabId === 'company-history' || tabId === 'expenses')) {
+    showToast('Access Denied: Expenses, petty cash, payroll, and finances are restricted to Admin & HR.', 'danger');
+    tabId = 'dashboard';
+  }
+  if (user && user.role !== 'ADMIN' && user.role !== 'Admin' && user.role !== 'System Admin' && tabId === 'anonymous') {
+    showToast('Access Denied: Anonymous Guard Reports are restricted exclusively to System Administrator.', 'danger');
     tabId = 'dashboard';
   }
   const titles = {
@@ -360,7 +724,8 @@ function switchTab(tabId) {
     'payroll': 'Guided Payroll Engine',
     'payments': 'Bank & M-Pesa Disbursement Schedules',
     'statutory': 'Tax & Statutory Parameters Management',
-    'reports': 'Performance Overview Analytics & Statutory Reports',
+    'reports': 'Chart Analytics & Operational Performance Reports',
+    'team-chat': 'Team Operations Chat (Admin, HR, Staff & Supervisors)',
     'audit': 'System Audit Trail',
     'settings': 'Statutory Parameters & System Settings',
     'supervisors': 'Supervisor Management & Guard Assignments',
@@ -372,7 +737,8 @@ function switchTab(tabId) {
     'company-history': 'Corporate History, Milestones & Governance',
     'salary-advances': 'Mid-Month Salary Advances & Automatic Payroll Deductions',
     'expenses': 'Firm Expenses, Petty Cash & Recurring Expenditure',
-    'download-app': 'Download & Install Desktop Application in Your Machine'
+    'download-app': 'Download & Install Desktop Application in Your Machine',
+    'anonymous': 'Anonymous Guard Reports & Whistleblower Feed'
   };
 
   if (tabId === 'documents') {
@@ -408,6 +774,7 @@ function switchTab(tabId) {
   }
   if (tabId === 'incidents') loadAdminIncidents();
   if (tabId === 'leave') loadAdminLeave();
+  if (tabId === 'anonymous') loadAnonymousMessages();
   if (tabId === 'guards') {
     const fileViewContainer = document.getElementById('guard-file-view');
     const listViewContainer = document.getElementById('guards-list-view');
@@ -435,10 +802,14 @@ function switchTab(tabId) {
   if (tabId === 'assets') loadAssets();
   if (tabId === 'company-history') loadCompanyHistory();
   if (tabId === 'download-app') initDownloadAppSection();
+  if (tabId === 'team-chat') {
+    initWhatsAppChat();
+  }
   if (tabId === 'reports') {
     loadAnalyticsData();
     loadGuards();
     loadSites();
+    loadTeamChat();
   }
 }
 
@@ -547,6 +918,9 @@ async function loadDashboardData(forceReload = false) {
     // 7. Render Inventory Watchlist Feed (Admin/HR)
     if (!isSupervisor) {
       renderDashboardInventoryWatchlist(inventoryItems);
+    }
+    if (user && (user.role === 'ADMIN' || user.role === 'Admin' || user.role === 'System Admin')) {
+      refreshAnonymousReportsCount();
     }
   } catch (err) {
     console.error('loadDashboardData error:', err);
@@ -2291,36 +2665,25 @@ async function loadAttendance() {
       }
     }
 
-    // Daily Attendance Logs Table
-    const tbody = document.getElementById('attendance-table-body');
-    if (tbody) {
-      tbody.innerHTML = '';
-      if (!atts || atts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:16px; color:#64748B;">No attendance logs found. Click 'Log Manual Shift' to add one.</td></tr>`;
-      } else {
-        atts.forEach((a, idx) => {
-          const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
-          const clockOut = a.actual_clock_out ? new Date(a.actual_clock_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
-          const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
-          const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
-          const guardLabel = a.guard_name || (g ? g.full_name : `Guard #${a.guard_id}`);
-          const siteLabel = a.site_name || (s ? s.site_name : 'Client Site');
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${a.shift_date}</td>
-            <td>${guardLabel}</td>
-            <td>${siteLabel}</td>
-            <td>${clockIn}</td>
-            <td>${clockOut}</td>
-            <td>${a.regular_hours}h</td>
-            <td>${a.overtime_hours}h</td>
-            <td><span class="badge badge-active">${a.status}</span></td>
-            <td><button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openCorrectAttendanceModal(${idx})">✏️ Correct</button></td>
-          `;
-          tbody.appendChild(tr);
-        });
+    // Populate Site filter options if element exists
+    const siteSelect = document.getElementById('att-filter-site');
+    if (siteSelect) {
+      if (!cachedSites || cachedSites.length === 0) {
+        try {
+          const sRes = await apiFetch('/sites');
+          if (sRes.ok) cachedSites = await sRes.json();
+        } catch (e) {}
+      }
+      if (cachedSites && cachedSites.length > 0) {
+        const curVal = siteSelect.value;
+        siteSelect.innerHTML = '<option value="">🏢 All Client Sites</option>' +
+          cachedSites.map(s => `<option value="${s.id}">🏢 ${escapeHtml(s.site_name)}</option>`).join('');
+        if (curVal) siteSelect.value = curVal;
       }
     }
+
+    // Daily Shift Attendance Logs Table (responsive filtering by Site & Shift Type)
+    filterAttendanceLogs();
 
     // Dashboard Recent Shift Activity Table
     const dashBody = document.getElementById('dashboard-activity-body');
@@ -2451,20 +2814,186 @@ async function handleManualAttendanceSubmit(e) {
   }
 }
 
+// Attendance Filter and Shift Display Logic
+let currentAttendanceShiftFilter = 'ALL'; // 'ALL', 'DAY', 'NIGHT'
+
+function setAttendanceShiftFilter(type) {
+  currentAttendanceShiftFilter = type;
+  const btnAll = document.getElementById('att-btn-shift-all');
+  const btnDay = document.getElementById('att-btn-shift-day');
+  const btnNight = document.getElementById('att-btn-shift-night');
+
+  if (btnAll) {
+    btnAll.style.background = (type === 'ALL') ? '#FFFFFF' : 'transparent';
+    btnAll.style.boxShadow = (type === 'ALL') ? '0 1px 2px rgba(0,0,0,0.05)' : 'none';
+  }
+  if (btnDay) {
+    btnDay.style.background = (type === 'DAY') ? '#FFFFFF' : 'transparent';
+    btnDay.style.boxShadow = (type === 'DAY') ? '0 1px 2px rgba(0,0,0,0.05)' : 'none';
+  }
+  if (btnNight) {
+    btnNight.style.background = (type === 'NIGHT') ? '#FFFFFF' : 'transparent';
+    btnNight.style.boxShadow = (type === 'NIGHT') ? '0 1px 2px rgba(0,0,0,0.05)' : 'none';
+  }
+
+  filterAttendanceLogs();
+}
+
+function setAttendanceTodayDate() {
+  const dateInput = document.getElementById('att-filter-date');
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+    filterAttendanceLogs();
+  }
+}
+
+function resetAttendanceFilters() {
+  const siteSelect = document.getElementById('att-filter-site');
+  const dateInput = document.getElementById('att-filter-date');
+  const searchInput = document.getElementById('att-filter-search');
+  if (siteSelect) siteSelect.value = '';
+  if (dateInput) dateInput.value = '';
+  if (searchInput) searchInput.value = '';
+  setAttendanceShiftFilter('ALL');
+}
+
+function filterAttendanceLogs() {
+  const tbody = document.getElementById('attendance-table-body');
+  if (!tbody) return;
+
+  const atts = cachedAttendance || [];
+  const siteVal = document.getElementById('att-filter-site')?.value || '';
+  const dateVal = document.getElementById('att-filter-date')?.value || '';
+  const searchVal = (document.getElementById('att-filter-search')?.value || '').toLowerCase().trim();
+
+  // Helper to determine if a record is Night Shift
+  const isNight = (a) => {
+    if (a.is_night_shift === true) return true;
+    if (a.shift_type && a.shift_type.toUpperCase() === 'NIGHT') return true;
+    if (a.shift_name && a.shift_name.toLowerCase().includes('night')) return true;
+    return false;
+  };
+
+  let countTotal = 0;
+  let countDay = 0;
+  let countNight = 0;
+
+  const filtered = atts.filter(a => {
+    // 1. Site filter
+    if (siteVal && String(a.site_id) !== String(siteVal)) {
+      return false;
+    }
+
+    // 2. Date filter
+    if (dateVal && a.shift_date !== dateVal) {
+      return false;
+    }
+
+    // 3. Search query filter
+    if (searchVal) {
+      const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
+      const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
+      const gName = (a.guard_name || (g ? g.full_name : '')).toLowerCase();
+      const gEmp = (a.guard_employee_number || (g ? g.employee_number : '')).toLowerCase();
+      const sName = (a.site_name || (s ? s.site_name : '')).toLowerCase();
+      const sShift = (a.shift_name || '').toLowerCase();
+      if (!gName.includes(searchVal) && !gEmp.includes(searchVal) && !sName.includes(searchVal) && !sShift.includes(searchVal)) {
+        return false;
+      }
+    }
+
+    // Count day/night after site, date, search filters
+    countTotal++;
+    if (isNight(a)) {
+      countNight++;
+    } else {
+      countDay++;
+    }
+
+    // 4. Shift filter (ALL, DAY, NIGHT)
+    if (currentAttendanceShiftFilter === 'DAY' && isNight(a)) {
+      return false;
+    }
+    if (currentAttendanceShiftFilter === 'NIGHT' && !isNight(a)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Update KPI counters
+  const totalEl = document.getElementById('att-count-total');
+  const dayEl = document.getElementById('att-count-day');
+  const nightEl = document.getElementById('att-count-night');
+  if (totalEl) totalEl.innerText = countTotal;
+  if (dayEl) dayEl.innerText = countDay;
+  if (nightEl) nightEl.innerText = countNight;
+
+  // Render Table Rows
+  tbody.innerHTML = '';
+  if (!filtered || filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:24px; color:#64748B;">No attendance logs match the selected site or shift filters.</td></tr>`;
+    return;
+  }
+
+  filtered.forEach(a => {
+    const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
+    const clockOut = a.actual_clock_out ? new Date(a.actual_clock_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
+    const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
+    const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
+    const guardName = a.guard_name || (g ? g.full_name : `Guard #${a.guard_id}`);
+    const empNum = a.guard_employee_number || (g ? g.employee_number : '');
+    const guardDisplay = empNum ? `<strong>${escapeHtml(guardName)}</strong> <span style="font-size:11px; color:#64748B;">(${escapeHtml(empNum)})</span>` : `<strong>${escapeHtml(guardName)}</strong>`;
+    const siteLabel = a.site_name || (s ? s.site_name : 'Client Site');
+
+    const nightShift = isNight(a);
+    const shiftBadge = nightShift
+      ? '<span class="badge" style="background:#EEF2FF; color:#4338CA; border:1px solid #C7D2FE; font-weight:700;">🌙 Night Shift</span>'
+      : '<span class="badge" style="background:#FFFBEB; color:#B45309; border:1px solid #FDE68A; font-weight:700;">☀️ Day Shift</span>';
+
+    const statusBadge = a.status === 'PRESENT'
+      ? '<span class="badge badge-active">PRESENT</span>'
+      : (a.status === 'LATE'
+        ? '<span class="badge badge-warning" style="background:#FEF3C7; color:#B45309;">LATE</span>'
+        : `<span class="badge badge-inactive">${escapeHtml(a.status || 'ABSENT')}</span>`);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${a.shift_date}</td>
+      <td>${guardDisplay}</td>
+      <td><strong>🏢 ${escapeHtml(siteLabel)}</strong></td>
+      <td>${shiftBadge}</td>
+      <td>${clockIn}</td>
+      <td>${clockOut}</td>
+      <td><b>${a.regular_hours || 0}h</b></td>
+      <td><span style="color:#0284c7; font-weight:700;">${a.overtime_hours || 0}h</span></td>
+      <td>${statusBadge}</td>
+      <td><button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openCorrectAttendanceModal(${a.id})">✏️ Correct</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 // Attendance Correction Modal Handlers
-function openCorrectAttendanceModal(idx) {
-  const record = cachedAttendance[idx];
+function openCorrectAttendanceModal(idOrIdx) {
+  const record = (cachedAttendance || []).find(x => x.id === idOrIdx) || (cachedAttendance || [])[idOrIdx];
   if (!record) return;
 
   document.getElementById('correct-att-id').value = record.id;
-  const g = cachedGuards.find(x => x.id === record.guard_id);
-  document.getElementById('correct-att-guard-info').innerText = `Guard: ${g ? g.full_name : 'Guard #' + record.guard_id} | Date: ${record.shift_date}`;
+  const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === record.guard_id) : null;
+  const guardName = record.guard_name || (g ? g.full_name : 'Guard #' + record.guard_id);
+  document.getElementById('correct-att-guard-info').innerText = `Guard: ${guardName} | Date: ${record.shift_date}`;
   
   if (record.actual_clock_in) {
     document.getElementById('correct-att-clock-in').value = record.actual_clock_in.substring(0, 16);
+  } else {
+    document.getElementById('correct-att-clock-in').value = '';
   }
   if (record.actual_clock_out) {
     document.getElementById('correct-att-clock-out').value = record.actual_clock_out.substring(0, 16);
+  } else {
+    document.getElementById('correct-att-clock-out').value = '';
   }
   document.getElementById('correct-att-status').value = record.status || 'PRESENT';
   document.getElementById('modal-correct-attendance').style.display = 'flex';
@@ -3290,7 +3819,6 @@ let analyticsCache = null;
 
 async function loadAnalyticsData(selectedPeriodId = null) {
   const user = getLoggedInUser();
-  if (user && user.role === 'SUPERVISOR') return;
   const yearSelect = document.getElementById('reports-year-select');
   const year = yearSelect ? yearSelect.value : 2026;
 
@@ -3773,81 +4301,7 @@ window.openExportReturnsModal = openExportReturnsModal;
 window.closeExportReturnsModal = closeExportReturnsModal;
 
 /* Add Guard / Site / Bulk Salary / Anomaly Scan Handlers */
-function openAddGuardModal() {
-  const modal = document.getElementById('modal-add-guard');
-  if (modal) modal.style.display = 'flex';
-}
-function closeAddGuardModal() {
-  const modal = document.getElementById('modal-add-guard');
-  if (modal) modal.style.display = 'none';
-}
-async function handleAddGuardSubmit(e) {
-  e.preventDefault();
-  const submitBtn = e.target.querySelector('button[type="submit"]');
-  const originalText = submitBtn ? submitBtn.innerText : '';
-  if (submitBtn) {
-    submitBtn.innerText = '⏳ Registering Guard...';
-    submitBtn.disabled = true;
-  }
-
-  const empNumber = document.getElementById('new-guard-emp-no')?.value?.trim() || `CS-00${Math.floor(100 + Math.random() * 800)}`;
-  const fullName = document.getElementById('new-guard-name')?.value?.trim() || '';
-  const nationalId = document.getElementById('new-guard-id')?.value?.trim() || '';
-  const phone = document.getElementById('new-guard-phone')?.value?.trim() || '';
-  const emailVal = document.getElementById('new-guard-email')?.value?.trim() || null;
-  const initialPwdVal = document.getElementById('new-guard-password')?.value?.trim() || '';
-  const salary = parseFloat(document.getElementById('new-guard-salary')?.value || '15000');
-  const hireDate = document.getElementById('new-guard-hire-date')?.value || new Date().toISOString().split('T')[0];
-
-  if (!initialPwdVal || initialPwdVal.length < 6) {
-    showToast('Initial password is required (minimum 6 characters)', 'danger');
-    if (submitBtn) {
-      submitBtn.innerText = originalText;
-      submitBtn.disabled = false;
-    }
-    return;
-  }
-
-  try {
-    const payload = {
-      employee_number: empNumber,
-      full_name: fullName,
-      national_id: nationalId,
-      phone: phone,
-      initial_password: initialPwdVal,
-      basic_salary: salary,
-      hire_date: hireDate,
-      gender: 'Male',
-      payment_method: 'Bank Transfer'
-    };
-    if (emailVal) payload.email = emailVal;
-    payload.is_super_guard = document.getElementById('new-guard-is-super-guard')?.checked || false;
-    payload.is_reliever = document.getElementById('new-guard-is-reliever')?.checked || false;
-
-    const res = await apiFetch('/guards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      const newGuard = await res.json();
-      showToast(`Guard '${newGuard.full_name}' (${newGuard.employee_number}) registered successfully! User login account created.`, 'success');
-      closeAddGuardModal();
-      loadGuards();
-    } else {
-      const errData = await res.json();
-      showToast('Registration failed: ' + (errData.detail || 'Error creating guard profile'), 'danger');
-    }
-  } catch (err) {
-    showToast('Error registering guard: ' + err.message, 'danger');
-  } finally {
-    if (submitBtn) {
-      submitBtn.innerText = originalText;
-      submitBtn.disabled = false;
-    }
-  }
-}
+// Note: openAddGuardModal and handleAddGuardSubmit are defined with full auto-increment support at line 5955+
 
 function openAddSiteModal() {
   const modal = document.getElementById('modal-add-site');
@@ -5593,7 +6047,66 @@ async function handleEditSiteSubmit(e) {
   }
 }
 
-// --- Guard Management Updates ---
+// --- Guard Management Updates & Incremental Employee Numbers ---
+let cachedNextEmployeeInfo = null;
+
+async function autoFillNextEmployeeNumber() {
+  const empInput = document.getElementById('new-guard-emp-no');
+  const hintText = document.getElementById('new-guard-emp-hint-text');
+  const switchContainer = document.getElementById('new-guard-emp-switch-container');
+  if (!empInput) return;
+
+  empInput.placeholder = 'Generating next incremental number...';
+  try {
+    const res = await apiFetch('/guards/next-employee-number');
+    if (res.ok) {
+      const data = await res.json();
+      cachedNextEmployeeInfo = data;
+      empInput.value = data.next_employee_number || '';
+
+      if (hintText) {
+        if (data.previous_employee_number) {
+          hintText.innerHTML = `Auto-incremented from previous: <strong>${escapeHtml(data.previous_employee_number)}</strong> → <strong>${escapeHtml(data.next_employee_number)}</strong>`;
+        } else {
+          hintText.innerHTML = `Auto-assigned initial number: <strong>${escapeHtml(data.next_employee_number)}</strong>`;
+        }
+      }
+
+      // If the auto-assigned number has an alphabetic prefix (e.g. CS-00462), offer quick switch to clean 001 sequence
+      if (switchContainer) {
+        const isPureDigits = /^\d+$/.test(data.next_employee_number);
+        if (!isPureDigits) {
+          switchContainer.style.display = 'inline-block';
+        } else {
+          switchContainer.style.display = 'none';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not auto-generate next employee number:', err);
+  }
+}
+
+async function refreshNextEmployeeNumber() {
+  await autoFillNextEmployeeNumber();
+  if (typeof showToast === 'function') {
+    showToast('Recalculated next incremental employee number', 'info');
+  }
+}
+
+function usePureNumericEmpNo() {
+  const empInput = document.getElementById('new-guard-emp-no');
+  const hintText = document.getElementById('new-guard-emp-hint-text');
+  const pureNum = (cachedNextEmployeeInfo && cachedNextEmployeeInfo.suggested_pure_number) ? cachedNextEmployeeInfo.suggested_pure_number : '001';
+  if (empInput) {
+    empInput.value = pureNum;
+    if (hintText) {
+      const nextNum = (parseInt(pureNum, 10) + 1).toString().padStart(Math.max(pureNum.length, 3), '0');
+      hintText.innerHTML = `Switched to clean sequence: <strong>${escapeHtml(pureNum)}</strong> (next will be <strong>${nextNum}</strong>)`;
+    }
+  }
+}
+
 async function openAddGuardModal() {
   await loadSites();
   const sel = document.getElementById('new-guard-site-select');
@@ -5605,6 +6118,16 @@ async function openAddGuardModal() {
     supSel.innerHTML = '<option value="">-- No Supervisor Assigned --</option>' + (supervisorsCache || []).map(s => `<option value="${s.id}">${s.full_name || s.email} (${s.email})</option>`).join('');
   }
   updateGuardSiteSalaryHint();
+
+  // Reset basic inputs and prefill default hire date to today if blank
+  const hireDateInput = document.getElementById('new-guard-hire-date');
+  if (hireDateInput && !hireDateInput.value) {
+    hireDateInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  // Automatically fetch and fill next incremental employee number
+  await autoFillNextEmployeeNumber();
+
   document.getElementById('modal-add-guard').style.display = 'flex';
 }
 
@@ -5627,40 +6150,70 @@ function updateGuardSiteSalaryHint() {
 
 async function handleAddGuardSubmit(e) {
   e.preventDefault();
-  const employee_number = document.getElementById('new-guard-emp-no').value.trim();
-  const full_name = document.getElementById('new-guard-name').value.trim();
-  const national_id = document.getElementById('new-guard-id').value.trim();
-  const phone = document.getElementById('new-guard-phone').value.trim();
-  const email = document.getElementById('new-guard-email').value.trim() || null;
-  const initial_password = document.getElementById('new-guard-password').value.trim();
-  const site_id_val = document.getElementById('new-guard-site-select').value;
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const originalText = submitBtn ? submitBtn.innerText : '';
+  if (submitBtn) {
+    submitBtn.innerText = '⏳ Registering Guard...';
+    submitBtn.disabled = true;
+  }
+
+  const employee_number = document.getElementById('new-guard-emp-no')?.value?.trim() || '';
+  const full_name = document.getElementById('new-guard-name')?.value?.trim() || '';
+  const national_id = document.getElementById('new-guard-id')?.value?.trim() || '';
+  const phone = document.getElementById('new-guard-phone')?.value?.trim() || '';
+  const email = document.getElementById('new-guard-email')?.value?.trim() || null;
+  const initial_password = document.getElementById('new-guard-password')?.value?.trim() || '';
+  const site_id_val = document.getElementById('new-guard-site-select')?.value;
   const site_id = site_id_val ? parseInt(site_id_val) : null;
   const sup_id_val = document.getElementById('new-guard-supervisor-select')?.value;
   const supervisor_id = sup_id_val ? parseInt(sup_id_val) : null;
-  const salaryVal = document.getElementById('new-guard-salary').value.trim();
+  const salaryVal = document.getElementById('new-guard-salary')?.value?.trim();
   const basic_salary = salaryVal ? parseFloat(salaryVal) : null;
-  const is_reliever = document.getElementById('new-guard-is-reliever').checked;
-  const hire_date = document.getElementById('new-guard-hire-date').value;
+  const is_reliever = document.getElementById('new-guard-is-reliever')?.checked || false;
+  const is_super_guard = document.getElementById('new-guard-is-super-guard')?.checked || false;
+  const hire_date = document.getElementById('new-guard-hire-date')?.value || new Date().toISOString().split('T')[0];
 
   try {
+    const payload = {
+      full_name, national_id, phone, initial_password,
+      site_id, supervisor_id, basic_salary, is_reliever, is_super_guard, hire_date
+    };
+    if (employee_number) payload.employee_number = employee_number;
+    if (email) payload.email = email;
+
     const res = await apiFetch('/guards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        employee_number, full_name, national_id, phone, email, initial_password,
-        site_id, supervisor_id, basic_salary, is_reliever, hire_date
-      })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.detail || 'Failed to register guard');
+      if (typeof showToast === 'function') {
+        showToast('Registration failed: ' + (data.detail || 'Could not register guard'), 'danger');
+      } else {
+        alert(data.detail || 'Failed to register guard');
+      }
       return;
     }
+
     closeAddGuardModal();
-    alert('✅ Guard registered successfully!');
-    loadGuards();
+    if (typeof showToast === 'function') {
+      showToast(`✅ Guard '${data.full_name}' (${data.employee_number}) registered successfully!`, 'success');
+    } else {
+      alert(`✅ Guard '${data.full_name}' (${data.employee_number}) registered successfully!`);
+    }
+    await loadGuards();
   } catch (err) {
-    alert('Error registering guard: ' + err.message);
+    if (typeof showToast === 'function') {
+      showToast('Error registering guard: ' + err.message, 'danger');
+    } else {
+      alert('Error registering guard: ' + err.message);
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.innerText = originalText;
+      submitBtn.disabled = false;
+    }
   }
 }
 
@@ -5874,6 +6427,9 @@ window.openAddGuardModal = openAddGuardModal;
 window.closeAddGuardModal = closeAddGuardModal;
 window.updateGuardSiteSalaryHint = updateGuardSiteSalaryHint;
 window.handleAddGuardSubmit = handleAddGuardSubmit;
+window.refreshNextEmployeeNumber = refreshNextEmployeeNumber;
+window.usePureNumericEmpNo = usePureNumericEmpNo;
+window.autoFillNextEmployeeNumber = autoFillNextEmployeeNumber;
 window.openOffDayAllowanceModal = openOffDayAllowanceModal;
 window.closeOffDayAllowanceModal = closeOffDayAllowanceModal;
 window.handleOffDayAllowanceSubmit = handleOffDayAllowanceSubmit;
@@ -6847,6 +7403,8 @@ async function loadStaffMembers() {
   const tbody = document.getElementById('staff-table-body');
   if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading staff directory...</td></tr>';
 
+  loadStaffMonitoringOverview();
+
   try {
     const res = await apiFetch('/staff');
     if (!res.ok) throw new Error('Failed to load staff list');
@@ -7041,6 +7599,52 @@ async function deleteStaffAccountRecord(userId, email) {
     loadStaffMembers();
   } catch (e) {
     showToast(e.message, 'danger');
+  }
+}
+
+async function loadStaffMonitoringOverview() {
+  const hubCard = document.getElementById('staff-monitoring-hub-card');
+  const tbody = document.getElementById('staff-monitoring-table-body');
+  if (!hubCard || !tbody) return;
+
+  const user = JSON.parse(localStorage.getItem('corpsec_user') || '{}');
+  if (user.role !== 'ADMIN') {
+    hubCard.style.display = 'none';
+    return;
+  }
+  hubCard.style.display = 'block';
+
+  try {
+    const res = await apiFetch('/staff/monitoring/overview');
+    if (!res.ok) {
+      hubCard.style.display = 'none';
+      return;
+    }
+    const data = await res.json();
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#64748B;">No staff session records found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(s => `
+      <tr>
+        <td><b>${escapeHtml(s.full_name || s.email)}</b><br><small style="color:#64748B;">${s.email}</small></td>
+        <td><span class="badge" style="background:#F1F5F9; color:#0F172A; font-weight:700;">${s.role}</span></td>
+        <td>
+          ${s.is_online 
+            ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Online</span>' 
+            : '<span class="badge" style="background:#F1F5F9; color:#64748B;">⚪ Offline</span>'}
+        </td>
+        <td><b>${s.today_hours.toFixed(2)} hrs</b></td>
+        <td><small>${s.last_login ? new Date(s.last_login).toLocaleString() : 'Never'}</small></td>
+        <td>
+          <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="openStaffFileModal(${s.user_id})">
+            📁 View File
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    hubCard.style.display = 'none';
   }
 }
 
@@ -8106,12 +8710,13 @@ function switchAssetsSubtab(subTab) {
 
 async function loadAssets() {
   try {
-    const [catRes, astRes, invRes, transRes, maintRes] = await Promise.all([
+    const [catRes, astRes, invRes, transRes, maintRes, auditRes] = await Promise.all([
       apiFetch('/assets/categories'),
       apiFetch('/assets'),
       apiFetch('/assets/inventory'),
       apiFetch('/assets/inventory/transactions'),
-      apiFetch('/assets/maintenance')
+      apiFetch('/assets/maintenance'),
+      apiFetch('/assets/inventory/audit-summary').catch(() => null)
     ]);
 
     cachedAssetCategories = (await catRes.json()) || [];
@@ -8120,11 +8725,16 @@ async function loadAssets() {
     cachedInventoryTransactions = (await transRes.json()) || [];
     cachedMaintenanceRecords = (await maintRes.json()) || [];
 
-    // KPI Calculations
+    let auditData = null;
+    if (auditRes && auditRes.ok) {
+      auditData = await auditRes.json();
+    }
+
+    // Baseline Asset KPI Calculations
     const totalAssets = cachedAssets.length;
     const totalValuation = cachedAssets.reduce((sum, a) => sum + (Number(a.current_value) || 0), 0);
     const totalAllocated = cachedAssets.filter(a => a.status === 'ASSIGNED').length;
-    const totalSupplyVal = cachedInventoryItems.reduce((sum, item) => sum + (Number(item.total_valuation) || 0), 0);
+    const totalSupplyVal = cachedInventoryItems.reduce((sum, item) => sum + (Number(item.total_firm_valuation ?? item.total_valuation) || 0), 0);
 
     const elTotal = document.getElementById('kpi-assets-total');
     if (elTotal) elTotal.innerText = totalAssets;
@@ -8138,9 +8748,41 @@ async function loadAssets() {
     const elSupp = document.getElementById('kpi-inventory-valuation');
     if (elSupp) elSupp.innerText = `KES ${totalSupplyVal.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+    // Top Firm Inventory Audit Summary KPIs
+    const totalCombinedUnits = auditData ? auditData.total_combined_units : cachedInventoryItems.reduce((sum, i) => sum + (Number(i.total_combined_stock ?? (i.current_stock + (i.issued_stock || 0))) || 0), 0);
+    const totalIssuedUnits = auditData ? auditData.total_issued_units : cachedInventoryItems.reduce((sum, i) => sum + (Number(i.issued_stock) || 0), 0);
+    const totalRemainingUnits = auditData ? auditData.total_remaining_units : cachedInventoryItems.reduce((sum, i) => sum + (Number(i.remaining_stock ?? i.current_stock) || 0), 0);
+    const totalFirmVal = auditData ? auditData.total_firm_valuation : cachedInventoryItems.reduce((sum, i) => sum + (Number(i.total_firm_valuation ?? i.total_valuation) || 0), 0);
+    const totalIssuedVal = auditData ? auditData.total_issued_valuation : cachedInventoryItems.reduce((sum, i) => sum + (Number(i.issued_valuation) || 0), 0);
+    const totalRemainingVal = auditData ? auditData.total_remaining_valuation : cachedInventoryItems.reduce((sum, i) => sum + (Number(i.remaining_valuation) || 0), 0);
+
+    const issuedPct = totalCombinedUnits > 0 ? ((totalIssuedUnits / totalCombinedUnits) * 100).toFixed(1) : '0.0';
+    const remainingPct = totalCombinedUnits > 0 ? ((totalRemainingUnits / totalCombinedUnits) * 100).toFixed(1) : '0.0';
+
+    const kpiTotalComb = document.getElementById('inv-kpi-total-combined');
+    if (kpiTotalComb) kpiTotalComb.innerText = `${totalCombinedUnits} Units`;
+
+    const kpiTotalIssued = document.getElementById('inv-kpi-total-issued');
+    if (kpiTotalIssued) kpiTotalIssued.innerText = `${totalIssuedUnits} Units`;
+
+    const kpiIssuedPct = document.getElementById('inv-kpi-issued-pct');
+    if (kpiIssuedPct) kpiIssuedPct.innerText = `${issuedPct}% in custody of guards & staff`;
+
+    const kpiTotalRem = document.getElementById('inv-kpi-total-remaining');
+    if (kpiTotalRem) kpiTotalRem.innerText = `${totalRemainingUnits} Units`;
+
+    const kpiRemPct = document.getElementById('inv-kpi-remaining-pct');
+    if (kpiRemPct) kpiRemPct.innerText = `${remainingPct}% available in warehouse`;
+
+    const kpiTotalVal = document.getElementById('inv-kpi-total-valuation');
+    if (kpiTotalVal) kpiTotalVal.innerText = `KES ${totalFirmVal.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const kpiValBreak = document.getElementById('inv-kpi-val-breakdown');
+    if (kpiValBreak) kpiValBreak.innerText = `Issued: KES ${totalIssuedVal.toLocaleString('en-KE', { minimumFractionDigits: 2 })} • In Store: KES ${totalRemainingVal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+
     // Render Tables
     renderAssetsTable(cachedAssets);
-    renderInventoryItemsTable(cachedInventoryItems);
+    filterInventoryTable();
     renderInventoryTransactionsTable(cachedInventoryTransactions);
     renderMaintenanceRecordsTable(cachedMaintenanceRecords);
 
@@ -8205,38 +8847,109 @@ function renderAssetsTable(assets) {
   }).join('');
 }
 
+let currentInventoryCategoryFilter = 'ALL';
+
+function setInventoryCategoryFilter(cat, btn) {
+  currentInventoryCategoryFilter = cat;
+  document.querySelectorAll('.inv-cat-pill').forEach(b => {
+    b.className = 'btn btn-sm btn-secondary inv-cat-pill';
+  });
+  if (btn) btn.className = 'btn btn-sm btn-primary inv-cat-pill active';
+  filterInventoryTable();
+}
+
+function filterInventoryTable() {
+  const statusFilter = document.getElementById('inv-stock-status-filter')?.value || 'ALL';
+  let filtered = [...(cachedInventoryItems || [])];
+
+  if (currentInventoryCategoryFilter && currentInventoryCategoryFilter !== 'ALL') {
+    filtered = filtered.filter(i => (i.category || '').toUpperCase() === currentInventoryCategoryFilter.toUpperCase());
+  }
+
+  if (statusFilter && statusFilter !== 'ALL') {
+    if (statusFilter === 'HEALTHY') {
+      filtered = filtered.filter(i => (i.stock_health === 'HEALTHY') || (Number(i.remaining_stock ?? i.current_stock) > Number(i.min_stock_level)));
+    } else if (statusFilter === 'LOW_IN_STORE') {
+      filtered = filtered.filter(i => (i.stock_health === 'LOW_IN_STORE') || (Number(i.remaining_stock ?? i.current_stock) <= Number(i.min_stock_level) && Number(i.remaining_stock ?? i.current_stock) > 0));
+    } else if (statusFilter === 'FULLY_ISSUED') {
+      filtered = filtered.filter(i => (i.stock_health === 'FULLY_ISSUED') || (Number(i.remaining_stock ?? i.current_stock) === 0 && (i.issued_stock || 0) > 0));
+    }
+  }
+
+  renderInventoryItemsTable(filtered);
+}
+
 function renderInventoryItemsTable(items) {
   const tbody = document.getElementById('inventory-items-body');
   if (!tbody) return;
 
   if (!items || items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:32px; color:#64748B;">No supplies inventory recorded yet. Click "+ Supply Item" to register uniforms, boots or radios.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; padding:32px; color:#64748B;">No supplies inventory found matching filter criteria.</td></tr>';
     return;
   }
 
   tbody.innerHTML = items.map(item => {
-    const isLow = Number(item.current_stock) <= Number(item.min_stock_level);
-    const statusBadge = isLow ?
-      `<span class="badge" style="background:#FEE2E2; color:#DC2626; font-weight:700;">LOW STOCK ALERT</span>` :
-      `<span class="badge" style="background:#ECFDF5; color:#059669;">HEALTHY</span>`;
+    const totalCombined = Number(item.total_combined_stock ?? (item.current_stock + (item.issued_stock || 0))) || 0;
+    const issued = Number(item.issued_stock) || 0;
+    const remaining = Number(item.remaining_stock ?? item.current_stock) || 0;
     const cost = Number(item.unit_cost) || 0;
-    const totalVal = Number(item.total_valuation) || 0;
+    const totalVal = Number(item.total_firm_valuation ?? item.total_valuation) || (totalCombined * cost);
+
+    const issuedPct = totalCombined > 0 ? Math.round((issued / totalCombined) * 100) : 0;
+    const remainingPct = 100 - issuedPct;
+
+    // Stock Health Status
+    let statusBadge = '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">HEALTHY</span>';
+    if (remaining === 0 && issued > 0) {
+      statusBadge = '<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">FULLY ISSUED</span>';
+    } else if (remaining <= Number(item.min_stock_level || 0)) {
+      statusBadge = '<span class="badge" style="background:#FEF3C7; color:#B45309; font-weight:700;">LOW IN STORE</span>';
+    }
+
+    const holdersCount = (item.issued_guards_count || 0) + (item.issued_staff_count || 0) + (item.issued_sites_count || 0);
 
     return `
       <tr>
-        <td><code>${escapeHtml(item.item_code)}</code></td>
-        <td><strong>${escapeHtml(item.item_name)}</strong></td>
-        <td><span style="font-size:11px; background:#F8FAFC; border:1px solid #E2E8F0; padding:2px 6px; border-radius:4px;">${escapeHtml(item.category)}</span></td>
-        <td style="text-align:center;">${escapeHtml(item.unit_of_measure)}</td>
-        <td style="text-align:center; font-size:14px; font-weight:800; color:${isLow ? '#DC2626' : '#0F172A'};">${item.current_stock}</td>
-        <td style="text-align:center; color:#64748B;">${item.min_stock_level}</td>
-        <td style="text-align:right;">KES ${cost.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
-        <td style="text-align:right; font-weight:700; color:#059669;">KES ${totalVal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+        <td><code style="font-weight:700; color:#0F172A;">${escapeHtml(item.item_code)}</code></td>
+        <td>
+          <div style="font-weight:700; color:#0F172A; font-size:13.5px;">${escapeHtml(item.item_name)}</div>
+          ${item.description ? `<div style="font-size:11px; color:#64748B;">${escapeHtml(item.description)}</div>` : ''}
+        </td>
+        <td><span style="font-size:11px; background:#F1F5F9; border:1px solid #E2E8F0; padding:2px 6px; border-radius:4px; font-weight:600; color:#475569;">${escapeHtml(item.category || 'General')}</span></td>
+        <td style="text-align:center; color:#64748B; font-size:12px;">${escapeHtml(item.unit_of_measure || 'Units')}</td>
+        <td style="text-align:center; background:rgba(15,23,42,0.03);">
+          <div style="font-size:15px; font-weight:900; color:#0F172A;">${totalCombined}</div>
+          <div style="font-size:10px; color:#64748B; font-weight:600; text-transform:uppercase;">Combined</div>
+        </td>
+        <td style="text-align:center; background:rgba(37,99,235,0.04);">
+          <div style="font-size:15px; font-weight:900; color:#1D4ED8;">${issued}</div>
+          ${issued > 0 ?
+            `<button class="btn btn-secondary" style="font-size:10px; padding:2px 7px; margin-top:2px; background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; font-weight:700;" onclick="openInventoryCustodyModal('${item.id}')" title="Click to view all guards & staff holding this item">👥 View (${holdersCount})</button>` :
+            `<div style="font-size:10px; color:#94A3B8;">0 in field</div>`
+          }
+        </td>
+        <td style="text-align:center; background:rgba(5,150,105,0.04);">
+          <div style="font-size:15px; font-weight:900; color:#059669;">${remaining}</div>
+          <div style="font-size:10px; color:#64748B;">In Warehouse</div>
+        </td>
+        <td style="min-width:130px; text-align:center;">
+          <div style="display:flex; height:8px; border-radius:4px; overflow:hidden; background:#E2E8F0; margin-bottom:4px;">
+            <div style="width:${issuedPct}%; background:#2563EB;" title="${issuedPct}% Issued (${issued})"></div>
+            <div style="width:${remainingPct}%; background:#10B981;" title="${remainingPct}% In Store (${remaining})"></div>
+          </div>
+          <div style="font-size:10px; color:#64748B; font-weight:600;">
+            <span style="color:#2563EB;">${issuedPct}% Field</span> • <span style="color:#059669;">${remainingPct}% Store</span>
+          </div>
+        </td>
+        <td style="text-align:right; font-weight:600; color:#475569;">KES ${cost.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right; font-weight:800; color:#0F172A;">KES ${totalVal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td style="text-align:center;">${statusBadge}</td>
         <td style="text-align:right; white-space:nowrap;">
-          <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openInventoryTransactModal('${item.id}')">📊 Move</button>
-          <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditInventoryItemModal('${item.id}')">✏️ Edit</button>
-          <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteInventoryItem('${item.id}', '${escapeHtml(item.item_name)}')">🗑️</button>
+          <button class="btn btn-secondary" style="font-size:11px; padding:3px 7px; margin-right:3px; background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE;" onclick="openInventoryTransactModal('${item.id}', 'STOCK_OUT')" title="Issue item to guard or site">🤝 Issue</button>
+          <button class="btn btn-secondary" style="font-size:11px; padding:3px 7px; margin-right:3px; background:#ECFDF5; color:#059669; border-color:#A7F3D0;" onclick="openInventoryTransactModal('${item.id}', 'STOCK_IN')" title="Add incoming supplies to store">📥 Stock In</button>
+          <button class="btn btn-secondary" style="font-size:11px; padding:3px 7px; margin-right:3px;" onclick="openInventoryCustodyModal('${item.id}')" title="View custody holders & returns">👥 Custody</button>
+          <button class="btn btn-secondary" style="font-size:11px; padding:3px 6px; margin-right:3px;" onclick="openEditInventoryItemModal('${item.id}')" title="Edit item specifications">✏️</button>
+          <button class="btn btn-secondary" style="font-size:11px; padding:3px 6px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteInventoryItem('${item.id}', '${escapeHtml(item.item_name)}')" title="Delete item">🗑️</button>
         </td>
       </tr>
     `;
@@ -8663,11 +9376,16 @@ async function handleNewInventoryItemSubmit(e) {
 }
 
 // Modal Handlers: Inventory Transactions
-function openInventoryTransactModal(itemId) {
+function openInventoryTransactModal(itemId, defaultType = 'STOCK_OUT') {
+  const typeSelect = document.getElementById('inv-trans-type');
+  if (typeSelect && defaultType) {
+    typeSelect.value = defaultType;
+  }
+
   const itemSelect = document.getElementById('inv-trans-item-id');
   if (itemSelect) {
     itemSelect.innerHTML = '<option value="">Select Item...</option>' +
-      cachedInventoryItems.map(i => `<option value="${i.id}" ${itemId === i.id ? 'selected' : ''}>${escapeHtml(i.item_code)} - ${escapeHtml(i.item_name)} (Stock: ${i.current_stock})</option>`).join('');
+      cachedInventoryItems.map(i => `<option value="${i.id}" ${String(itemId) === String(i.id) ? 'selected' : ''}>${escapeHtml(i.item_code)} - ${escapeHtml(i.item_name)} (In Store: ${i.remaining_stock ?? i.current_stock}, Total Firm: ${i.total_combined_stock ?? i.current_stock})</option>`).join('');
   }
 
   // Populate Guards
@@ -8696,6 +9414,114 @@ function closeInventoryTransactModal() {
   if (m) m.style.display = 'none';
   const f = document.getElementById('form-inventory-transact');
   if (f) f.reset();
+}
+
+// Custody Breakdown & Quick Returns Modal
+window.currentCustodyItemId = null;
+
+async function openInventoryCustodyModal(itemId) {
+  window.currentCustodyItemId = itemId;
+  const item = (cachedInventoryItems || []).find(i => String(i.id) === String(itemId));
+  const modal = document.getElementById('modal-inventory-custody');
+  const tbody = document.getElementById('inv-custody-table-body');
+  const titleEl = document.getElementById('inv-custody-modal-title');
+  const subEl = document.getElementById('inv-custody-modal-sub');
+  const totalFirmEl = document.getElementById('inv-custody-total-firm');
+  const totalIssuedEl = document.getElementById('inv-custody-total-issued');
+  const totalStoreEl = document.getElementById('inv-custody-total-store');
+
+  if (titleEl && item) titleEl.innerText = `👥 Active Custody: ${item.item_name} (${item.item_code})`;
+  if (subEl && item) subEl.innerText = `Specification: ${item.category} • Unit Cost: KES ${Number(item.unit_cost || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+  if (totalFirmEl && item) totalFirmEl.innerText = `${item.total_combined_stock ?? (item.current_stock + (item.issued_stock || 0))} ${item.unit_of_measure || 'Units'}`;
+  if (totalIssuedEl && item) totalIssuedEl.innerText = `${item.issued_stock || 0} ${item.unit_of_measure || 'Units'}`;
+  if (totalStoreEl && item) totalStoreEl.innerText = `${item.remaining_stock ?? item.current_stock} ${item.unit_of_measure || 'Units'}`;
+
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading custody holders...</td></tr>';
+  if (modal) modal.style.display = 'flex';
+
+  try {
+    const res = await apiFetch(`/assets/inventory/items/${itemId}/custody`);
+    if (!res.ok) throw new Error('Failed to load custody details');
+    const holders = await res.json();
+
+    if (!holders || holders.length === 0) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:28px; color:#64748B;">No units currently issued in the field. All stock is securely stored in warehouse.</td></tr>';
+      return;
+    }
+
+    if (tbody) {
+      tbody.innerHTML = holders.map(h => {
+        const lastDate = h.last_issued_date ? new Date(h.last_issued_date).toLocaleDateString('en-GB') : '-';
+        const typeBadge = {
+          'GUARD': '<span class="badge" style="background:#EFF6FF; color:#2563EB;">GUARD</span>',
+          'STAFF': '<span class="badge" style="background:#F0FDF4; color:#15803D;">STAFF</span>',
+          'SITE': '<span class="badge" style="background:#FEF3C7; color:#D97706;">CLIENT SITE</span>'
+        }[h.recipient_type] || `<span class="badge">${h.recipient_type}</span>`;
+
+        return `
+          <tr>
+            <td>
+              <div style="font-weight:700; color:#0F172A;">${escapeHtml(h.recipient_name || 'Holder')}</div>
+              <div style="font-size:11px; color:#64748B;">${escapeHtml(h.recipient_identifier || '')}</div>
+            </td>
+            <td>${typeBadge}</td>
+            <td style="text-align:center; font-size:14px; font-weight:800; color:#1D4ED8;">${h.quantity_held}</td>
+            <td style="text-align:right; font-weight:600;">KES ${(Number(h.total_cost) || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+            <td style="color:#64748B; font-size:11px;">${lastDate}</td>
+            <td style="text-align:right;">
+              <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; background:#ECFDF5; color:#059669; border-color:#A7F3D0;" onclick="quickReturnInventoryUnit('${h.recipient_type}', '${h.recipient_id}', '${itemId}', ${h.quantity_held}, '${escapeHtml(h.recipient_name)}')">📥 Return Unit</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#DC2626;">Error loading custody records: ${err.message}</td></tr>`;
+  }
+}
+
+function closeInventoryCustodyModal() {
+  const modal = document.getElementById('modal-inventory-custody');
+  if (modal) modal.style.display = 'none';
+  window.currentCustodyItemId = null;
+}
+
+async function quickReturnInventoryUnit(recType, recId, itemId, qtyHeld, recName) {
+  const returnQty = prompt(`Return ${recName}'s issued inventory unit(s) to store warehouse:\nEnter quantity to return (1 to ${qtyHeld}):`, String(qtyHeld));
+  if (!returnQty) return;
+  const num = parseInt(returnQty, 10);
+  if (isNaN(num) || num <= 0 || num > qtyHeld) {
+    showToast(`Invalid quantity. Must be between 1 and ${qtyHeld}`, 'danger');
+    return;
+  }
+
+  const payload = {
+    item_id: parseInt(itemId, 10),
+    transaction_type: 'RETURNED',
+    quantity: num,
+    reference_no: `RET-${Date.now().toString().slice(-6)}`,
+    reason_notes: `Returned to store from ${recType} ${recName}`
+  };
+  if (recType === 'GUARD') payload.issued_to_guard_id = parseInt(recId, 10);
+  else if (recType === 'STAFF') payload.issued_to_staff_id = parseInt(recId, 10);
+  else if (recType === 'SITE') payload.issued_to_site_id = parseInt(recId, 10);
+
+  try {
+    const res = await apiFetch('/assets/inventory/transact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Return transaction failed');
+    }
+    showToast(`Successfully returned ${num} unit(s) to store!`, 'success');
+    await loadAssets();
+    await openInventoryCustodyModal(itemId);
+  } catch (err) {
+    showToast('Failed to return unit: ' + err.message, 'danger');
+  }
 }
 
 function toggleInvTransFields() {
@@ -10610,6 +11436,12 @@ async function handleAwardItemSubmit(event) {
 
 // --- Staff Personnel File Modal ---
 async function openStaffFileModal(staffId) {
+  const curUser = JSON.parse(localStorage.getItem('corpsec_user') || '{}');
+  if (curUser.role !== 'ADMIN') {
+    alert('Access restricted: Staff personnel files are confidential and visible only to the System Administrator.');
+    return;
+  }
+
   const staff = (allStaffMembers || []).find(s => s.id === staffId);
   currentViewedStaff = staff;
 
@@ -10669,6 +11501,80 @@ async function openStaffFileModal(staffId) {
           </tr>
         `).join('');
       }
+    }
+
+    // Fetch system hours & activity logs for System Admin
+    const hoursSection = document.getElementById('staff-location-hours-section');
+    const activitySection = document.getElementById('staff-activity-trail-section');
+
+    if (curUser.role === 'ADMIN') {
+      if (hoursSection) hoursSection.style.display = 'block';
+      if (activitySection) activitySection.style.display = 'block';
+
+      try {
+        const [dailyRes, sessRes, actRes] = await Promise.all([
+          apiFetch(`/staff/${staffId}/daily-hours`).catch(() => ({ ok: false })),
+          apiFetch(`/staff/${staffId}/sessions`).catch(() => ({ ok: false })),
+          apiFetch(`/staff/${staffId}/activity`).catch(() => ({ ok: false }))
+        ]);
+
+        if (dailyRes && dailyRes.ok) {
+          const dailyData = await dailyRes.json();
+          const dBody = document.getElementById('staff-daily-hours-body');
+          if (dBody) {
+            dBody.innerHTML = !dailyData.length
+              ? '<tr><td colspan="4" style="text-align:center; padding:12px; color:#64748B;">No daily hours recorded.</td></tr>'
+              : dailyData.map(d => `
+                <tr>
+                  <td><b>${d.date}</b></td>
+                  <td>${d.total_hours.toFixed(2)} hrs</td>
+                  <td>${d.total_minutes} mins</td>
+                  <td>${d.session_count} session(s)</td>
+                </tr>
+              `).join('');
+          }
+        }
+
+        if (sessRes && sessRes.ok) {
+          const sessData = await sessRes.json();
+          const sBody = document.getElementById('staff-sessions-body');
+          if (sBody) {
+            sBody.innerHTML = !sessData.length
+              ? '<tr><td colspan="5" style="text-align:center; padding:12px; color:#64748B;">No sessions recorded.</td></tr>'
+              : sessData.map(s => `
+                <tr>
+                  <td>${s.login_time ? new Date(s.login_time).toLocaleString() : '—'}</td>
+                  <td>${s.logout_time ? new Date(s.logout_time).toLocaleString() : (s.is_active ? '<span style="color:#059669; font-weight:700;">Active Now</span>' : '—')}</td>
+                  <td>${s.duration_hours.toFixed(2)} hrs</td>
+                  <td>${s.ip_address || '—'}</td>
+                  <td><small>${s.location_name || 'Terminal Network'}</small></td>
+                </tr>
+              `).join('');
+          }
+        }
+
+        if (actRes && actRes.ok) {
+          const actData = await actRes.json();
+          const aBody = document.getElementById('staff-activity-body');
+          if (aBody) {
+            aBody.innerHTML = !actData.length
+              ? '<tr><td colspan="4" style="text-align:center; padding:12px; color:#64748B;">No activity logs recorded.</td></tr>'
+              : actData.map(a => `
+                <tr>
+                  <td><small>${a.timestamp ? new Date(a.timestamp).toLocaleString() : '—'}</small></td>
+                  <td><b>${escapeHtml(a.action)}</b></td>
+                  <td><small>${escapeHtml(a.reason || '—')}</small></td>
+                  <td><small>${a.ip_address || '—'}</small></td>
+                </tr>
+              `).join('');
+          }
+        }
+      } catch (adminErr) {
+        console.warn('Error fetching staff monitoring details:', adminErr);
+      }
+    } else {
+      if (hoursSection) hoursSection.style.display = 'none';
+      if (activitySection) activitySection.style.display = 'none';
     }
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#EF4444;">Error loading custody records: ${err.message}</td></tr>`;
@@ -10880,7 +11786,6 @@ async function waiveDamageDeduction(deductionId, guardId) {
 
 async function loadSalaryAdvances() {
   const user = getLoggedInUser();
-  if (user && user.role === 'SUPERVISOR') return;
   const tbody = document.getElementById('salary-advances-table-body');
   if (tbody) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;"><div style="font-size:24px; margin-bottom:8px;">⏳</div>Loading salary advances...</td></tr>';
@@ -11367,6 +12272,7 @@ function switchExpenseSubtab(subtab) {
 }
 
 async function loadExpenses() {
+  const user = getLoggedInUser();
   const tbody = document.getElementById('expenses-table-body');
   if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:24px; color:#64748B;">Loading firm expenses...</td></tr>';
 
@@ -11426,6 +12332,7 @@ async function loadExpenses() {
 }
 
 async function loadExpensesSummary() {
+  const user = getLoggedInUser();
   try {
     const res = await apiFetch('/expenses/summary');
     if (!res.ok) return;
@@ -11513,6 +12420,7 @@ async function loadExpensesSummary() {
 }
 
 async function loadPettyCashBook() {
+  const user = getLoggedInUser();
   const tbody = document.getElementById('petty-cash-table-body');
   if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading petty cash ledger...</td></tr>';
 
@@ -12346,3 +13254,825 @@ window.closeReleaseSalaryHoldModal = closeReleaseSalaryHoldModal;
 window.handleReleaseSalaryHoldSubmit = handleReleaseSalaryHoldSubmit;
 window.openDamageDeductionForIncident = openDamageDeductionForIncident;
 window.openHoldSalaryForIncident = openHoldSalaryForIncident;
+
+
+// ==================== WHATSAPP-STYLE TEAM OPERATIONS CHAT ====================
+
+let waContactsCache = [];
+let waCurrentFilter = 'all';
+let waActiveContact = {
+  id: 'group_operations',
+  is_group: true,
+  name: '🏢 Operations Team Group',
+  email: 'operations-group@corpsec.co.ke',
+  subtitle: 'Group • All Supervisors, HR & Staff (Guards Excluded)',
+  avatar: '👥',
+  user_id: null,
+  unread_count: 0
+};
+let waPollTimer = null;
+let waGlobalUnreadTimer = null;
+let waPendingAttachment = null;
+
+function updateTeamChatBadges(totalUnread) {
+  const count = parseInt(totalUnread, 10) || 0;
+
+  // 1. Sidebar Nav Item Badge
+  const navBadge = document.getElementById('team-chat-nav-badge');
+  if (navBadge) {
+    if (count > 0) {
+      navBadge.innerText = count > 99 ? '99+' : count;
+      navBadge.style.display = 'inline-flex';
+    } else {
+      navBadge.style.display = 'none';
+    }
+  }
+
+  // 2. Chat Header Filter Pill Badge
+  const pillBadge = document.getElementById('wa-unread-filter-count');
+  if (pillBadge) {
+    if (count > 0) {
+      pillBadge.innerText = count > 99 ? '99+' : count;
+      pillBadge.style.display = 'inline-block';
+    } else {
+      pillBadge.style.display = 'none';
+    }
+  }
+}
+
+async function fetchGlobalTeamChatUnread() {
+  const token = localStorage.getItem('corpsec_token') || authToken;
+  if (!token) return;
+  try {
+    const user = getLoggedInUser();
+    if (!user || user.role === 'GUARD' || user.role === 'Guard') return;
+
+    const res = await apiFetch('/team-chat/unread-count');
+    if (!res.ok) return;
+    const data = await res.json();
+    const unread = data.total_unread || 0;
+    updateTeamChatBadges(unread);
+
+    // If currently on team-chat tab and viewing contact list, keep directory refreshed
+    if (window.currentActiveTab === 'team-chat') {
+      const resContacts = await apiFetch('/team-chat/contacts');
+      if (resContacts.ok) {
+        const cData = await resContacts.json();
+        waContactsCache = cData.contacts || [];
+        renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
+      }
+    }
+  } catch (e) {
+    // Background polling error silent
+  }
+}
+
+function startTeamChatUnreadPoller() {
+  if (waGlobalUnreadTimer) clearInterval(waGlobalUnreadTimer);
+  fetchGlobalTeamChatUnread();
+  waGlobalUnreadTimer = setInterval(fetchGlobalTeamChatUnread, 5000);
+}
+
+async function initWhatsAppChat() {
+  if (waPollTimer) {
+    clearInterval(waPollTimer);
+    waPollTimer = null;
+  }
+
+  const container = document.getElementById('wa-contact-list');
+  if (container) {
+    container.innerHTML = '<div style="text-align:center; padding:25px; color:#8696a0; font-size:13px;">Loading team directory...</div>';
+  }
+
+  try {
+    const res = await apiFetch('/team-chat/contacts');
+    if (!res.ok) {
+      if (res.status === 403) {
+        showToast('Access Denied: Team Chat is restricted to Admin, HR, Staff, and Supervisors.', 'danger');
+      }
+      throw new Error('Could not fetch team directory');
+    }
+    const data = await res.json();
+    waContactsCache = data.contacts || [];
+
+    // Update global and pill unread badges
+    updateTeamChatBadges(data.total_unread || 0);
+
+    // Render logged-in user profile in top-left
+    if (data.current_user) {
+      const myName = document.getElementById('wa-my-name');
+      const myRole = document.getElementById('wa-my-role');
+      const myAvatar = document.getElementById('wa-my-avatar');
+      if (myName) myName.innerText = data.current_user.email || data.current_user.name || 'User';
+      if (myRole) myRole.innerText = data.current_user.role || 'Member';
+      if (myAvatar) {
+        const initial = (data.current_user.email || 'U').charAt(0).toUpperCase();
+        myAvatar.innerText = initial;
+      }
+    }
+
+    renderWhatsAppContacts();
+    await loadWhatsAppActiveMessages();
+
+    // Start auto-poll every 3 seconds while viewing team-chat tab
+    waPollTimer = setInterval(() => {
+      if (window.currentActiveTab === 'team-chat') {
+        loadWhatsAppActiveMessages(true);
+      } else {
+        clearInterval(waPollTimer);
+        waPollTimer = null;
+      }
+    }, 3000);
+
+  } catch (err) {
+    console.error('initWhatsAppChat error:', err);
+    if (container) {
+      container.innerHTML = '<div style="text-align:center; padding:25px; color:#ef4444; font-size:13px;">⚠️ Error loading contacts: ' + (err.message || 'Check network') + '</div>';
+    }
+  }
+}
+
+function renderWhatsAppContacts(filterQuery = '') {
+  const container = document.getElementById('wa-contact-list');
+  if (!container) return;
+
+  let list = waContactsCache || [];
+
+  // Filter by pill
+  if (waCurrentFilter === 'group') {
+    list = list.filter(c => c.is_group);
+  } else if (waCurrentFilter === 'direct') {
+    list = list.filter(c => !c.is_group);
+  } else if (waCurrentFilter === 'unread') {
+    list = list.filter(c => (c.unread_count || 0) > 0);
+  }
+
+  // Filter by search query
+  if (filterQuery && filterQuery.trim()) {
+    const q = filterQuery.toLowerCase().trim();
+    list = list.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.subtitle || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (!list || list.length === 0) {
+    const emptyMsg = waCurrentFilter === 'unread'
+      ? 'No unread messages'
+      : 'No contacts found';
+    container.innerHTML = `<div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">${emptyMsg}</div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(c => {
+    const isActive = c.id === waActiveContact.id;
+    const unread = parseInt(c.unread_count, 10) || 0;
+    const hasUnread = unread > 0;
+
+    let timeFormatted = '';
+    if (c.last_time) {
+      const d = new Date(c.last_time);
+      timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const roleColor = {
+      'ADMIN': '#3B82F6',
+      'System Admin': '#3B82F6',
+      'HR': '#00A884',
+      'SUPERVISOR': '#F59E0B',
+      'Supervisor': '#F59E0B',
+      'STAFF': '#06B6D4',
+      'Staff': '#06B6D4'
+    }[c.role] || '#8696A0';
+
+    const timeStyle = hasUnread
+      ? 'color:#00a884; font-weight:700;'
+      : 'color:#8696a0;';
+
+    const nameStyle = hasUnread
+      ? 'color:#FFFFFF; font-weight:700;'
+      : 'color:#e9edef; font-weight:600;';
+
+    const msgStyle = hasUnread
+      ? 'color:#e9edef; font-weight:600;'
+      : 'color:#8696a0;';
+
+    const unreadBadgeHtml = hasUnread
+      ? `<span class="wa-unread-badge">${unread > 99 ? '99+' : unread}</span>`
+      : '';
+
+    return `
+      <div class="wa-contact-item ${isActive ? 'active' : ''}" onclick="selectWhatsAppChat('${c.id}')">
+        <div class="wa-contact-avatar">${c.avatar || '👤'}</div>
+        <div class="wa-contact-info">
+          <div class="wa-contact-top">
+            <span class="wa-contact-name" style="${nameStyle}" title="${escapeHtml(c.email || c.name)}">${escapeHtml(c.name)}</span>
+            <span class="wa-contact-time" style="${timeStyle}">${timeFormatted}</span>
+          </div>
+          <div class="wa-contact-bottom">
+            <span class="wa-contact-msg" style="${msgStyle}">${escapeHtml(c.last_message || '')}</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              ${!c.is_group ? `<span class="wa-role-tag" style="background:rgba(255,255,255,0.08); color:${roleColor};">${c.subtitle || ''}</span>` : `<span class="wa-role-tag" style="background:rgba(0,168,132,0.15); color:#00A884;">GROUP</span>`}
+              ${unreadBadgeHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectWhatsAppChat(contactId) {
+  const found = waContactsCache.find(c => c.id === contactId);
+  if (!found) return;
+
+  waActiveContact = found;
+
+  // Immediately clear unread status locally and send mark-read to backend
+  if ((found.unread_count || 0) > 0) {
+    found.unread_count = 0;
+    const remainingTotal = waContactsCache.reduce((acc, x) => acc + (x.unread_count || 0), 0);
+    updateTeamChatBadges(remainingTotal);
+
+    apiFetch('/team-chat/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contact_id: found.id,
+        user_id: found.user_id
+      })
+    }).catch(e => console.error('mark-read error:', e));
+  }
+
+  // Update conversation header
+  const nameEl = document.getElementById('wa-active-name');
+  const statusEl = document.getElementById('wa-active-status');
+  const avatarEl = document.getElementById('wa-active-avatar');
+
+  if (nameEl) nameEl.innerText = found.name;
+  if (statusEl) {
+    statusEl.innerText = found.is_group
+      ? 'Group • All Supervisors, HR & Staff (Guards Excluded) • Online'
+      : `${found.email} [${found.subtitle}] • Online`;
+  }
+  if (avatarEl) avatarEl.innerText = found.avatar || '👤';
+
+  renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
+  loadWhatsAppActiveMessages();
+}
+
+async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
+  const container = document.getElementById('wa-messages-body');
+  if (!container) return;
+
+  if (!isBackgroundPoll) {
+    container.innerHTML = '<div class="wa-date-pill">TODAY</div><div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading conversation...</div>';
+  }
+
+  try {
+    const url = waActiveContact.is_group
+      ? '/team-chat/messages'
+      : `/team-chat/messages?receiver_id=${waActiveContact.user_id}`;
+
+    const res = await apiFetch(url);
+    if (!res.ok) return;
+
+    const messages = await res.json();
+    const currentUser = getLoggedInUser() || {};
+
+    if (!messages || messages.length === 0) {
+      container.innerHTML = `
+        <div class="wa-date-pill">TODAY</div>
+        <div style="text-align:center; padding:50px 20px; color:#8696a0;">
+          <div style="font-size:36px; margin-bottom:10px;">💬</div>
+          <div style="font-size:15px; font-weight:600; color:#e9edef;">No messages yet with ${escapeHtml(waActiveContact.name)}</div>
+          <div style="font-size:12px; color:#8696a0; margin-top:4px;">Type a message below and press Send to start the conversation.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const myId = currentUser.user_id || currentUser.id;
+    const myEmail = (currentUser.email || '').toLowerCase().trim();
+
+    container.innerHTML = '<div class="wa-date-pill">TODAY</div>' + messages.map(m => {
+      const isOut = (myId && Number(m.user_id) === Number(myId)) ||
+                    (myEmail && m.sender_name && m.sender_name.toLowerCase().trim() === myEmail);
+      const d = new Date(m.created_at);
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const senderRoleColor = {
+        'ADMIN': '#53bdeb',
+        'System Admin': '#53bdeb',
+        'admin': '#53bdeb',
+        'HR': '#25D366',
+        'SUPERVISOR': '#FBBF24',
+        'Supervisor': '#FBBF24',
+        'STAFF': '#38BDF8',
+        'Staff': '#38BDF8'
+      }[m.sender_role] || '#8696a0';
+
+      // Build attachment preview if present
+      let attachmentHtml = '';
+      if (m.attachment_url) {
+        const attachUrl = `${m.attachment_url}${m.attachment_url.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken || '')}`;
+        const isImg = (m.attachment_type && m.attachment_type.startsWith('image/')) ||
+                      /\.(jpg|jpeg|png|gif|webp|svg)($|\?)/i.test(m.attachment_url || m.attachment_name || '');
+
+        if (isImg) {
+          attachmentHtml = `
+            <div class="wa-bubble-img-wrap" onclick="openWhatsAppImagePreview('${escapeHtml(attachUrl)}', '${escapeHtml(m.attachment_name || 'Photo')}', '${escapeHtml(m.message || '')}')">
+              <img src="${escapeHtml(attachUrl)}" alt="${escapeHtml(m.attachment_name || 'Photo')}" loading="lazy" class="wa-bubble-img" />
+            </div>
+          `;
+        } else {
+          let docIcon = '📄';
+          const extName = (m.attachment_name || '').toLowerCase();
+          if (extName.match(/\.(xls|xlsx|csv)$/)) docIcon = '📊';
+          else if (extName.match(/\.(doc|docx)$/)) docIcon = '📑';
+          else if (extName.match(/\.pdf$/)) docIcon = '📕';
+          else if (extName.match(/\.(zip|tar|gz)$/)) docIcon = '🗜️';
+
+          const sizeLabel = formatFileSize(m.attachment_size);
+          attachmentHtml = `
+            <a href="${escapeHtml(attachUrl)}&download=true" download="${escapeHtml(m.attachment_name || 'attachment')}" target="_blank" class="wa-bubble-doc" title="Click to download ${escapeHtml(m.attachment_name || 'file')}">
+              <div class="wa-bubble-doc-icon">${docIcon}</div>
+              <div class="wa-bubble-doc-info">
+                <div class="wa-bubble-doc-name">${escapeHtml(m.attachment_name || 'Document')}</div>
+                <div class="wa-bubble-doc-meta">${sizeLabel} • Tap to download</div>
+              </div>
+              <div class="wa-bubble-doc-dl">⬇️</div>
+            </a>
+          `;
+        }
+      }
+
+      const textHtml = m.message ? `<div style="margin-top:${attachmentHtml ? '4px' : '0'}; font-size:13.5px; line-height:1.45; word-wrap:break-word;">${m.message}</div>` : '';
+
+      if (isOut) {
+        // WhatsApp checkmarks: double blue ticks if read by recipient, double grey ticks if delivered
+        const ticksHtml = m.is_read
+          ? '<span class="wa-blue-ticks" title="Read">✓✓</span>'
+          : '<span class="wa-grey-ticks" title="Delivered">✓✓</span>';
+
+        return `
+          <div class="wa-bubble-wrap out">
+            <div class="wa-bubble wa-bubble-out">
+              ${attachmentHtml}
+              ${textHtml}
+              <div class="wa-bubble-meta">
+                <span>${timeStr}</span>
+                ${ticksHtml}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="wa-bubble-wrap in">
+            <div class="wa-bubble wa-bubble-in">
+              ${waActiveContact.is_group ? `<span class="wa-sender-lbl" style="color:${senderRoleColor};">${escapeHtml(m.sender_name)}</span>` : ''}
+              ${attachmentHtml}
+              ${textHtml}
+              <div class="wa-bubble-meta">
+                <span>${timeStr}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }).join('');
+
+    // Keep chat scrolled to bottom
+    container.scrollTop = container.scrollHeight;
+
+  } catch (err) {
+    console.error('loadWhatsAppActiveMessages error:', err);
+  }
+}
+
+async function sendWhatsAppMessage(e) {
+  if (e) {
+    e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
+  const input = document.getElementById('wa-msg-input');
+  const btn = document.getElementById('wa-send-btn');
+  if (!input) return false;
+
+  const raw = input.value.trim();
+  if (!raw && !waPendingAttachment) return false;
+
+  if (btn) btn.disabled = true;
+
+  try {
+    let attachmentPayload = {};
+
+    // 1. If a file is attached, upload it first to /api/v1/team-chat/upload
+    if (waPendingAttachment) {
+      const formData = new FormData();
+      formData.append('file', waPendingAttachment);
+
+      const uploadHeaders = {};
+      if (authToken) uploadHeaders['Authorization'] = `Bearer ${authToken}`;
+
+      const uploadRes = await fetch(`${API_BASE}/team-chat/upload`, {
+        method: 'POST',
+        headers: uploadHeaders,
+        body: formData
+      });
+
+      if (!uploadRes.ok) {
+        const uErr = await uploadRes.json().catch(() => ({}));
+        throw new Error(uErr.detail || 'Failed to upload attachment');
+      }
+
+      const uData = await uploadRes.json();
+      attachmentPayload = {
+        attachment_url: uData.file_url,
+        attachment_name: uData.file_name,
+        attachment_type: uData.file_type,
+        attachment_size: uData.file_size
+      };
+    }
+
+    // 2. Dispatch message
+    const payload = {
+      message: raw,
+      receiver_id: waActiveContact.is_group ? null : waActiveContact.user_id,
+      channel: waActiveContact.is_group ? 'operations' : 'direct',
+      ...attachmentPayload
+    };
+
+    const res = await apiFetch('/team-chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to send message');
+    }
+
+    input.value = '';
+    clearWhatsAppAttachment();
+
+    await loadWhatsAppActiveMessages(true);
+
+    // Refresh contact list snippet
+    const resContacts = await apiFetch('/team-chat/contacts');
+    if (resContacts.ok) {
+      const data = await resContacts.json();
+      waContactsCache = data.contacts || [];
+      updateTeamChatBadges(data.total_unread || 0);
+      renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
+    }
+
+  } catch (err) {
+    showToast('Failed to send message: ' + err.message, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+  return false;
+}
+
+function handleWhatsAppFileSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  // Max 25 MB
+  if (file.size > 25 * 1024 * 1024) {
+    showToast('Attachment too large. Maximum file size is 25 MB.', 'danger');
+    e.target.value = '';
+    return;
+  }
+
+  waPendingAttachment = file;
+
+  const bar = document.getElementById('wa-attachment-preview-bar');
+  const thumbWrap = document.getElementById('wa-preview-thumb-wrap');
+  const nameEl = document.getElementById('wa-preview-filename');
+  const metaEl = document.getElementById('wa-preview-meta');
+
+  if (nameEl) nameEl.innerText = file.name;
+  if (metaEl) {
+    const sizeStr = formatFileSize(file.size);
+    metaEl.innerText = `${sizeStr} • Attached (ready to send)`;
+  }
+
+  if (thumbWrap) {
+    if (file.type && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        thumbWrap.innerHTML = `<img src="${ev.target.result}" class="wa-preview-thumb" alt="Preview" />`;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      let icon = '📄';
+      if (file.name.match(/\.(xls|xlsx|csv)$/i)) icon = '📊';
+      else if (file.name.match(/\.(doc|docx)$/i)) icon = '📑';
+      else if (file.name.match(/\.pdf$/i)) icon = '📕';
+      else if (file.name.match(/\.(zip|tar|gz)$/i)) icon = '🗜️';
+      thumbWrap.innerHTML = `<div class="wa-preview-doc-icon">${icon}</div>`;
+    }
+  }
+
+  if (bar) bar.style.display = 'flex';
+  const msgInput = document.getElementById('wa-msg-input');
+  if (msgInput) {
+    msgInput.focus();
+    msgInput.placeholder = 'Add a caption (optional)...';
+  }
+}
+
+function clearWhatsAppAttachment() {
+  waPendingAttachment = null;
+  const fileInput = document.getElementById('wa-file-input');
+  if (fileInput) fileInput.value = '';
+  const bar = document.getElementById('wa-attachment-preview-bar');
+  if (bar) bar.style.display = 'none';
+  const thumbWrap = document.getElementById('wa-preview-thumb-wrap');
+  if (thumbWrap) thumbWrap.innerHTML = '';
+  const msgInput = document.getElementById('wa-msg-input');
+  if (msgInput) msgInput.placeholder = 'Type a message (or attach file with optional caption)';
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function openWhatsAppImagePreview(url, name, caption) {
+  const modal = document.getElementById('modal-wa-image-preview');
+  const img = document.getElementById('wa-modal-preview-img');
+  const link = document.getElementById('wa-modal-download-link');
+  const cap = document.getElementById('wa-modal-preview-caption');
+
+  if (img) img.src = url;
+  if (link) {
+    link.href = url + '&download=true';
+    link.download = name || 'photo.jpg';
+  }
+  if (cap) cap.innerText = caption || name || '';
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeWhatsAppImagePreview() {
+  const modal = document.getElementById('modal-wa-image-preview');
+  if (modal) modal.style.display = 'none';
+  const img = document.getElementById('wa-modal-preview-img');
+  if (img) img.src = '';
+}
+
+function filterWhatsAppContacts(query) {
+  renderWhatsAppContacts(query);
+}
+
+function setWaFilter(filterType, btnEl) {
+  waCurrentFilter = filterType;
+  document.querySelectorAll('.wa-pill').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+  renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
+}
+
+function insertWaEmoji(emoji) {
+  const input = document.getElementById('wa-msg-input');
+  if (input) {
+    input.value += emoji + ' ';
+    input.focus();
+  }
+}
+
+// ==================== ANONYMOUS GUARD REPORTS & WHISTLEBLOWER FEED (SYSTEM ADMIN) ====================
+let cachedAnonymousMessages = [];
+
+async function refreshAnonymousReportsCount() {
+  const token = localStorage.getItem('corpsec_token') || authToken;
+  if (!token) return;
+  try {
+    const res = await apiFetch('/anonymous-reporting/messages');
+    if (!res.ok) return;
+    const msgs = await res.json();
+    const count = Array.isArray(msgs) ? msgs.length : 0;
+    
+    // 1. Sidebar Nav Badge
+    const navBadge = document.getElementById('anon-reports-nav-badge');
+    if (navBadge) {
+      if (count > 0) {
+        navBadge.innerText = count > 99 ? '99+' : count;
+        navBadge.style.display = 'inline-block';
+      } else {
+        navBadge.style.display = 'none';
+      }
+    }
+
+    // 2. Dashboard Quick Action Badge
+    const dashBadge = document.getElementById('dash-anon-count-badge');
+    if (dashBadge) {
+      if (count > 0) {
+        dashBadge.innerText = count > 99 ? '99+' : count;
+        dashBadge.style.display = 'inline-block';
+      } else {
+        dashBadge.style.display = 'none';
+      }
+    }
+  } catch (e) {
+    // Silent fail in background badge poll
+  }
+}
+
+async function loadAnonymousMessages() {
+  const feed = document.getElementById('anon-reports-feed');
+  const countEl = document.getElementById('anon-reports-count');
+  const navBadge = document.getElementById('anon-reports-nav-badge');
+  const dashBadge = document.getElementById('dash-anon-count-badge');
+
+  if (feed) {
+    feed.innerHTML = '<div style="text-align:center; padding:35px; color:#64748B;"><div style="font-size:28px; margin-bottom:8px;">⏳</div>Loading confidential reports...</div>';
+  }
+
+  try {
+    const res = await apiFetch('/anonymous-reporting/messages');
+    if (!res.ok) {
+      if (res.status === 403) {
+        if (feed) {
+          feed.innerHTML = `
+            <div style="text-align:center; padding:35px; color:#DC2626;">
+              <div style="font-size:36px; margin-bottom:8px;">🚫</div>
+              <div style="font-size:15px; font-weight:800;">Access Denied</div>
+              <div style="font-size:12px; color:#64748B; margin-top:4px;">Anonymous guard reports are restricted exclusively to the System Administrator.</div>
+            </div>
+          `;
+        }
+        return;
+      }
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+
+    const messages = await res.json();
+    cachedAnonymousMessages = messages || [];
+
+    const totalCount = cachedAnonymousMessages.length;
+    if (countEl) countEl.innerText = totalCount;
+
+    if (navBadge) {
+      if (totalCount > 0) {
+        navBadge.innerText = totalCount > 99 ? '99+' : totalCount;
+        navBadge.style.display = 'inline-block';
+      } else {
+        navBadge.style.display = 'none';
+      }
+    }
+    if (dashBadge) {
+      if (totalCount > 0) {
+        dashBadge.innerText = totalCount > 99 ? '99+' : totalCount;
+        dashBadge.style.display = 'inline-block';
+      } else {
+        dashBadge.style.display = 'none';
+      }
+    }
+
+    if (!feed) return;
+
+    if (!messages || messages.length === 0) {
+      feed.innerHTML = `
+        <div style="text-align:center; padding:45px 20px; color:#64748B;">
+          <div style="font-size:42px; margin-bottom:10px;">📭</div>
+          <div style="font-size:16px; font-weight:800; color:#1E293B;">No Anonymous Reports Found</div>
+          <div style="font-size:13px; color:#64748B; margin-top:6px; max-width:440px; margin-left:auto; margin-right:auto; line-height:1.5;">
+            When security guards submit confidential reports, safety alerts, equipment concerns, or whistleblower messages from their mobile portal, they will appear here in chronological order.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    feed.innerHTML = messages.map(m => {
+      const dateObj = new Date(m.created_at);
+      const timeFormatted = isNaN(dateObj.getTime()) ? m.created_at : dateObj.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) + ' • ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const msgContent = m.message || '';
+
+      return `
+        <div class="anon-report-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #0D7682; border-radius:12px; padding:18px 20px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.03); transition:box-shadow 0.2s;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <span class="badge" style="background:#F0FDFA; color:#0D7682; border:1px solid #99F6E4; font-weight:800; font-size:11.5px; padding:4px 10px; border-radius:6px;">
+                🛡️ Report #${m.id}
+              </span>
+              <span style="font-size:12px; color:#64748B; font-weight:600; display:flex; align-items:center; gap:4px;">
+                <span>📅 Received:</span> <strong>${escapeHtml(timeFormatted)}</strong>
+              </span>
+            </div>
+            <button type="button" class="btn btn-secondary" onclick="deleteSingleAnonymousMessage(${m.id})" style="padding:5px 12px; font-size:11px; color:#DC2626; border-color:#FECACA; background:#FEF2F2; font-weight:700; border-radius:6px; cursor:pointer;" title="Permanently delete this report">
+              🗑️ Delete
+            </button>
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; font-size:14px; line-height:1.6; color:#0F172A; white-space:pre-wrap; word-break:break-word; font-family:inherit;">${msgContent}</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:11px; color:#94A3B8; flex-wrap:wrap; gap:6px;">
+            <span>🔒 Confidentiality Protocol: Identity decoupled from transmission</span>
+            <span>Autoincrement Index: #${m.id}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    console.error('loadAnonymousMessages error:', err);
+    if (feed) {
+      feed.innerHTML = `
+        <div style="text-align:center; padding:30px; color:#DC2626;">
+          <div style="font-size:14px; font-weight:700;">Error Loading Reports</div>
+          <div style="font-size:12px; margin-top:4px;">${escapeHtml(err.message || 'Check network connection')}</div>
+          <button class="btn btn-secondary" onclick="loadAnonymousMessages()" style="margin-top:12px; font-size:12px; padding:6px 14px;">Try Again</button>
+        </div>
+      `;
+    }
+  }
+}
+
+async function confirmClearAllAnonymousMessages() {
+  if (!cachedAnonymousMessages || cachedAnonymousMessages.length === 0) {
+    alert('There are no anonymous reports to clear.');
+    return;
+  }
+  const count = cachedAnonymousMessages.length;
+  const ok = confirm(`Are you sure you want to permanently clear all ${count} anonymous guard report(s)?\n\nThis action cannot be undone.`);
+  if (!ok) return;
+
+  try {
+    const res = await apiFetch('/anonymous-reporting/messages', {
+      method: 'DELETE'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to clear reports');
+    }
+    showToast(data.message || `Successfully cleared ${count} report(s).`, 'success');
+    loadAnonymousMessages();
+  } catch (err) {
+    alert('Error clearing reports: ' + err.message);
+  }
+}
+
+async function deleteSingleAnonymousMessage(id) {
+  if (!id) return;
+  const ok = confirm(`Permanently delete anonymous report #${id}?`);
+  if (!ok) return;
+
+  try {
+    const res = await apiFetch(`/anonymous-reporting/messages/${id}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to delete report');
+    }
+    showToast(data.message || `Report #${id} deleted successfully.`, 'success');
+    loadAnonymousMessages();
+  } catch (err) {
+    alert('Error deleting report: ' + err.message);
+  }
+}
+
+window.loadAnonymousMessages = loadAnonymousMessages;
+window.confirmClearAllAnonymousMessages = confirmClearAllAnonymousMessages;
+window.deleteSingleAnonymousMessage = deleteSingleAnonymousMessage;
+window.refreshAnonymousReportsCount = refreshAnonymousReportsCount;
+
+window.initWhatsAppChat = initWhatsAppChat;
+window.renderWhatsAppContacts = renderWhatsAppContacts;
+window.selectWhatsAppChat = selectWhatsAppChat;
+window.loadWhatsAppActiveMessages = loadWhatsAppActiveMessages;
+window.sendWhatsAppMessage = sendWhatsAppMessage;
+window.filterWhatsAppContacts = filterWhatsAppContacts;
+window.setWaFilter = setWaFilter;
+window.insertWaEmoji = insertWaEmoji;
+window.updateTeamChatBadges = updateTeamChatBadges;
+window.fetchGlobalTeamChatUnread = fetchGlobalTeamChatUnread;
+window.startTeamChatUnreadPoller = startTeamChatUnreadPoller;
+window.handleWhatsAppFileSelected = handleWhatsAppFileSelected;
+window.clearWhatsAppAttachment = clearWhatsAppAttachment;
+window.openWhatsAppImagePreview = openWhatsAppImagePreview;
+window.closeWhatsAppImagePreview = closeWhatsAppImagePreview;
+window.setInventoryCategoryFilter = setInventoryCategoryFilter;
+window.filterInventoryTable = filterInventoryTable;
+window.openInventoryCustodyModal = openInventoryCustodyModal;
+window.closeInventoryCustodyModal = closeInventoryCustodyModal;
+window.quickReturnInventoryUnit = quickReturnInventoryUnit;
+window.openInventoryTransactModal = openInventoryTransactModal;
+window.closeInventoryTransactModal = closeInventoryTransactModal;
+window.setAttendanceShiftFilter = setAttendanceShiftFilter;
+window.setAttendanceTodayDate = setAttendanceTodayDate;
+window.resetAttendanceFilters = resetAttendanceFilters;
+window.filterAttendanceLogs = filterAttendanceLogs;
+window.openCorrectAttendanceModal = openCorrectAttendanceModal;
