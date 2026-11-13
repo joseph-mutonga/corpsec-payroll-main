@@ -61,3 +61,45 @@ def test_manifest_and_pwa_readiness():
     assert data["display"] == "standalone"
     assert len(data["icons"]) > 0
 
+
+def test_silent_update_version_endpoints():
+    # 1. Desktop version endpoint
+    res_desktop = client.get("/api/v1/desktop/version")
+    assert res_desktop.status_code == 200
+    data = res_desktop.json()
+    assert "version" in data
+    assert "release_id" in data
+    assert len(data["release_id"]) >= 8
+    assert data["silent_update"] is True
+    assert "assets" in data
+    assert len(data["assets"]) >= 4
+    assert "/static/js/silent-updater.js" in data["assets"]
+
+    # 2. Root version.json endpoint
+    res_root = client.get("/version.json")
+    assert res_root.status_code == 200
+    assert res_root.json()["release_id"] == data["release_id"]
+
+    # 3. System version endpoint
+    res_sys = client.get("/api/v1/system/version")
+    assert res_sys.status_code == 200
+    assert res_sys.json()["release_id"] == data["release_id"]
+
+
+def test_silent_updater_js_file_available():
+    res = client.get("/static/js/silent-updater.js")
+    assert res.status_code == 200
+    assert "CorpSecUpdater" in res.text
+    assert "checkForUpdates" in res.text
+    assert "performSilentBackgroundUpdate" in res.text
+
+
+def test_portal_sw_cache_headers_and_message_handling():
+    res = client.get("/portal-sw.js")
+    assert res.status_code == 200
+    cache_ctrl = res.headers.get("Cache-Control", "")
+    assert "no-cache" in cache_ctrl
+    assert "SKIP_WAITING" in res.text
+    assert "corpsec-auto-update" in res.text
+
+

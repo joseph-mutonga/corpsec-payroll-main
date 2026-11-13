@@ -1,9 +1,11 @@
 import io
 import os
+import json
+import hashlib
 import zipfile
 from datetime import datetime
 from fastapi import APIRouter, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 
 router = APIRouter(prefix="/desktop", tags=["Desktop Application"])
 
@@ -241,22 +243,120 @@ def download_complete_desktop_package():
     )
 
 
+def get_release_fingerprint():
+    """
+    Computes a deterministic dynamic release fingerprint from version.json and
+    the last modified timestamps + file sizes of critical frontend assets.
+    Any code modification or deployment automatically yields a new release_id.
+    """
+    # Locate application/frontend correctly
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../frontend"))
+    if not os.path.exists(frontend_dir):
+        frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../frontend"))
+    version_file = os.path.join(frontend_dir, "version.json")
+    
+    version_data = {
+        "app_name": "CorpSec Payroll & Security Workforce System",
+        "version": "2.4.0",
+        "build_number": 2026111201,
+        "release_name": "CorpSec Enterprise 2.4",
+        "release_date": "2026-11-12",
+        "silent_update": True,
+        "check_interval_seconds": 45,
+        "assets": [
+            "/static/js/app.js",
+            "/static/css/styles.css",
+            "/static/js/portal.js",
+            "/static/css/portal.css",
+            "/static/js/silent-updater.js",
+            "/manifest.json",
+            "/portal-sw.js"
+        ],
+        "features": [
+            "Automatic silent background update detection and seamless hot-swap",
+            "Attendance & Overtime: Client site and Day/Night shift responsive filtering",
+            "WhatsApp-style Operations Team Chat with file and photo attachments",
+            "Anonymous Guard Reporting pipeline with complete whistleblower identity decoupling",
+            "Role-Based Access Control (RBAC) and auto-incrementing guard employee numbers"
+        ]
+    }
+
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r", encoding="utf-8") as vf:
+                loaded = json.load(vf)
+                version_data.update(loaded)
+        except Exception:
+            pass
+
+    hasher = hashlib.sha256()
+    hasher.update(str(version_data.get("version", "2.4.0")).encode())
+    hasher.update(str(version_data.get("build_number", 1)).encode())
+
+    critical_files = [
+        "index.html",
+        "portal.html",
+        "portal-sw.js",
+        "version.json",
+        "static/js/app.js",
+        "static/css/styles.css",
+        "static/js/portal.js",
+        "static/css/portal.css",
+        "static/js/silent-updater.js"
+    ]
+
+    for cf in critical_files:
+        full_p = os.path.join(frontend_dir, cf)
+        if os.path.exists(full_p):
+            hasher.update(f"{cf}:{os.path.getmtime(full_p)}:{os.path.getsize(full_p)}".encode())
+
+    release_id = hasher.hexdigest()[:12]
+    version_data["release_id"] = release_id
+    version_data["server_time"] = datetime.now().isoformat()
+    return version_data
+
+
+@router.get("/version")
+def get_desktop_app_version():
+    """
+    Returns the real-time application version, release fingerprint, and update manifest.
+    Used by the silent background updater on end-user devices.
+    """
+    data = get_release_fingerprint()
+    return JSONResponse(
+        content=data,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
+
+
 @router.get("/info")
 def get_desktop_app_info():
     """
-    Returns application system info, version, and platform installation options.
+    Returns application system info, version, platform installation options,
+    and automatic silent update status.
     """
+    rel = get_release_fingerprint()
     return {
         "app_name": "CorpSec Payroll & Workforce Management System",
         "version": "1.0.0",
+        "current_release": rel.get("version", "2.4.0"),
+        "release_id": rel.get("release_id"),
         "desktop_supported": True,
         "pwa_ready": True,
+        "silent_update_enabled": True,
+        "silent_update_interval_sec": 45,
         "platforms": ["Windows 10/11", "macOS", "Linux", "Android"],
         "download_urls": {
             "windows_launcher": "/api/v1/desktop/download-launcher",
             "powershell_installer": "/api/v1/desktop/download-powershell-installer",
             "complete_bundle_zip": "/api/v1/desktop/download-package",
+            "version_manifest": "/api/v1/desktop/version",
             "pwa_manifest": "/manifest.json"
         }
     }
+
 

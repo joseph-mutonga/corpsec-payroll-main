@@ -52,6 +52,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  const loginForm = document.getElementById('unified-login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', (evt) => {
+      handleUnifiedLogin(evt);
+    });
+  }
+
   checkAuthStatus();
 });
 
@@ -141,8 +148,15 @@ async function sendHeartbeatPing() {
   }).catch(() => {});
 }
 
+let isSubmittingLogin = false;
+
 async function handleUnifiedLogin(e) {
-  if (e) e.preventDefault();
+  if (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
+  }
+  if (isSubmittingLogin) return;
+
   const idInput = document.getElementById('unified-login-id');
   const passInput = document.getElementById('unified-login-password');
   const alertEl = document.getElementById('unified-login-alert');
@@ -156,16 +170,32 @@ async function handleUnifiedLogin(e) {
   const password = passInput.value;
 
   if (alertEl) alertEl.style.display = 'none';
+
+  if (!loginId || !password) {
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Please enter both your identity credential and password.';
+      alertEl.style.display = 'block';
+    }
+    return;
+  }
+
+  isSubmittingLogin = true;
   if (btn) btn.disabled = true;
   if (btnText) btnText.innerText = 'Authenticating...';
   if (btnSpinner) btnSpinner.style.display = 'inline-block';
+
+  const abortCtrl = new AbortController();
+  const timeoutId = setTimeout(() => abortCtrl.abort(), 25000);
 
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: loginId, password: password })
+      body: JSON.stringify({ email: loginId, password: password }),
+      signal: abortCtrl.signal
     });
+    clearTimeout(timeoutId);
 
     const data = await res.json();
 
@@ -271,12 +301,24 @@ async function handleUnifiedLogin(e) {
       alertEl.innerText = 'Network error or backend server unreachable: ' + err.message;
       alertEl.style.display = 'block';
     }
+  } finally {
+    isSubmittingLogin = false;
   }
 }
 
 function quickFillCredentials(id, pass, autoSubmit = true) {
   const idInput = document.getElementById('unified-login-id');
   const passInput = document.getElementById('unified-login-password');
+  const alertEl = document.getElementById('unified-login-alert');
+  const btn = document.getElementById('unified-login-btn');
+  const btnText = document.getElementById('btn-login-text');
+  const btnSpinner = document.getElementById('btn-login-spinner');
+
+  if (alertEl) alertEl.style.display = 'none';
+  if (btn) btn.disabled = false;
+  if (btnText) btnText.innerText = 'Sign In to CorpSec';
+  if (btnSpinner) btnSpinner.style.display = 'none';
+
   if (idInput && passInput) {
     idInput.value = id;
     passInput.value = pass;
@@ -284,7 +326,7 @@ function quickFillCredentials(id, pass, autoSubmit = true) {
     if (autoSubmit) {
       setTimeout(() => {
         handleUnifiedLogin();
-      }, 60);
+      }, 80);
     }
   }
 }
@@ -369,8 +411,15 @@ function startResendCountdown(seconds = 60) {
   otpResendTimer = setInterval(update, 1000);
 }
 
+let isVerifyingOTP = false;
+
 async function handleVerifyOTPSubmit(e) {
-  if (e) e.preventDefault();
+  if (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
+  }
+  if (isVerifyingOTP) return;
+
   const otpInput = document.getElementById('unified-otp-input');
   const alertEl = document.getElementById('unified-login-alert');
   const btn = document.getElementById('btn-verify-otp');
@@ -390,6 +439,7 @@ async function handleVerifyOTPSubmit(e) {
     return;
   }
 
+  isVerifyingOTP = true;
   const emailToVerify = pendingOTPAuth ? pendingOTPAuth.email : (document.getElementById('unified-login-id')?.value.trim() || '');
 
   if (alertEl) alertEl.style.display = 'none';
@@ -463,6 +513,8 @@ async function handleVerifyOTPSubmit(e) {
       alertEl.innerText = 'Network error while verifying OTP: ' + err.message;
       alertEl.style.display = 'block';
     }
+  } finally {
+    isVerifyingOTP = false;
   }
 }
 
@@ -655,24 +707,36 @@ function updateUserProfileDisplay(userData) {
   }
 }
 
+let isLoggingOut = false;
+
 function logout() {
+  if (isLoggingOut) return;
+  isLoggingOut = true;
   stopSessionHeartbeat();
   const sessId = localStorage.getItem('corpsec_session_id');
-  if (sessId) {
-    apiFetch('/auth/logout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: parseInt(sessId) })
-    }).catch(() => {});
-  }
+  const oldToken = authToken;
+
+  authToken = '';
   localStorage.removeItem('corpsec_session_id');
   localStorage.removeItem('corpsec_token');
   localStorage.removeItem('corpsec_user');
   sessionStorage.removeItem('company_documents_vault_unlocked');
   sessionStorage.removeItem('guard_auth_token');
   sessionStorage.removeItem('guard_user');
-  authToken = '';
+
+  if (sessId && oldToken) {
+    fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${oldToken}`
+      },
+      body: JSON.stringify({ session_id: parseInt(sessId) })
+    }).catch(() => {});
+  }
+
   checkAuthStatus();
+  setTimeout(() => { isLoggingOut = false; }, 400);
 }
 
 async function initApp() {
@@ -726,6 +790,7 @@ function switchTab(tabId) {
     'statutory': 'Tax & Statutory Parameters Management',
     'reports': 'Chart Analytics & Operational Performance Reports',
     'team-chat': 'Team Operations Chat (Admin, HR, Staff & Supervisors)',
+    'call-center': 'Call Center Operations & Live Voice Dispatch',
     'audit': 'System Audit Trail',
     'settings': 'Statutory Parameters & System Settings',
     'supervisors': 'Supervisor Management & Guard Assignments',
@@ -805,6 +870,11 @@ function switchTab(tabId) {
   if (tabId === 'team-chat') {
     initWhatsAppChat();
   }
+  if (tabId === 'call-center') {
+    if (typeof initCallCenter === 'function') {
+      initCallCenter();
+    }
+  }
   if (tabId === 'reports') {
     loadAnalyticsData();
     loadGuards();
@@ -818,9 +888,14 @@ async function apiFetch(endpoint, options = {}) {
   if (authToken) {
     options.headers['Authorization'] = `Bearer ${authToken}`;
   }
+  if (options.body && !(options.body instanceof FormData) && !options.headers['Content-Type']) {
+    options.headers['Content-Type'] = 'application/json';
+  }
   const res = await fetch(`${API_BASE}${endpoint}`, options);
   if (res.status === 401) {
-    logout();
+    if (!endpoint.includes('/auth/')) {
+      logout();
+    }
     throw new Error('Unauthorized');
   }
   return res;
@@ -3819,6 +3894,7 @@ let analyticsCache = null;
 
 async function loadAnalyticsData(selectedPeriodId = null) {
   const user = getLoggedInUser();
+  if (user && user.role === 'SUPERVISOR') return;
   const yearSelect = document.getElementById('reports-year-select');
   const year = yearSelect ? yearSelect.value : 2026;
 
@@ -11786,6 +11862,7 @@ async function waiveDamageDeduction(deductionId, guardId) {
 
 async function loadSalaryAdvances() {
   const user = getLoggedInUser();
+  if (user && user.role === 'SUPERVISOR') return;
   const tbody = document.getElementById('salary-advances-table-body');
   if (tbody) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;"><div style="font-size:24px; margin-bottom:8px;">⏳</div>Loading salary advances...</td></tr>';
@@ -12280,11 +12357,13 @@ async function loadExpenses() {
     const category = document.getElementById('expense-filter-category')?.value || '';
     const expenseType = document.getElementById('expense-filter-type')?.value || '';
     const search = document.getElementById('expense-filter-search')?.value.trim() || '';
+    const month = document.getElementById('expense-filter-month')?.value || '';
 
-    let url = '/expenses?limit=100';
+    let url = '/expenses?limit=150';
     if (category) url += `&category=${encodeURIComponent(category)}`;
     if (expenseType) url += `&expense_type=${encodeURIComponent(expenseType)}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (month) url += `&month=${encodeURIComponent(month)}`;
 
     const res = await apiFetch(url);
     if (!res.ok) throw new Error('Failed to load expenses');
@@ -12334,11 +12413,34 @@ async function loadExpenses() {
 async function loadExpensesSummary() {
   const user = getLoggedInUser();
   try {
-    const res = await apiFetch('/expenses/summary');
+    const month = document.getElementById('expense-filter-month')?.value || '';
+    let summaryUrl = '/expenses/summary';
+    if (month) summaryUrl += `?month=${encodeURIComponent(month)}`;
+
+    const res = await apiFetch(summaryUrl);
     if (!res.ok) return;
     const s = await res.json();
 
-    const monthlyTotal = s.total_expenses_this_month !== undefined ? s.total_expenses_this_month : (s.total_expenses_month || 0);
+    // Populate available months dropdown if present
+    const monthSelect = document.getElementById('expense-filter-month');
+    if (monthSelect && Array.isArray(s.available_months) && s.available_months.length > 0) {
+      const currentSelected = monthSelect.value || month;
+      const existingVals = new Set(Array.from(monthSelect.options).map(o => o.value));
+      s.available_months.forEach(m => {
+        if (!existingVals.has(m.value)) {
+          const opt = document.createElement('option');
+          opt.value = m.value;
+          opt.innerText = `📅 ${m.label} (${m.count} records)`;
+          monthSelect.appendChild(opt);
+          existingVals.add(m.value);
+        }
+      });
+      if (currentSelected) {
+        monthSelect.value = currentSelected;
+      }
+    }
+
+    const monthlyTotal = s.selected_month_total !== undefined ? s.selected_month_total : (s.total_expenses_this_month !== undefined ? s.total_expenses_this_month : (s.total_expenses_month || 0));
     const pettyBal = s.petty_cash_float_balance !== undefined ? s.petty_cash_float_balance : (s.petty_cash_balance || 0);
     const floatCap = s.petty_cash_float_max || 25000;
     const pettyPct = Math.round((pettyBal / floatCap) * 100);
@@ -12346,9 +12448,39 @@ async function loadExpensesSummary() {
     const recordedCount = s.total_recorded_count !== undefined ? s.total_recorded_count : (s.total_receipts_recorded || 0);
     const disbursed = s.petty_cash_disbursed_this_month !== undefined ? s.petty_cash_disbursed_this_month : (s.petty_cash_disbursed_month || 0);
 
+    // Update KPI Card 1 Header & Label
+    const periodTitle = document.getElementById('kpi-expenses-period-title');
+    if (periodTitle) {
+      if (s.selected_month === 'last_month') {
+        periodTitle.innerText = 'TOTAL EXPENSES (LAST MONTH)';
+      } else if (s.selected_month === 'this_month') {
+        periodTitle.innerText = 'TOTAL EXPENSES (THIS MONTH)';
+      } else if (s.selected_month_label && s.selected_month_label !== 'All Recorded Months') {
+        periodTitle.innerText = `TOTAL EXPENSES (${s.selected_month_label.toUpperCase()})`;
+      } else {
+        periodTitle.innerText = 'TOTAL FIRM EXPENSES';
+      }
+    }
+
+    const monthBadge = document.getElementById('kpi-expenses-month-badge');
+    if (monthBadge) {
+      monthBadge.innerText = s.selected_month_label || 'Current Period';
+    }
+
     // Metric cards
     const mTotal = document.getElementById('kpi-expenses-monthly-total');
     if (mTotal) mTotal.innerText = `KES ${Number(monthlyTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+
+    const lastMonthSubtext = document.getElementById('kpi-expenses-last-month-subtext');
+    if (lastMonthSubtext) {
+      const lastMonthTotal = s.total_expenses_last_month !== undefined ? s.total_expenses_last_month : 0;
+      const thisMonthTotal = s.total_expenses_this_month !== undefined ? s.total_expenses_this_month : 0;
+      if (s.selected_month === 'last_month') {
+        lastMonthSubtext.innerText = `This Month (Nov): KES ${Number(thisMonthTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+      } else {
+        lastMonthSubtext.innerText = `Last Month (Oct): KES ${Number(lastMonthTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+      }
+    }
 
     const mPetty = document.getElementById('kpi-petty-cash-balance');
     if (mPetty) mPetty.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
@@ -12394,7 +12526,7 @@ async function loadExpensesSummary() {
       const total = monthlyTotal > 0 ? monthlyTotal : 1;
       const categories = Object.keys(catData);
       if (categories.length === 0) {
-        distContainer.innerHTML = '<div style="color:#64748B; font-size:12px; padding:12px;">No categorical expenditures recorded this month yet.</div>';
+        distContainer.innerHTML = '<div style="color:#64748B; font-size:12px; padding:12px;">No categorical expenditures recorded for this period yet.</div>';
       } else {
         categories.forEach(cat => {
           const amount = catData[cat];
@@ -12451,16 +12583,20 @@ async function loadPettyCashBook() {
 
       const inflow = isTopUp ? `+ KES ${Number(tx.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}` : '-';
       const outflow = !isTopUp ? `- KES ${Number(tx.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}` : '-';
+      const person = tx.source_or_recipient || tx.payee_or_custodian || '--';
+      const desc = tx.reason || tx.description || '--';
+      const ref = tx.voucher_ref || tx.reference_number || '--';
+      const bal = tx.balance_after !== undefined ? tx.balance_after : (tx.running_balance || 0);
 
       tr.innerHTML = `
-        <td>${tx.transaction_date ? tx.transaction_date.substring(0, 16).replace('T', ' ') : '--'}</td>
+        <td>${tx.transaction_date ? tx.transaction_date.substring(0, 10) : '--'}</td>
         <td>${badge}</td>
-        <td><strong>${tx.payee_or_custodian || '--'}</strong></td>
-        <td style="font-size:12px;">${tx.description || '--'}</td>
+        <td><strong>${person}</strong></td>
+        <td style="font-size:12px;">${desc}</td>
         <td style="font-weight:700; color:#16A34A;">${inflow}</td>
         <td style="font-weight:700; color:#DC2626;">${outflow}</td>
-        <td style="font-weight:800; color:#0F172A;">KES ${Number(tx.running_balance).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-        <td><span style="font-family:monospace; font-weight:700;">${tx.reference_number || '--'}</span></td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(bal).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td><span style="font-family:monospace; font-weight:700; color:#3B5EDB;">${ref}</span></td>
       `;
       tbody.appendChild(tr);
     });
@@ -12472,7 +12608,7 @@ async function loadPettyCashBook() {
 
 async function loadRecurringExpenses() {
   const tbody = document.getElementById('recurring-expenses-table-body');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading recurring obligations...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;">Loading recurring obligations...</td></tr>';
 
   try {
     const res = await apiFetch('/expenses/recurring');
@@ -12483,31 +12619,76 @@ async function loadRecurringExpenses() {
     tbody.innerHTML = '';
 
     if (allRecurringExpenses.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No recurring expenses currently registered.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:32px; color:#64748B;">No recurring expenses currently registered. Click "+ Add Recurring Commitment" above to create one.</td></tr>';
       return;
     }
 
     allRecurringExpenses.forEach(rec => {
       const tr = document.createElement('tr');
-      const monthlyEquiv = rec.monthly_equivalent || rec.amount;
-      const freqBadge = `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${rec.frequency || 'MONTHLY'}</span>`;
+      const monthlyEquiv = rec.monthly_normalized_amount || rec.monthly_equivalent || rec.amount;
+      const freqBadge = `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${rec.recurrence_interval || rec.frequency || 'MONTHLY'}</span>`;
       const dueStr = rec.next_due_date ? rec.next_due_date.substring(0, 10) : 'Ongoing';
+      
+      let dueBadge = '';
+      if (rec.days_until_due !== null && rec.days_until_due !== undefined) {
+        if (rec.days_until_due < 0) {
+          dueBadge = `<span class="badge" style="background:#FEE2E2; color:#991B1B; font-size:11px; margin-top:3px; display:inline-block;">⚠️ Overdue by ${Math.abs(rec.days_until_due)}d</span>`;
+        } else if (rec.days_until_due === 0) {
+          dueBadge = `<span class="badge" style="background:#FEF3C7; color:#92400E; font-size:11px; margin-top:3px; display:inline-block;">⚠️ Due Today</span>`;
+        } else if (rec.days_until_due <= 7) {
+          dueBadge = `<span class="badge" style="background:#FEF3C7; color:#92400E; font-size:11px; margin-top:3px; display:inline-block;">Due in ${rec.days_until_due}d</span>`;
+        } else {
+          dueBadge = `<span style="font-size:11px; color:#64748B; margin-top:2px; display:block;">(in ${rec.days_until_due} days)</span>`;
+        }
+      }
+
+      let lastPaidHtml = '<span style="color:#94A3B8; font-size:11px;">Not yet recorded</span>';
+      if (rec.last_paid_date) {
+        const lastPaidDateStr = rec.last_paid_date.substring(0, 10);
+        const lastAmt = rec.last_paid_amount ? `KES ${Number(rec.last_paid_amount).toLocaleString()}` : '';
+        const lastMethod = rec.last_payment_method ? ` via ${rec.last_payment_method}` : '';
+        lastPaidHtml = `
+          <div>
+            <strong style="color:#059669; font-size:12px;">🗓️ ${lastPaidDateStr}</strong>
+            <div style="font-size:11px; color:#475569;">${lastAmt}${lastMethod}</div>
+          </div>
+        `;
+      }
+
+      const statusBadge = rec.status === 'ACTIVE'
+        ? '<span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">ACTIVE</span>'
+        : (rec.status === 'PAUSED' ? '<span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">PAUSED</span>' : `<span class="badge" style="background:#F1F5F9; color:#475569;">${rec.status || 'ACTIVE'}</span>`);
 
       tr.innerHTML = `
-        <td><strong>${rec.title}</strong></td>
+        <td>
+          <strong>${rec.title}</strong>
+          ${rec.description ? `<div style="font-size:11px; color:#64748B;">${rec.description}</div>` : ''}
+        </td>
         <td><span class="badge" style="background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A;">${rec.category}</span></td>
-        <td>${freqBadge}</td>
-        <td>KES ${Number(rec.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td><strong style="color:#1E3A5F; font-size:13px;">🏢 ${rec.payee || '--'}</strong></td>
+        <td>
+          <div style="font-weight:700; color:#0F172A;">KES ${Number(rec.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+          <div style="margin-top:2px;">${freqBadge}</div>
+        </td>
         <td style="font-weight:800; color:#2563EB;">KES ${Number(monthlyEquiv).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-        <td>📅 ${dueStr}</td>
-        <td>${rec.payee || '--'}</td>
-        <td><span class="badge" style="background:#DCFCE7; color:#166534;">ACTIVE</span></td>
+        <td>${lastPaidHtml}</td>
+        <td>
+          <strong>📅 ${dueStr}</strong>
+          ${dueBadge}
+        </td>
+        <td>${statusBadge}</td>
+        <td style="text-align:center; white-space:nowrap;">
+          <button class="btn btn-secondary" style="padding:4px 9px; font-size:11px; background:#ECFDF5; color:#065F46; border-color:#A7F3D0; font-weight:700; margin-right:4px;" title="Record Payment for this cycle" onclick="openPayRecurringExpenseModal(${rec.id})">💳 Pay</button>
+          <button class="btn btn-secondary" style="padding:4px 9px; font-size:11px; background:#EFF6FF; color:#1E40AF; border-color:#BFDBFE; font-weight:700; margin-right:4px;" title="View payment audit trail" onclick="openRecurringHistoryModal(${rec.id})">📜 History</button>
+          <button class="btn btn-secondary" style="padding:4px 9px; font-size:11px; color:#1E3A5F; border-color:#CBD5E1; font-weight:600; margin-right:4px;" title="Edit commitment" onclick="openEditRecurringExpenseModal(${rec.id})">✏️ Edit</button>
+          <button class="btn btn-secondary" style="padding:4px 9px; font-size:11px; color:#EF4444; border-color:#FCA5A5; font-weight:600;" title="Remove commitment" onclick="deleteRecurringExpense(${rec.id})">🗑️</button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
 
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
   }
 }
 
@@ -12533,31 +12714,50 @@ async function handleRecordExpenseSubmit(e) {
   e.preventDefault();
   const submitBtn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('.btn-primary');
   const origBtnText = submitBtn ? submitBtn.innerText : 'Save';
+
+  const rawDate = document.getElementById('exp-date')?.value;
+  const expense_date = (rawDate && rawDate.trim()) ? rawDate.trim() : new Date().toISOString().substring(0, 10);
+  const category = document.getElementById('exp-category')?.value || 'MISCELLANEOUS';
+  const expense_type = document.getElementById('exp-type')?.value || 'FIRM_OPERATING';
+  const payee = (document.getElementById('exp-payee')?.value || '').trim();
+  const rawAmount = document.getElementById('exp-amount')?.value;
+  const amount = parseFloat(rawAmount);
+  const payment_method = document.getElementById('exp-payment-method')?.value || 'CASH';
+  const rawReceipt = (document.getElementById('exp-receipt-no')?.value || '').trim();
+  const receipt_number = rawReceipt ? rawReceipt : null;
+  const rawDescription = (document.getElementById('exp-description')?.value || '').trim();
+  const description = rawDescription ? rawDescription : null;
+  const is_recurring = (expense_type === 'RECURRING');
+  const rawFreq = is_recurring ? (document.getElementById('exp-frequency')?.value || '').trim() : null;
+  const recurring_frequency = rawFreq ? rawFreq : null;
+  const rawDueDate = is_recurring ? (document.getElementById('exp-due-date')?.value || '').trim() : null;
+  const next_due_date = rawDueDate ? rawDueDate : null;
+
+  if (isNaN(amount) || amount <= 0) {
+    showToast('⚠️ Please enter a valid expense amount greater than KES 0.00', 'warning');
+    return;
+  }
+  if (!payee) {
+    showToast('⚠️ Please specify the payee or vendor name', 'warning');
+    return;
+  }
+
   if (submitBtn) {
     submitBtn.disabled = true;
     submitBtn.innerText = 'Saving Expense...';
   }
 
-  const expense_date = document.getElementById('exp-date').value;
-  const category = document.getElementById('exp-category').value;
-  const expense_type = document.getElementById('exp-type').value;
-  const payee = document.getElementById('exp-payee').value.trim();
-  const amount = parseFloat(document.getElementById('exp-amount').value);
-  const payment_method = document.getElementById('exp-payment-method').value;
-  const receipt_number = document.getElementById('exp-receipt-no').value.trim() || null;
-  const description = document.getElementById('exp-description').value.trim();
-  const is_petty_cash = (payment_method === 'PETTY_CASH' || expense_type === 'PETTY_CASH');
-  const is_recurring = (expense_type === 'RECURRING');
-  const recurring_frequency = is_recurring ? document.getElementById('exp-frequency')?.value : null;
-  const next_due_date = is_recurring ? (document.getElementById('exp-due-date')?.value || null) : null;
-
   try {
-    const title = description ? description.substring(0, 80) : `${category} - ${payee}`;
+    let title = description ? description.substring(0, 80) : `${category} - ${payee}`;
+    if (!title || title.trim().length < 2) {
+      title = `${category} Expense`;
+    }
+
     const res = await apiFetch('/expenses', {
       method: 'POST',
       body: JSON.stringify({
         expense_date,
-        title,
+        title: title.trim(),
         category,
         expense_type,
         payee,
@@ -12573,7 +12773,13 @@ async function handleRecordExpenseSubmit(e) {
 
     const data = await res.json();
     if (!res.ok) {
-      showToast(`⚠️ Could not save expense: ${data.detail || 'Request failed'}`, 'danger');
+      let errMsg = 'Request failed';
+      if (typeof data.detail === 'string') {
+        errMsg = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        errMsg = data.detail.map(d => `${d.loc ? d.loc.slice(1).join('.') : 'Field'}: ${d.msg}`).join(', ');
+      }
+      showToast(`⚠️ Could not save expense: ${errMsg}`, 'danger');
       return;
     }
 
@@ -12598,6 +12804,20 @@ function openTopUpPettyCashModal() {
   if (modal) modal.style.display = 'flex';
 }
 
+function formatApiError(data, fallback = 'Operation failed') {
+  if (!data) return fallback;
+  if (typeof data === 'string') return data;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map(d => `${d.loc ? d.loc.filter(x => x !== 'body').join('.') : 'Field'}: ${d.msg}`).join(', ');
+  }
+  if (data.detail && typeof data.detail === 'object') {
+    return JSON.stringify(data.detail);
+  }
+  if (typeof data.message === 'string') return data.message;
+  return fallback;
+}
+
 function closeTopUpPettyCashModal() {
   const modal = document.getElementById('modal-topup-petty-cash');
   if (modal) modal.style.display = 'none';
@@ -12611,10 +12831,17 @@ async function handleTopUpPettyCashSubmit(e) {
     submitBtn.disabled = true;
     submitBtn.innerText = 'Replenishing Float...';
   }
-  const amount = parseFloat(document.getElementById('topup-amount').value);
-  const source = document.getElementById('topup-source').value;
-  const reference_number = document.getElementById('topup-ref').value.trim() || null;
-  const notes = document.getElementById('topup-notes').value.trim() || null;
+  const rawAmt = document.getElementById('topup-amount')?.value;
+  const amount = parseFloat(rawAmt);
+  const source = document.getElementById('topup-source')?.value || 'Corporate Operating Bank Account';
+  const voucher_ref = (document.getElementById('topup-ref')?.value || '').trim() || null;
+  const reason = (document.getElementById('topup-notes')?.value || '').trim() || 'Petty cash float replenishment';
+
+  if (isNaN(amount) || amount <= 0) {
+    showToast('⚠️ Please enter a valid replenishment amount greater than KES 0.00', 'warning');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origBtnText; }
+    return;
+  }
 
   try {
     const res = await apiFetch('/expenses/petty-cash/top-up', {
@@ -12622,14 +12849,16 @@ async function handleTopUpPettyCashSubmit(e) {
       body: JSON.stringify({
         amount,
         source,
-        reference_number,
-        notes
+        voucher_ref,
+        reference_number: voucher_ref,
+        reason,
+        notes: reason
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showToast(`⚠️ Top-up failed: ${data.detail || 'Request failed'}`, 'danger');
+      showToast(`⚠️ Top-up failed: ${formatApiError(data, 'Could not replenish petty cash float')}`, 'danger');
       return;
     }
 
@@ -12656,7 +12885,7 @@ async function deleteExpenseRecord(id) {
     const res = await apiFetch(`/expenses/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      showToast(`⚠️ Could not delete: ${err.detail || 'Server error'}`, 'danger');
+      showToast(`⚠️ Could not delete: ${formatApiError(err, 'Server error')}`, 'danger');
       return;
     }
     showToast('✅ Expense record removed.', 'success');
@@ -12667,18 +12896,374 @@ async function deleteExpenseRecord(id) {
   }
 }
 
+// --- Recurring Expenditures Handlers ---
+function openAddRecurringExpenseModal() {
+  const modal = document.getElementById('modal-add-recurring');
+  const dueInput = document.getElementById('rec-add-due-date');
+  if (dueInput) {
+    const nextMo = new Date();
+    nextMo.setMonth(nextMo.getMonth() + 1);
+    dueInput.value = nextMo.toISOString().substring(0, 10);
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeAddRecurringExpenseModal() {
+  const modal = document.getElementById('modal-add-recurring');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleAddRecurringSubmit(e) {
+  e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const origText = submitBtn ? submitBtn.innerText : 'Save';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Registering Commitment...';
+  }
+
+  const title = (document.getElementById('rec-add-title')?.value || '').trim();
+  const category = document.getElementById('rec-add-category')?.value || 'Rent & Facilities';
+  const payee = (document.getElementById('rec-add-payee')?.value || '').trim();
+  const amount = parseFloat(document.getElementById('rec-add-amount')?.value);
+  const recurrence_interval = document.getElementById('rec-add-interval')?.value || 'MONTHLY';
+  const next_due_date = document.getElementById('rec-add-due-date')?.value || null;
+  const payment_method = document.getElementById('rec-add-payment-method')?.value || 'BANK_TRANSFER';
+  const status = document.getElementById('rec-add-status')?.value || 'ACTIVE';
+  const description = (document.getElementById('rec-add-description')?.value || '').trim() || null;
+
+  if (!title || !payee || isNaN(amount) || amount <= 0) {
+    showToast('⚠️ Please enter a valid title, payee, and amount.', 'warning');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origText; }
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/expenses/recurring', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        category,
+        payee,
+        amount,
+        recurrence_interval,
+        next_due_date,
+        payment_method,
+        status,
+        description
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(`⚠️ Could not add recurring obligation: ${formatApiError(data, 'Server error')}`, 'danger');
+      return;
+    }
+
+    closeAddRecurringExpenseModal();
+    showToast(`✅ Recurring commitment '${title}' to ${payee} registered successfully!`, 'success');
+    document.getElementById('form-add-recurring').reset();
+    loadRecurringExpenses();
+    loadExpensesSummary();
+
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origText; }
+  }
+}
+
+async function openEditRecurringExpenseModal(id) {
+  let rec = allRecurringExpenses.find(r => r.id === Number(id) || r.id == id);
+  if (!rec) {
+    try {
+      const res = await apiFetch(`/expenses/recurring/${id}`);
+      if (res.ok) rec = await res.json();
+    } catch (e) {
+      console.error('Fetch recurring detail error:', e);
+    }
+  }
+  if (!rec) {
+    showToast('⚠️ Recurring obligation not found.', 'warning');
+    return;
+  }
+
+  document.getElementById('rec-edit-id').value = rec.id;
+  document.getElementById('rec-edit-title').value = rec.title || '';
+  document.getElementById('rec-edit-category').value = rec.category || 'Rent & Facilities';
+  document.getElementById('rec-edit-payee').value = rec.payee || '';
+  document.getElementById('rec-edit-amount').value = rec.amount || '';
+  document.getElementById('rec-edit-interval').value = rec.recurrence_interval || rec.frequency || 'MONTHLY';
+  document.getElementById('rec-edit-due-date').value = rec.next_due_date ? rec.next_due_date.substring(0, 10) : '';
+  document.getElementById('rec-edit-last-paid-date').value = rec.last_paid_date ? rec.last_paid_date.substring(0, 10) : '';
+  document.getElementById('rec-edit-status').value = rec.status || 'ACTIVE';
+  document.getElementById('rec-edit-description').value = rec.description || '';
+
+  const modal = document.getElementById('modal-edit-recurring');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditRecurringExpenseModal() {
+  const modal = document.getElementById('modal-edit-recurring');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleEditRecurringSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('rec-edit-id')?.value;
+  if (!id) return;
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const origText = submitBtn ? submitBtn.innerText : 'Save';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Saving Changes...';
+  }
+
+  const title = (document.getElementById('rec-edit-title')?.value || '').trim();
+  const category = document.getElementById('rec-edit-category')?.value;
+  const payee = (document.getElementById('rec-edit-payee')?.value || '').trim();
+  const amount = parseFloat(document.getElementById('rec-edit-amount')?.value);
+  const recurrence_interval = document.getElementById('rec-edit-interval')?.value;
+  const next_due_date = document.getElementById('rec-edit-due-date')?.value || null;
+  const last_paid_date = document.getElementById('rec-edit-last-paid-date')?.value || null;
+  const status = document.getElementById('rec-edit-status')?.value || 'ACTIVE';
+  const description = (document.getElementById('rec-edit-description')?.value || '').trim() || null;
+
+  try {
+    const res = await apiFetch(`/expenses/recurring/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        title,
+        category,
+        payee,
+        amount,
+        recurrence_interval,
+        next_due_date,
+        last_paid_date,
+        status,
+        description
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(`⚠️ Could not update obligation: ${formatApiError(data, 'Server error')}`, 'danger');
+      return;
+    }
+
+    closeEditRecurringExpenseModal();
+    showToast(`✅ Recurrent commitment '${title}' updated!`, 'success');
+    loadRecurringExpenses();
+    loadExpensesSummary();
+
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origText; }
+  }
+}
+
+async function deleteRecurringExpense(id) {
+  let rec = allRecurringExpenses.find(r => r.id === Number(id) || r.id == id);
+  const name = rec ? rec.title : 'this obligation';
+  if (!confirm(`Are you sure you want to permanently remove the recurring obligation: "${name}"?`)) return;
+
+  try {
+    const res = await apiFetch(`/expenses/recurring/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(`⚠️ Could not remove: ${formatApiError(err, 'Server error')}`, 'danger');
+      return;
+    }
+    showToast(`✅ Recurring obligation removed.`, 'success');
+    loadRecurringExpenses();
+    loadExpensesSummary();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  }
+}
+
+async function openPayRecurringExpenseModal(id) {
+  let rec = allRecurringExpenses.find(r => r.id === Number(id) || r.id == id);
+  if (!rec) {
+    try {
+      const res = await apiFetch(`/expenses/recurring/${id}`);
+      if (res.ok) rec = await res.json();
+    } catch (e) {
+      console.error('Fetch recurring detail error:', e);
+    }
+  }
+  if (!rec) {
+    showToast('⚠️ Obligation details not found.', 'warning');
+    return;
+  }
+
+  document.getElementById('rec-pay-id').value = rec.id;
+  const sumTitle = document.getElementById('rec-pay-summary-title');
+  if (sumTitle) sumTitle.innerText = rec.title;
+  const sumPayee = document.getElementById('rec-pay-summary-payee');
+  if (sumPayee) sumPayee.innerText = rec.payee || '--';
+  const sumAmt = document.getElementById('rec-pay-summary-amount');
+  if (sumAmt) sumAmt.innerText = `KES ${Number(rec.amount).toLocaleString('en-KE', {minimumFractionDigits:2})} / ${rec.recurrence_interval || 'MONTHLY'}`;
+  const sumDue = document.getElementById('rec-pay-summary-due');
+  if (sumDue) sumDue.innerText = `Next Due Date: ${rec.next_due_date ? rec.next_due_date.substring(0, 10) : 'Not scheduled'}`;
+
+  const dateInput = document.getElementById('rec-pay-date');
+  if (dateInput) dateInput.value = new Date().toISOString().substring(0, 10);
+  const amtInput = document.getElementById('rec-pay-amount');
+  if (amtInput) amtInput.value = rec.amount;
+  const methodInput = document.getElementById('rec-pay-method');
+  if (methodInput) methodInput.value = rec.payment_method || 'BANK_TRANSFER';
+  const refInput = document.getElementById('rec-pay-ref');
+  if (refInput) refInput.value = '';
+  const notesInput = document.getElementById('rec-pay-notes');
+  if (notesInput) {
+    const moName = new Date().toLocaleString('default', { month: 'short', year: 'numeric' });
+    notesInput.value = `${rec.title} - Payment cycle for ${moName}`;
+  }
+  const advCheckbox = document.getElementById('rec-pay-advance');
+  if (advCheckbox) advCheckbox.checked = true;
+
+  const modal = document.getElementById('modal-pay-recurring');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closePayRecurringExpenseModal() {
+  const modal = document.getElementById('modal-pay-recurring');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handlePayRecurringSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('rec-pay-id')?.value;
+  if (!id) return;
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const origText = submitBtn ? submitBtn.innerText : 'Confirm Payment';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Recording Payment...';
+  }
+
+  const payment_date = document.getElementById('rec-pay-date')?.value || new Date().toISOString().substring(0, 10);
+  const amount = parseFloat(document.getElementById('rec-pay-amount')?.value);
+  const payment_method = document.getElementById('rec-pay-method')?.value || 'BANK_TRANSFER';
+  const receipt_number = (document.getElementById('rec-pay-ref')?.value || '').trim() || null;
+  const description = (document.getElementById('rec-pay-notes')?.value || '').trim() || null;
+  const advance_next_due_date = document.getElementById('rec-pay-advance')?.checked !== false;
+
+  if (isNaN(amount) || amount <= 0) {
+    showToast('⚠️ Please enter a valid payment amount.', 'warning');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origText; }
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/expenses/recurring/${id}/pay`, {
+      method: 'POST',
+      body: JSON.stringify({
+        payment_date,
+        amount,
+        payment_method,
+        receipt_number,
+        description,
+        advance_next_due_date
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(`⚠️ Could not record payment: ${formatApiError(data, 'Server error')}`, 'danger');
+      return;
+    }
+
+    closePayRecurringExpenseModal();
+    showToast(`✅ ${data.message || 'Payment recorded successfully!'}`, 'success');
+    loadRecurringExpenses();
+    loadExpenses();
+    loadExpensesSummary();
+    if (payment_method === 'PETTY_CASH') {
+      loadPettyCashBook();
+    }
+
+  } catch (err) {
+    showToast('Error: ' + err.message, 'danger');
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origText; }
+  }
+}
+
+async function openRecurringHistoryModal(id) {
+  const modal = document.getElementById('modal-recurring-history');
+  const tbody = document.getElementById('recurring-history-table-body');
+  const subtitle = document.getElementById('rec-history-subtitle');
+
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading payment audit history...</td></tr>';
+  if (modal) modal.style.display = 'flex';
+
+  try {
+    const res = await apiFetch(`/expenses/recurring/${id}`);
+    if (!res.ok) throw new Error('Failed to retrieve commitment details');
+    const rec = await res.json();
+
+    if (subtitle) {
+      subtitle.innerHTML = `<strong>${rec.title}</strong> &bull; Paid to: <strong>${rec.payee}</strong> &bull; Total Settled: <strong>KES ${Number(rec.total_paid_to_date || 0).toLocaleString()}</strong> (${rec.payment_count || 0} payments)`;
+    }
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const history = rec.payments_history || [];
+    if (history.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:#64748B;">No recorded payment cycles yet for this obligation. Use the "💳 Pay" button to record one.</td></tr>';
+      return;
+    }
+
+    history.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>🗓️ ${p.expense_date ? p.expense_date.substring(0, 10) : '--'}</strong></td>
+        <td><strong style="color:#1E3A5F;">🏢 ${p.payee}</strong></td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(p.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td><span class="badge" style="background:#F1F5F9; color:#475569;">${p.payment_method}</span></td>
+        <td><span style="font-family:monospace; font-weight:700; color:#2563EB;">${p.receipt_number || '--'}</span></td>
+        <td style="font-size:12px; color:#64748B;">${p.recorded_by_name || 'System Administrator'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#EF4444;">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function closeRecurringHistoryModal() {
+  const modal = document.getElementById('modal-recurring-history');
+  if (modal) modal.style.display = 'none';
+}
+
 function applyExpenseFilters() {
   loadExpenses();
+  loadExpensesSummary();
+}
+
+function setExpenseMonthQuick(monthVal) {
+  const m = document.getElementById('expense-filter-month');
+  if (m) m.value = monthVal;
+  applyExpenseFilters();
 }
 
 function resetExpenseFilters() {
+  const m = document.getElementById('expense-filter-month');
+  if (m) m.value = '';
   const s = document.getElementById('expense-filter-search');
   if (s) s.value = '';
   const c = document.getElementById('expense-filter-category');
   if (c) c.value = '';
   const t = document.getElementById('expense-filter-type');
   if (t) t.value = '';
-  loadExpenses();
+  applyExpenseFilters();
 }
 
 function exportExpensesReport() {
@@ -12986,7 +13571,20 @@ window.openTopUpPettyCashModal = openTopUpPettyCashModal;
 window.closeTopUpPettyCashModal = closeTopUpPettyCashModal;
 window.handleTopUpPettyCashSubmit = handleTopUpPettyCashSubmit;
 window.deleteExpenseRecord = deleteExpenseRecord;
+window.openAddRecurringExpenseModal = openAddRecurringExpenseModal;
+window.closeAddRecurringExpenseModal = closeAddRecurringExpenseModal;
+window.handleAddRecurringSubmit = handleAddRecurringSubmit;
+window.openEditRecurringExpenseModal = openEditRecurringExpenseModal;
+window.closeEditRecurringExpenseModal = closeEditRecurringExpenseModal;
+window.handleEditRecurringSubmit = handleEditRecurringSubmit;
+window.deleteRecurringExpense = deleteRecurringExpense;
+window.openPayRecurringExpenseModal = openPayRecurringExpenseModal;
+window.closePayRecurringExpenseModal = closePayRecurringExpenseModal;
+window.handlePayRecurringSubmit = handlePayRecurringSubmit;
+window.openRecurringHistoryModal = openRecurringHistoryModal;
+window.closeRecurringHistoryModal = closeRecurringHistoryModal;
 window.applyExpenseFilters = applyExpenseFilters;
+window.setExpenseMonthQuick = setExpenseMonthQuick;
 window.resetExpenseFilters = resetExpenseFilters;
 window.exportExpensesReport = exportExpensesReport;
 

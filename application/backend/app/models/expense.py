@@ -20,15 +20,18 @@ class Expense(Base):
     is_recurring = Column(Boolean, default=False, nullable=False)
     recurrence_interval = Column(String(50), nullable=True)  # MONTHLY, WEEKLY, QUARTERLY, ANNUALLY
     next_due_date = Column(Date, nullable=True)
+    last_paid_date = Column(Date, nullable=True)
     
-    status = Column(String(50), default="PAID", nullable=False)  # PAID, PENDING, APPROVED
+    status = Column(String(50), default="PAID", nullable=False)  # PAID, PENDING, APPROVED, ACTIVE, PAUSED
     description = Column(Text, nullable=True)
     
     recorded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    recurring_parent_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
 
     recorded_by = relationship("User", foreign_keys=[recorded_by_user_id])
+    recurring_parent = relationship("Expense", remote_side=[id], foreign_keys=[recurring_parent_id])
 
 
 class PettyCashTransaction(Base):

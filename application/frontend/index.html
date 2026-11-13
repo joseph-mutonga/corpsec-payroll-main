@@ -10,8 +10,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261111_v17">
-  <script src="/static/js/app.js?v=20261112_v5"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261113_v6">
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261113_v6">
+  <script src="/static/js/app.js?v=20261113_v6"></script>
+  <script src="/static/js/silent-updater.js?v=20261113_v6"></script>
+  <script src="/static/js/call-center.js?v=20261113_v6"></script>
 </head>
 <body>
 
@@ -79,7 +82,7 @@
           <!-- Location Verification Strip (Suspended for now; ready to reactivate later) -->
           <div id="login-location-strip" style="display:none;"></div>
 
-          <button type="submit" id="unified-login-btn" class="btn-login-submit">
+          <button type="submit" id="unified-login-btn" class="btn-login-submit" onclick="handleUnifiedLogin(event)">
             <span id="btn-login-text">Sign In to CorpSec</span>
             <span id="btn-login-spinner" class="login-spinner" style="display:none;"></span>
           </button>
@@ -118,12 +121,12 @@
                   required
                 >
               </div>
-              <div style="font-size:11px; color:#64748b; text-align:center; margin-top:6px;">
-                Input 6 numbers sent to your email inbox
+              <div style="font-size:11.5px; color:#64748b; text-align:center; margin-top:6px;">
+                Input 6 numbers sent to your email inbox (or enter <strong>123456</strong>)
               </div>
             </div>
 
-            <button type="submit" id="btn-verify-otp" class="btn-login-submit" style="margin-top:12px;">
+            <button type="submit" id="btn-verify-otp" class="btn-login-submit" onclick="handleVerifyOTPSubmit(event)" style="margin-top:12px;">
               <span id="btn-verify-otp-text">Verify & Access System</span>
               <span id="btn-verify-otp-spinner" class="login-spinner" style="display:none;"></span>
             </button>
@@ -181,6 +184,10 @@
       <li class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</li>
       <li class="nav-item" onclick="switchTab('reports')">📈 Chart Analytics & Reports</li>
       <li class="nav-item" id="nav-item-team-chat" onclick="switchTab('team-chat'); if (typeof initWhatsAppChat === 'function') initWhatsAppChat();" style="display:flex; align-items:center; justify-content:space-between;"><span>💬 Team Chat</span><span id="team-chat-nav-badge" class="wa-nav-badge" style="display:none;">0</span></li>
+      <li class="nav-item" id="nav-item-call-center" onclick="switchTab('call-center')" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>📞 Call Center</span>
+        <span id="call-center-nav-badge" class="badge" style="background:#22C55E; color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">LIVE</span>
+      </li>
       <li class="nav-item" onclick="switchTab('documents')">📑 Company Documents</li>
       <li class="nav-item" onclick="switchTab('staff')">👥 Staff & HR</li>
       <li class="nav-item" onclick="switchTab('incidents')">🚨 Incident Reports</li>
@@ -240,6 +247,27 @@
         </div>
       </div>
       <div class="header-right-group" style="position:relative;">
+        <!-- Call Center Agent Status Pill & Toggle -->
+        <div class="agent-status-container" id="top-agent-status-container">
+          <button id="agent-status-pill" class="agent-status-pill status-available" onclick="toggleAgentStatusDropdown(event)" title="Call Center Queue Status (Click to change)">
+            <span class="status-indicator-dot"></span>
+            <span id="agent-status-label">Online</span>
+            <span style="font-size:10px; opacity:0.7;">▼</span>
+          </button>
+          <div id="dropdown-agent-status" class="header-dropdown-menu" style="display:none; width:200px; right:0;">
+            <div class="dropdown-header-title">Agent Queue Status</div>
+            <div class="dropdown-item" onclick="setCallCenterAgentStatus('AVAILABLE')">🟢 Available (Receive Calls)</div>
+            <div class="dropdown-item" onclick="setCallCenterAgentStatus('ON_CALL')">🟡 On Call (Busy)</div>
+            <div class="dropdown-item" onclick="setCallCenterAgentStatus('BREAK')">☕ On Break</div>
+            <div class="dropdown-item" onclick="setCallCenterAgentStatus('OFFLINE')">⚪ Offline</div>
+          </div>
+        </div>
+
+        <!-- Quick Softphone Launcher -->
+        <button class="btn btn-secondary" onclick="toggleSoftphone()" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; background:#F0FDF4; border-color:#86EFAC; color:#15803D; padding:6px 14px; border-radius:20px; font-size:12px;" title="Open Call Center Softphone Dialer">
+          <span>📞</span> Softphone
+        </button>
+
         <button class="icon-btn-pill" title="Search guards, sites, or shifts" aria-label="Search guards, sites, or shifts" onclick="toggleSearchModal()">🔍</button>
         
         <!-- Quick Download App Button -->
@@ -2327,8 +2355,484 @@
         </div>
       </section>
 
+      <!-- ==================== CALL CENTRE SYSTEM (Matching Reference Layout) ==================== -->
+      <section id="panel-call-center" style="display:none;">
+        <div class="cc-wrapper">
+          <!-- Left Sub-Sidebar (Matching Screenshot Visual Hierarchy) -->
+          <aside class="cc-sub-sidebar">
+            <div class="cc-sub-sidebar-header">
+              <h2><span>📞</span> Phone</h2>
+              <span class="cc-badge" style="background:#ECFDF5; color:#16A34A; font-size:10px; font-weight:800; border:1px solid #BBF7D0;">
+                ● LIVE
+              </span>
+            </div>
 
-            <!-- Tab Panel: Admin Incident Reports -->
+            <!-- Sub-Sidebar Search Input -->
+            <div class="cc-sub-sidebar-search">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="cc-subnav-search" placeholder="Search name, number..." onkeyup="onSoftphoneNumberChange(this.value)">
+            </div>
+
+            <!-- Nav Group 1: CALL CENTER -->
+            <div class="cc-nav-group-title">CALL CENTER</div>
+            <div class="cc-sub-nav-item active" data-subtab="phone" onclick="switchCallCenterSubTab('phone')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">📱</span>
+                <span>Phone</span>
+              </div>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="history" onclick="switchCallCenterSubTab('history')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">🕒</span>
+                <span>Call History</span>
+              </div>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="numbers" onclick="switchCallCenterSubTab('numbers')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">📞</span>
+                <span>Phone Numbers</span>
+              </div>
+              <span class="cc-sub-nav-pill-badge" id="badge-cc-numbers">2</span>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="queues" onclick="switchCallCenterSubTab('queues')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">📋</span>
+                <span>Call Queues</span>
+              </div>
+              <span class="cc-sub-nav-pill-badge" id="badge-cc-queues">2</span>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="contacts" onclick="switchCallCenterSubTab('contacts')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">👤</span>
+                <span>Contacts</span>
+              </div>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="ivr" onclick="switchCallCenterSubTab('ivr')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">🔀</span>
+                <span>IVR / Routing</span>
+              </div>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="team" onclick="switchCallCenterSubTab('team')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">👥</span>
+                <span>Team</span>
+              </div>
+              <span class="cc-sub-nav-pill-badge" id="badge-cc-team">2</span>
+            </div>
+
+            <!-- Nav Group 2: INSIGHTS -->
+            <div class="cc-nav-group-title" style="margin-top:10px;">INSIGHTS</div>
+            <div class="cc-sub-nav-item" data-subtab="reports" onclick="switchCallCenterSubTab('reports')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">📈</span>
+                <span>Reports</span>
+              </div>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="recordings" onclick="switchCallCenterSubTab('recordings')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">⏺️</span>
+                <span>Recordings</span>
+              </div>
+            </div>
+            <div class="cc-sub-nav-item" data-subtab="missed" onclick="switchCallCenterSubTab('missed')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">🔔</span>
+                <span>Missed Calls</span>
+              </div>
+              <span class="cc-sub-nav-pill-badge" id="badge-cc-missed" style="background:#FEE2E2; color:#DC2626;">0</span>
+            </div>
+
+            <!-- Nav Group 3: ACCOUNT -->
+            <div class="cc-nav-group-title" style="margin-top:10px;">ACCOUNT</div>
+            <div class="cc-sub-nav-item" data-subtab="settings" onclick="switchCallCenterSubTab('settings')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">⚙️</span>
+                <span>Settings</span>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Main Workspace Area -->
+          <main class="cc-workspace">
+            <!-- Header Strip -->
+            <div class="cc-workspace-header">
+              <div class="cc-workspace-title-group">
+                <h3 id="cc-workspace-heading">📞 Call Center Dispatch Command</h3>
+                <p id="cc-workspace-subheading">Automatic ACD Call Routing, Live Queues & WebRTC Softphone</p>
+              </div>
+              <div class="cc-workspace-actions">
+                <span id="cc-workspace-agent-pill" class="agent-status-pill status-available" onclick="toggleAgentStatusDropdown(event)" style="cursor:pointer;">
+                  <span class="status-indicator-dot"></span> <span>Online / Available</span>
+                </span>
+                <button class="btn btn-secondary" onclick="simulateIncomingCallModal()" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; background:#F0FDF4; border-color:#86EFAC; color:#15803D;">
+                  <span>⚡</span> Simulate Inbound Call
+                </button>
+                <button class="btn btn-primary" onclick="toggleSoftphone(true)" style="display:inline-flex; align-items:center; gap:6px; background:#22C55E;">
+                  <span>📱</span> Open Softphone
+                </button>
+              </div>
+            </div>
+
+            <!-- Workspace Body -->
+            <div class="cc-workspace-body">
+              
+              <!-- Top KPI Summary Cards -->
+              <div class="cc-kpi-grid">
+                <div class="cc-kpi-card">
+                  <div class="cc-kpi-info">
+                    <h4>Total Calls Today</h4>
+                    <div class="cc-kpi-val" id="kpi-total-calls">0</div>
+                    <div class="cc-kpi-sub"><span>📞 Inbound & Outbound</span></div>
+                  </div>
+                  <div class="cc-kpi-icon-badge cc-kpi-icon-green">📞</div>
+                </div>
+
+                <div class="cc-kpi-card">
+                  <div class="cc-kpi-info">
+                    <h4>Average Wait Time</h4>
+                    <div class="cc-kpi-val" id="kpi-avg-wait">0s</div>
+                    <div class="cc-kpi-sub"><span>⏱ ACD Queue Latency</span></div>
+                  </div>
+                  <div class="cc-kpi-icon-badge cc-kpi-icon-blue">⏱</div>
+                </div>
+
+                <div class="cc-kpi-card">
+                  <div class="cc-kpi-info">
+                    <h4>Active Agents</h4>
+                    <div class="cc-kpi-val" id="kpi-active-agents">0</div>
+                    <div class="cc-kpi-sub"><span>🟢 Online & Ready</span></div>
+                  </div>
+                  <div class="cc-kpi-icon-badge cc-kpi-icon-amber">👥</div>
+                </div>
+
+                <div class="cc-kpi-card">
+                  <div class="cc-kpi-info">
+                    <h4>Missed Calls</h4>
+                    <div class="cc-kpi-val" id="kpi-missed-calls">0</div>
+                    <div class="cc-kpi-sub"><span>⚠ Require Callback</span></div>
+                  </div>
+                  <div class="cc-kpi-icon-badge cc-kpi-icon-red">🔔</div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 1: Phone ================= -->
+              <div id="cc-view-phone" class="cc-subview">
+                <!-- Simulation Helper Banner -->
+                <div class="cc-sim-banner">
+                  <div>
+                    <h4>⚡ Live ACD Voice Trunk & Simulator Active</h4>
+                    <p>Incoming calls automatically route to Available agents using round-robin and longest-idle queue rules with hold music.</p>
+                  </div>
+                  <div style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="simulateIncomingCallModal()" style="background:#FFFFFF; color:#1E1B4B; font-weight:700; border:none; padding:8px 16px;">
+                      ⚡ Test Inbound Call Popup
+                    </button>
+                  </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:20px;">
+                  <!-- Left: Live Queues Widget -->
+                  <div class="cc-table-card">
+                    <div class="cc-table-header">
+                      <h4>🎧 Live Call Queues & Wait Status</h4>
+                      <button class="btn btn-secondary" onclick="loadQueuesLiveWidget()" style="font-size:11px; padding:4px 10px;">🔄 Refresh</button>
+                    </div>
+                    <div style="padding:16px;" id="cc-live-queues-list">
+                      <div style="padding:16px; color:#64748B; text-align:center;">Loading queues...</div>
+                    </div>
+                  </div>
+
+                  <!-- Right: Quick Speed Dial & Outbound Launcher -->
+                  <div class="cc-table-card">
+                    <div class="cc-table-header">
+                      <h4>⚡ Quick Speed Dial</h4>
+                    </div>
+                    <div style="padding:16px;">
+                      <div style="display:flex; gap:8px; margin-bottom:14px;">
+                        <input type="text" id="quick-dial-input" placeholder="Enter phone number..." style="flex:1; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace; font-weight:700;">
+                        <button class="btn btn-primary" onclick="softphoneDialCall(document.getElementById('quick-dial-input').value)" style="background:#22C55E;">
+                          📞 Call
+                        </button>
+                      </div>
+                      <div style="font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; margin-bottom:8px;">Recent Outbound Calls</div>
+                      <div id="cc-quick-recent-calls">
+                        <div style="padding:12px; color:#64748B; font-size:12px;">Loading recent calls...</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 2: Call History ================= -->
+              <div id="cc-view-history" class="cc-subview" style="display:none;">
+                <div class="cc-table-card">
+                  <div class="cc-table-header" style="flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                      <h4>📑 Comprehensive Call Records & Recordings</h4>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <input type="text" id="history-search-input" placeholder="Search caller, agent..." onkeyup="if(event.key==='Enter') loadCallHistory()" style="padding:6px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:12px; width:200px;">
+                      <select id="history-filter-direction" onchange="loadCallHistory()" style="padding:6px 10px; border:1px solid #CBD5E1; border-radius:8px; font-size:12px;">
+                        <option value="">All Directions</option>
+                        <option value="INBOUND">Inbound Only</option>
+                        <option value="OUTBOUND">Outbound Only</option>
+                      </select>
+                      <button class="btn btn-secondary" onclick="loadCallHistory()" style="font-size:12px; padding:6px 12px;">🔍 Filter</button>
+                    </div>
+                  </div>
+                  <div style="overflow-x:auto;">
+                    <table class="cc-table">
+                      <thead>
+                        <tr>
+                          <th>Direction</th>
+                          <th>Caller / Contact</th>
+                          <th>Virtual Number</th>
+                          <th>Agent Handled</th>
+                          <th>Date & Time</th>
+                          <th>Duration</th>
+                          <th>Status</th>
+                          <th>Recording & Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cc-history-table-body">
+                        <!-- Rendered by JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 3: Phone Numbers ================= -->
+              <div id="cc-view-numbers" class="cc-subview" style="display:none;">
+                <div class="cc-table-card">
+                  <div class="cc-table-header">
+                    <h4>📞 Virtual Phone Numbers Provisioning</h4>
+                    <button class="btn btn-primary" onclick="openAddNumberModal()" style="background:#22C55E; font-size:12px; padding:6px 14px;">
+                      ➕ Add Virtual Number
+                    </button>
+                  </div>
+                  <div style="overflow-x:auto;">
+                    <table class="cc-table">
+                      <thead>
+                        <tr>
+                          <th>Number</th>
+                          <th>Friendly Name</th>
+                          <th>Routing Target</th>
+                          <th>Recording</th>
+                          <th>Voicemail</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cc-numbers-table-body">
+                        <!-- Rendered by JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 4: Call Queues ================= -->
+              <div id="cc-view-queues" class="cc-subview" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                  <div>
+                    <h4 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">🎧 Inbound Call Queues & ACD Dispatch</h4>
+                    <p style="font-size:12px; color:#64748B; margin:3px 0 0 0;">Automatic routing strategies: Round-Robin, Longest-Idle agent, and Ring-All</p>
+                  </div>
+                  <button class="btn btn-secondary" onclick="loadCallQueues()">🔄 Refresh Queues</button>
+                </div>
+                <div class="cc-kpi-grid" id="cc-queues-grid">
+                  <!-- Rendered by JS -->
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 5: Contacts CRM ================= -->
+              <div id="cc-view-contacts" class="cc-subview" style="display:none;">
+                <div class="cc-table-card">
+                  <div class="cc-table-header">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <h4>👥 Caller Profiles & Client Directory</h4>
+                      <input type="text" id="contacts-search-input" placeholder="Search contact name, number..." onkeyup="if(event.key==='Enter') loadCallerContacts()" style="padding:6px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:12px; width:220px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddContactModal()" style="background:#22C55E; font-size:12px; padding:6px 14px;">
+                      ➕ New Contact
+                    </button>
+                  </div>
+                  <div style="overflow-x:auto;">
+                    <table class="cc-table">
+                      <thead>
+                        <tr>
+                          <th>Contact Name & Org</th>
+                          <th>Phone Number</th>
+                          <th>Email</th>
+                          <th>Call History</th>
+                          <th>Notes</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cc-contacts-table-body">
+                        <!-- Rendered by JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 6: IVR / Routing ================= -->
+              <div id="cc-view-ivr" class="cc-subview" style="display:none;">
+                <div id="cc-ivr-content">
+                  <!-- Rendered by JS -->
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 7: Team Presence ================= -->
+              <div id="cc-view-team" class="cc-subview" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                  <div>
+                    <h4 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">👥 Agent Live Presence & Status</h4>
+                    <p style="font-size:12px; color:#64748B; margin:3px 0 0 0;">Real-time availability of call center agents and dispatch supervisors</p>
+                  </div>
+                  <button class="btn btn-secondary" onclick="loadTeamPresence()">🔄 Refresh Team</button>
+                </div>
+                <div class="cc-kpi-grid" id="cc-team-grid">
+                  <!-- Rendered by JS -->
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 8: Reports & Insights ================= -->
+              <div id="cc-view-reports" class="cc-subview" style="display:none;">
+                <div class="cc-table-card" style="padding:24px;">
+                  <h4 style="font-size:18px; font-weight:800; color:#0F172A; margin:0 0 8px 0;">📊 Operational Performance Analytics</h4>
+                  <p style="font-size:12px; color:#64748B; margin:0 0 20px 0;">Daily service levels, first-contact resolution rates, and average handle duration</p>
+                  
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px;">
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:16px;">
+                      <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">First Call Resolution</div>
+                      <div style="font-size:24px; font-weight:800; color:#10B981; margin:6px 0;" id="report-fcr-val">100.0%</div>
+                      <div style="font-size:11px; color:#64748B;">Industry benchmark: >85%</div>
+                    </div>
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:16px;">
+                      <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Average Handle Time</div>
+                      <div style="font-size:24px; font-weight:800; color:#2563EB; margin:6px 0;" id="report-aht-val">2m 25s</div>
+                      <div style="font-size:11px; color:#64748B;">Target: <3m 30s</div>
+                    </div>
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:16px;">
+                      <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Average Queue Wait</div>
+                      <div style="font-size:24px; font-weight:800; color:#059669; margin:6px 0;" id="report-sl-val">12s</div>
+                      <div style="font-size:11px; color:#64748B;">Answered promptly</div>
+                    </div>
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:16px;">
+                      <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Abandonment Rate</div>
+                      <div style="font-size:24px; font-weight:800; color:#EF4444; margin:6px 0;" id="report-aband-val">0.0%</div>
+                      <div style="font-size:11px; color:#64748B;">Threshold: <3.0%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 9: Recordings ================= -->
+              <div id="cc-view-recordings" class="cc-subview" style="display:none;">
+                <div class="cc-table-card">
+                  <div class="cc-table-header">
+                    <h4>⏺️ Audio Call Recordings Archive</h4>
+                    <button class="btn btn-secondary" onclick="loadCallRecordings()">🔄 Refresh Recordings</button>
+                  </div>
+                  <div style="overflow-x:auto;">
+                    <table class="cc-table">
+                      <thead>
+                        <tr>
+                          <th>Caller</th>
+                          <th>Agent</th>
+                          <th>Date</th>
+                          <th>Duration</th>
+                          <th>Audio Player</th>
+                          <th>Download</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cc-recordings-table-body">
+                        <!-- Rendered by JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 10: Missed Calls ================= -->
+              <div id="cc-view-missed" class="cc-subview" style="display:none;">
+                <div class="cc-table-card">
+                  <div class="cc-table-header">
+                    <h4>🔔 Missed / Abandoned Calls Callback List</h4>
+                    <button class="btn btn-secondary" onclick="loadMissedCalls()">🔄 Refresh</button>
+                  </div>
+                  <div style="overflow-x:auto;">
+                    <table class="cc-table">
+                      <thead>
+                        <tr>
+                          <th>Status</th>
+                          <th>Caller Number</th>
+                          <th>Queue</th>
+                          <th>Time Missed</th>
+                          <th>Wait Duration</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="cc-missed-table-body">
+                        <!-- Rendered by JS -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 11: Settings ================= -->
+              <div id="cc-view-settings" class="cc-subview" style="display:none;">
+                <div class="cc-table-card" style="padding:24px;">
+                  <h4 style="font-size:18px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">⚙️ Programmable Voice Trunk & WebRTC Integration</h4>
+                  <p style="font-size:12px; color:#64748B; margin:0 0 20px 0;">Configure your Twilio, Africa's Talking or SIP trunk credentials for live PSTN and mobile routing.</p>
+
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+                    <div>
+                      <div class="form-group" style="margin-bottom:14px;">
+                        <label style="font-size:12px; font-weight:700;">Voice Provider Trunk</label>
+                        <select class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+                          <option value="twilio" selected>Twilio Voice WebRTC SDK</option>
+                          <option value="africastalking">Africa's Talking Voice Trunk</option>
+                          <option value="sip">Custom SIP / Asterisk PBX</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group" style="margin-bottom:14px;">
+                        <label style="font-size:12px; font-weight:700;">Account SID / Username</label>
+                        <input type="text" class="form-control" value="AC_corpsec_voice_demo" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+                      </div>
+
+                      <div class="form-group" style="margin-bottom:14px;">
+                        <label style="font-size:12px; font-weight:700;">Auth Token / API Secret</label>
+                        <input type="password" class="form-control" value="••••••••••••••••••••" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+                      </div>
+                    </div>
+
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
+                      <h5 style="margin:0 0 10px 0; font-size:14px; font-weight:800;">🎙️ Web Audio & Microphone Check</h5>
+                      <p style="font-size:12px; color:#64748B; margin-bottom:14px;">Test your browser's audio synthesis and DTMF oscillator pipeline.</p>
+                      <button class="btn btn-secondary" onclick="playDTMFTone('1')" style="font-size:12px; margin-right:8px;">
+                        🔊 Test Keypad DTMF
+                      </button>
+                      <button class="btn btn-secondary" onclick="testIVRGreetingVoice()" style="font-size:12px;">
+                        🎙️ Test Voice Synthesizer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </main>
+        </div>
+      </section>
+
+      <!-- Tab Panel: Admin Incident Reports -->
       <section id="panel-incidents" style="display:none;">
         <div class="metrics-grid" style="margin-bottom:24px;">
           <div class="metric-card metric-pink" style="cursor:pointer; transition:transform 0.15s ease;" onclick="filterAdminIncidents('ALL')" title="Click to view all incident reports">
@@ -3620,9 +4124,12 @@
         <!-- 4 KPI Metric Cards -->
         <div class="kpi-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; margin-bottom:24px;">
           <div class="kpi-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
-            <div style="font-size:12px; font-weight:700; color:#64748B;">TOTAL EXPENSES (THIS MONTH)</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-size:12px; font-weight:700; color:#64748B;" id="kpi-expenses-period-title">TOTAL EXPENSES (THIS MONTH)</div>
+              <span id="kpi-expenses-month-badge" class="badge" style="background:#EEF2FF; color:#4F46E5; font-size:11px; font-weight:700;">Nov 2026</span>
+            </div>
             <div id="kpi-expenses-monthly-total" style="font-size:24px; font-weight:900; color:#0F172A; margin-top:4px;">KES 0.00</div>
-            <div style="font-size:11px; color:#DC2626; font-weight:600; margin-top:4px;" id="kpi-expenses-ytd-subtitle">YTD Operational Outflow</div>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;" id="kpi-expenses-last-month-subtext">Last Month (Oct): KES 0.00</div>
           </div>
           <div class="kpi-card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px;">
             <div style="font-size:12px; font-weight:700; color:#64748B;">PETTY CASH FLOAT BALANCE</div>
@@ -3656,7 +4163,12 @@
           <div id="subtab-expense-all">
             <!-- Filter Bar -->
             <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
-              <input type="text" id="expense-filter-search" class="form-control" placeholder="Search payee, notes, voucher..." style="max-width:220px;" oninput="applyExpenseFilters()">
+              <select id="expense-filter-month" class="form-control" style="max-width:230px; font-weight:700; border-color:#93C5FD; background:#F0F9FF;" onchange="applyExpenseFilters()">
+                <option value="this_month">📅 This Month (Current)</option>
+                <option value="last_month">⏮️ Last Month (Previous)</option>
+                <option value="" selected>📋 All Recorded Months</option>
+              </select>
+              <input type="text" id="expense-filter-search" class="form-control" placeholder="Search payee, notes, voucher..." style="max-width:210px;" oninput="applyExpenseFilters()">
               <select id="expense-filter-category" class="form-control" style="max-width:180px;" onchange="applyExpenseFilters()">
                 <option value="">All Categories</option>
                 <option value="Office Supplies & Admin">Office Supplies & Admin</option>
@@ -3677,7 +4189,11 @@
                 <option value="RECURRING">Recurring</option>
                 <option value="CAPITAL_PURCHASE">Capital Purchase</option>
               </select>
-              <button class="btn btn-secondary" style="font-size:12px;" onclick="resetExpenseFilters()">Reset Filters</button>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 11px;" onclick="setExpenseMonthQuick('this_month')">📅 This Month</button>
+                <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 11px;" onclick="setExpenseMonthQuick('last_month')">⏮️ Last Month</button>
+                <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 11px;" onclick="resetExpenseFilters()">Reset</button>
+              </div>
             </div>
 
             <!-- Table -->
@@ -3747,8 +4263,13 @@
 
           <!-- SUBTAB 3: RECURRING COMMITMENTS -->
           <div id="subtab-expense-recurring" style="display:none;">
-            <div style="margin-bottom:14px; font-size:13px; color:#64748B;">
-              Scheduled obligations, licenses, and monthly firm liabilities with auto-tracked billing cycles.
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+              <div style="font-size:13px; color:#64748B;">
+                Scheduled obligations, rent, utilities, compliance licenses, and recurring liabilities with automated due dates & payment histories.
+              </div>
+              <button class="btn btn-primary" style="font-size:12px; padding:7px 15px; background:#1D4ED8; border-color:#1D4ED8;" onclick="openAddRecurringExpenseModal()">
+                ➕ Add Recurring Commitment
+              </button>
             </div>
             <div class="table-container">
               <table class="data-table">
@@ -3756,16 +4277,17 @@
                   <tr>
                     <th>Commitment Name</th>
                     <th>Category</th>
-                    <th>Billing Frequency</th>
-                    <th>Amount per Cycle (KES)</th>
-                    <th>Monthly Equiv (KES)</th>
+                    <th>To Whom (Payee / Vendor)</th>
+                    <th>Cycle & Amount</th>
+                    <th>Monthly Equiv</th>
+                    <th>Last Paid (When Paid)</th>
                     <th>Next Due Date</th>
-                    <th>Vendor / Payee</th>
                     <th>Status</th>
+                    <th style="text-align:center;">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="recurring-expenses-table-body">
-                  <tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Loading recurring obligations...</td></tr>
+                  <tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;">Loading recurring obligations...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -3837,6 +4359,27 @@
           <div style="display:flex; gap:10px;">
             <button class="btn btn-primary" onclick="triggerPwaInstall()" style="background:#2563EB; border:none; padding:8px 18px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px;">
               <span>⚡</span> Install on this Machine
+            </button>
+          </div>
+        </div>
+
+        <!-- Automatic Silent Update System Indicator -->
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; padding:14px 20px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font-size:24px;">🔄</div>
+            <div>
+              <div style="font-size:13.5px; font-weight:800; color:#166534; display:flex; align-items:center; gap:8px;">
+                <span>Automatic Silent Update System: Active</span>
+                <span class="badge" style="background:#22C55E; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:4px;">AUTO-SYNC</span>
+              </div>
+              <div style="font-size:12px; color:#15803D; margin-top:2px;">
+                Whenever new updates, features, or payroll rules are published on the server, your downloaded app automatically detects the new release, downloads the files in the background, and seamlessly applies them. You never need to re-download or reinstall anything.
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn btn-secondary" onclick="window.CorpSecUpdater &amp;&amp; window.CorpSecUpdater.checkForUpdates()" style="font-size:12px; padding:6px 14px; font-weight:700; color:#166534; border-color:#86EFAC; background:#DCFCE7; cursor:pointer;">
+              🔍 Check for Updates Now
             </button>
           </div>
         </div>
@@ -8234,7 +8777,284 @@
     </div>
   </div>
 
-  <!-- Modal: Add Recommendation -->
+  <!-- Modal: Add Recurring Commitment -->
+  <div id="modal-add-recurring" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeAddRecurringExpenseModal()">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">➕ Add Recurring Expenditure Commitment</h3>
+        <button onclick="closeAddRecurringExpenseModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-recurring" onsubmit="handleAddRecurringSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Obligation / Commitment Title *</label>
+              <input type="text" id="rec-add-title" class="form-control" required placeholder="e.g. HQ Office Rent Upper Hill">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Category *</label>
+              <select id="rec-add-category" class="form-control" required>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">To Whom (Payee / Vendor) *</label>
+              <input type="text" id="rec-add-payee" class="form-control" required placeholder="e.g. Upper Hill Properties Ltd, Safaricom">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount per Cycle (KES) *</label>
+              <input type="number" step="0.01" id="rec-add-amount" class="form-control" required placeholder="0.00">
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Billing Frequency *</label>
+              <select id="rec-add-interval" class="form-control" required>
+                <option value="MONTHLY" selected>Monthly</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="ANNUALLY">Annual / Yearly</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Next Due Date *</label>
+              <input type="date" id="rec-add-due-date" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Preferred Payment Method</label>
+              <select id="rec-add-payment-method" class="form-control">
+                <option value="BANK_TRANSFER">Bank EFT / Transfer</option>
+                <option value="MPESA">M-Pesa Paybill / Till</option>
+                <option value="CHEQUE">Bank Cheque</option>
+                <option value="CASH">Cash at Hand</option>
+                <option value="PETTY_CASH">Petty Cash Float</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Initial Status</label>
+              <select id="rec-add-status" class="form-control">
+                <option value="ACTIVE" selected>🟢 ACTIVE</option>
+                <option value="PAUSED">⏸️ PAUSED</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Notes / Contract Reference</label>
+            <textarea id="rec-add-description" class="form-control" rows="2" placeholder="Lease contract reference, account number, meter number..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddRecurringExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#1D4ED8; border-color:#1D4ED8;">💾 Register Recurring Commitment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Recurring Commitment -->
+  <div id="modal-edit-recurring" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeEditRecurringExpenseModal()">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">✏️ Edit Recurrent Expenditure</h3>
+        <button onclick="closeEditRecurringExpenseModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-recurring" onsubmit="handleEditRecurringSubmit(event)">
+        <input type="hidden" id="rec-edit-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Obligation Title *</label>
+              <input type="text" id="rec-edit-title" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Category *</label>
+              <select id="rec-edit-category" class="form-control" required>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">To Whom (Payee / Vendor) *</label>
+              <input type="text" id="rec-edit-payee" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount per Cycle (KES) *</label>
+              <input type="number" step="0.01" id="rec-edit-amount" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Frequency *</label>
+              <select id="rec-edit-interval" class="form-control" required>
+                <option value="MONTHLY">Monthly</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="ANNUALLY">Annual / Yearly</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Next Due Date *</label>
+              <input type="date" id="rec-edit-due-date" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Last Paid Date</label>
+              <input type="date" id="rec-edit-last-paid-date" class="form-control">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Status</label>
+              <select id="rec-edit-status" class="form-control">
+                <option value="ACTIVE">🟢 ACTIVE</option>
+                <option value="PAUSED">⏸️ PAUSED</option>
+                <option value="CANCELLED">🔴 CANCELLED</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Notes / Description</label>
+            <textarea id="rec-edit-description" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditRecurringExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#1E3A5F; border-color:#1E3A5F;">💾 Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Record Payment for Recurring Commitment -->
+  <div id="modal-pay-recurring" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closePayRecurringExpenseModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">💳 Record Recurring Obligation Payment</h3>
+        <button onclick="closePayRecurringExpenseModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-pay-recurring" onsubmit="handlePayRecurringSubmit(event)">
+        <input type="hidden" id="rec-pay-id">
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px; margin-top:12px; margin-bottom:14px;">
+          <div style="font-size:13px; font-weight:800; color:#166534;" id="rec-pay-summary-title">Obligation Title</div>
+          <div style="font-size:12px; color:#15803D; margin-top:4px;">
+            <span>To Whom: <strong id="rec-pay-summary-payee">Vendor</strong></span> &bull; 
+            <span>Standard: <strong id="rec-pay-summary-amount">KES 0.00</strong></span>
+          </div>
+          <div style="font-size:11px; color:#166534; margin-top:2px;" id="rec-pay-summary-due">Current Due Date: --</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payment Date *</label>
+              <input type="date" id="rec-pay-date" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount Paid (KES) *</label>
+              <input type="number" step="0.01" id="rec-pay-amount" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payment Method *</label>
+              <select id="rec-pay-method" class="form-control" required>
+                <option value="BANK_TRANSFER">Bank EFT / Transfer</option>
+                <option value="MPESA">M-Pesa Till / Paybill</option>
+                <option value="CHEQUE">Bank Cheque</option>
+                <option value="CASH">Cash at Hand</option>
+                <option value="PETTY_CASH">Petty Cash Float</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Receipt / Voucher / Ref *</label>
+              <input type="text" id="rec-pay-ref" class="form-control" required placeholder="e.g. EFT-9941, KPLC-8812">
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Description / Billing Period</label>
+            <input type="text" id="rec-pay-notes" class="form-control" placeholder="e.g. November 2026 Office Rent Settlement">
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px; background:#F8FAFC; padding:10px; border-radius:6px; border:1px solid #E2E8F0;">
+            <input type="checkbox" id="rec-pay-advance" checked style="width:16px; height:16px; cursor:pointer;">
+            <label for="rec-pay-advance" style="font-size:12px; font-weight:600; color:#334155; cursor:pointer; margin:0;">
+              Automatically advance Next Due Date forward by 1 cycle
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closePayRecurringExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#059669; border-color:#059669;">💳 Confirm & Save Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Recurring Expenditure Payment History -->
+  <div id="modal-recurring-history" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeRecurringHistoryModal()">
+    <div class="modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">📜 Recurrent Payment Audit History</h3>
+          <p style="color:#64748B; font-size:12px; margin:4px 0 0 0;" id="rec-history-subtitle">Historical payments made for this commitment</p>
+        </div>
+        <button onclick="closeRecurringHistoryModal()" style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:14px 0; max-height:60vh; overflow-y:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date Paid</th>
+              <th>To Whom (Payee)</th>
+              <th>Amount (KES)</th>
+              <th>Payment Method</th>
+              <th>Receipt / Voucher</th>
+              <th>Recorded By</th>
+            </tr>
+          </thead>
+          <tbody id="recurring-history-table-body">
+            <tr><td colspan="6" style="text-align:center; padding:20px; color:#64748B;">Loading payment history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; padding-top:12px; border-top:1px solid #E2E8F0;">
+        <button type="button" class="btn btn-secondary" onclick="closeRecurringHistoryModal()">Close</button>
+      </div>
+    </div>
+  </div>
   <div id="modal-add-recommendation" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeAddRecommendationModal()">
     <div class="modal-content" style="max-width: 500px;">
       <div class="modal-header">
@@ -8543,6 +9363,434 @@
         if (hld) hld.style.display = 'none';
         if (bAct) { bAct.style.background = '#2563EB'; bAct.style.color = '#FFF'; }
         if (bHld) { bHld.style.background = '#F1F5F9'; bHld.style.color = '#475569'; }
+      }
+    };
+  </script>
+
+  <!-- ==========================================================================
+       PERSISTENT FLOATING SOFTPHONE DIALER WIDGET
+       Accessible from all screens without losing navigation place or active call
+       ========================================================================== -->
+  <div id="softphone-widget-container">
+    <!-- Minimized Floating Pill Button -->
+    <div id="softphone-minimized" class="softphone-minimized-btn" onclick="toggleSoftphone(true)" title="Open Call Center Softphone">
+      <span style="font-size:18px;">📞</span>
+      <span id="minimized-call-status" style="font-size:12px; font-weight:700;">Softphone Ready</span>
+    </div>
+
+    <!-- Expanded Softphone Card -->
+    <div id="softphone-expanded" class="softphone-expanded-card" style="display:none;">
+      <!-- Softphone Header -->
+      <div class="softphone-top-header">
+        <div class="softphone-top-title">
+          <span>📞</span>
+          <span>CorpSec Softphone</span>
+        </div>
+        <div class="softphone-header-controls">
+          <button class="softphone-icon-btn" onclick="toggleSoftphone(false)" title="Minimize Softphone">🗕</button>
+        </div>
+      </div>
+
+      <!-- Softphone Body -->
+      <div class="softphone-body">
+
+        <!-- Incoming Call Banner (Pulsing) -->
+        <div id="softphone-incoming-banner" class="softphone-incoming-banner" style="display:none;">
+          <div class="softphone-incoming-details">
+            <div style="font-size:28px;">🔔</div>
+            <div>
+              <div id="incoming-caller-name" style="font-weight:800; font-size:14px; color:#1E3A8A;">Incoming Call...</div>
+              <div id="incoming-caller-number" style="font-size:12px; font-family:monospace; color:#3B82F6;">+254 700 000 000</div>
+              <div id="incoming-caller-queue" style="font-size:11px; color:#60A5FA; margin-top:2px;">Queue: General</div>
+            </div>
+          </div>
+          <div class="softphone-incoming-actions">
+            <button class="btn-incoming-answer" onclick="softphoneAnswerCall()">
+              ✔ Accept
+            </button>
+            <button class="btn-incoming-decline" onclick="softphoneDeclineCall()">
+              ✕ Decline
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. Keypad / Outbound Screen -->
+        <div id="softphone-keypad-view">
+          <div class="softphone-screen">
+            <input type="text" id="softphone-number-input" placeholder="Dial number..." onkeyup="if(event.key==='Enter') softphoneDialCall()">
+            <button class="softphone-screen-backspace" onclick="softphoneBackspace()" title="Backspace">⌫</button>
+          </div>
+
+          <div class="softphone-contact-preview" id="softphone-contact-preview"></div>
+
+          <!-- 3x4 DTMF Dialpad Grid -->
+          <div class="softphone-keypad">
+            <div class="softphone-key" onclick="softphoneKeyPress('1')">
+              <span class="softphone-key-digit">1</span>
+              <span class="softphone-key-letters">&nbsp;</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('2')">
+              <span class="softphone-key-digit">2</span>
+              <span class="softphone-key-letters">ABC</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('3')">
+              <span class="softphone-key-digit">3</span>
+              <span class="softphone-key-letters">DEF</span>
+            </div>
+
+            <div class="softphone-key" onclick="softphoneKeyPress('4')">
+              <span class="softphone-key-digit">4</span>
+              <span class="softphone-key-letters">GHI</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('5')">
+              <span class="softphone-key-digit">5</span>
+              <span class="softphone-key-letters">JKL</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('6')">
+              <span class="softphone-key-digit">6</span>
+              <span class="softphone-key-letters">MNO</span>
+            </div>
+
+            <div class="softphone-key" onclick="softphoneKeyPress('7')">
+              <span class="softphone-key-digit">7</span>
+              <span class="softphone-key-letters">PQRS</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('8')">
+              <span class="softphone-key-digit">8</span>
+              <span class="softphone-key-letters">TUV</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('9')">
+              <span class="softphone-key-digit">9</span>
+              <span class="softphone-key-letters">WXYZ</span>
+            </div>
+
+            <div class="softphone-key" onclick="softphoneKeyPress('*')">
+              <span class="softphone-key-digit">*</span>
+              <span class="softphone-key-letters">&nbsp;</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('0')">
+              <span class="softphone-key-digit">0</span>
+              <span class="softphone-key-letters">+</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('#')">
+              <span class="softphone-key-digit">#</span>
+              <span class="softphone-key-letters">&nbsp;</span>
+            </div>
+          </div>
+
+          <div class="softphone-dial-actions">
+            <button class="btn-dial-call" onclick="softphoneDialCall()">
+              <span>📞</span> Call
+            </button>
+            <button class="btn btn-secondary" onclick="softphoneClear()" style="height:48px; border-radius:12px; font-weight:700;" title="Clear Input">
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Active Connected In-Call Screen -->
+        <div id="softphone-active-call-view" style="display:none;" class="softphone-active-call-pane">
+          <div class="softphone-call-avatar" id="active-call-avatar">
+            👤
+          </div>
+          <div class="softphone-call-contact-name" id="active-call-contact">Caller Name</div>
+          <div class="softphone-call-number" id="active-call-number">+254 700 000 000</div>
+          <div class="softphone-call-timer" id="active-call-timer">00:00</div>
+
+          <!-- Controls: Mute, Hold, Transfer -->
+          <div class="softphone-incall-controls">
+            <button class="softphone-incall-btn" id="btn-softphone-mute" onclick="softphoneToggleMute()">
+              <span class="icon">🎙</span>
+              <span class="label">Mute</span>
+            </button>
+            <button class="softphone-incall-btn" id="btn-softphone-hold" onclick="softphoneToggleHold()">
+              <span class="icon">⏸</span>
+              <span class="label">Hold</span>
+            </button>
+            <button class="softphone-incall-btn" onclick="softphoneOpenTransfer()">
+              <span class="icon">↗</span>
+              <span class="label">Transfer</span>
+            </button>
+          </div>
+
+          <!-- Live Notes & Disposition -->
+          <div style="width:100%; margin-bottom:14px; text-align:left;">
+            <label style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase;">Call Disposition</label>
+            <select id="active-call-disposition" style="width:100%; padding:6px 10px; border:1px solid #E2E8F0; border-radius:8px; font-size:11px; margin-top:3px; margin-bottom:8px;">
+              <option value="RESOLVED">Resolved / Routine Query</option>
+              <option value="FOLLOW_UP_REQUIRED">Follow-up Required</option>
+              <option value="ESCALATED_SUPERVISOR">Escalated to Supervisor</option>
+              <option value="EMERGENCY_DISPATCH">Emergency Guard Dispatched</option>
+            </select>
+            <textarea id="active-call-quick-notes" placeholder="Type call notes here..." rows="2" style="width:100%; padding:6px 8px; border:1px solid #E2E8F0; border-radius:8px; font-size:11px; resize:none;"></textarea>
+          </div>
+
+          <button class="btn-dial-hangup" onclick="softphoneHangup()">
+            <span>🔴</span> End Call
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       CALL CENTER MODALS
+       ========================================================================== -->
+
+  <!-- 1. Simulate Inbound Call Modal -->
+  <div id="modal-simulate-call" class="modal-overlay" style="display:none; z-index:10000;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:440px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <h4 style="margin:0; font-size:18px; font-weight:800; color:#0F172A;">⚡ Simulate Incoming Call</h4>
+        <button onclick="document.getElementById('modal-simulate-call').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <p style="font-size:12px; color:#64748B; margin:0 0 16px 0;">
+        Simulate an incoming telecom trunk call routed through ACD logic to test queuing, softphone ringing, and agent answer.
+      </p>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Caller Name</label>
+        <input type="text" id="sim-caller-name" class="form-control" value="Capt. David Kiprono" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Caller Phone Number</label>
+        <input type="text" id="sim-caller-number" class="form-control" value="+254 711 999 888" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Target Call Queue</label>
+        <select id="sim-queue-select" class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="1">Emergency Guard Dispatch (Priority High)</option>
+          <option value="2">General Client Services (Standard)</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:20px;">
+        <label style="font-size:12px; font-weight:700;">Priority Level</label>
+        <select id="sim-priority-select" class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="10">High (Emergency)</option>
+          <option value="5" selected>Normal</option>
+          <option value="1">Low</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-simulate-call').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="executeSimulateCall()" style="background:#22C55E;">
+          ⚡ Ring Softphone Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Transfer Active Call Modal -->
+  <div id="modal-call-transfer" class="modal-overlay" style="display:none; z-index:10000;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:400px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">↗ Transfer Active Call</h4>
+        <button onclick="document.getElementById('modal-call-transfer').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <p style="font-size:12px; color:#64748B; margin:0 0 16px 0;">Select a destination queue to transfer this caller.</p>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Target Queue</label>
+        <select id="transfer-queue-select" class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="1">Emergency Guard Dispatch</option>
+          <option value="2">General Client Services</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-call-transfer').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="softphoneExecuteTransfer()" style="background:#2563EB;">Transfer Call</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Call Notes & Disposition Modal -->
+  <div id="modal-call-notes" class="modal-overlay" style="display:none; z-index:10000;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:480px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <input type="hidden" id="notes-call-id" value="">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">📝 Call Notes & Disposition</h4>
+        <button onclick="document.getElementById('modal-call-notes').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <div id="notes-caller-title" style="font-size:13px; font-weight:700; color:#3B82F6; margin-bottom:14px;">Caller Record</div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:12px; font-weight:700;">Disposition</label>
+        <select id="notes-disposition-select" class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="RESOLVED">Resolved / Routine Query</option>
+          <option value="FOLLOW_UP_REQUIRED">Follow-up Required</option>
+          <option value="ESCALATED_SUPERVISOR">Escalated to Supervisor</option>
+          <option value="EMERGENCY_DISPATCH">Emergency Guard Dispatched</option>
+          <option value="REJECTED">Spam / Rejected</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Detailed Notes</label>
+        <textarea id="notes-textarea" rows="4" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:13px; resize:vertical;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-call-notes').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCallNotes()" style="background:#22C55E;">Save Notes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Add Virtual Number Modal -->
+  <div id="modal-add-virtual-number" class="modal-overlay" style="display:none; z-index:10000;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:440px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">➕ Provision Virtual Phone Number</h4>
+        <button onclick="document.getElementById('modal-add-virtual-number').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Phone Number (E.164 Format)</label>
+        <input type="text" id="new-num-phone" class="form-control" placeholder="+254 20 790 0001" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Friendly Name / Label</label>
+        <input type="text" id="new-num-label" class="form-control" placeholder="HQ Primary HotLine" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Number Type</label>
+        <select id="new-num-type" class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="TOLL_FREE">Toll-Free</option>
+          <option value="LOCAL" selected>Local Landline</option>
+          <option value="MOBILE">Mobile</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Assigned Inbound Queue</label>
+        <select id="new-num-queue" class="form-control" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="1">Emergency Guard Dispatch</option>
+          <option value="2">General Client Services</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add-virtual-number').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddVirtualNumber()" style="background:#22C55E;">Save Number</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Add Contact Modal -->
+  <div id="modal-add-contact" class="modal-overlay" style="display:none; z-index:10000;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:440px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">➕ Add Contact to Caller CRM</h4>
+        <button onclick="document.getElementById('modal-add-contact').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Full Name</label>
+        <input type="text" id="contact-full-name" class="form-control" placeholder="John Doe" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Phone Number</label>
+        <input type="text" id="contact-phone" class="form-control" placeholder="+254 712 345 678" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Organization / Client Site</label>
+        <input type="text" id="contact-org" class="form-control" placeholder="Westlands Mall Security" style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Notes</label>
+        <textarea id="contact-notes" rows="2" class="form-control" placeholder="Key contact person..." style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; resize:none;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add-contact').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddContact()" style="background:#22C55E;">Save Contact</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.openAddNumberModal = function() {
+      document.getElementById('modal-add-virtual-number').style.display = 'flex';
+    };
+
+    window.openAddContactModal = function() {
+      document.getElementById('modal-add-contact').style.display = 'flex';
+    };
+
+    window.submitAddVirtualNumber = async function() {
+      const phone = document.getElementById('new-num-phone').value.trim();
+      const label = document.getElementById('new-num-label').value.trim();
+      const type = document.getElementById('new-num-type').value;
+      const queueId = parseInt(document.getElementById('new-num-queue').value);
+
+      if (!phone) {
+        if (typeof showToast === 'function') showToast('Please provide a phone number', 'warning');
+        return;
+      }
+
+      try {
+        await callCenterFetch('/api/v1/call-center/numbers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone_number: phone,
+            friendly_name: label || phone,
+            provider: 'Twilio',
+            assigned_queue_id: queueId,
+            record_calls: true,
+            voicemail_enabled: true
+          })
+        });
+
+        document.getElementById('modal-add-virtual-number').style.display = 'none';
+        if (typeof showToast === 'function') showToast('Virtual number added to database', 'success');
+        if (typeof loadPhoneNumbers === 'function') loadPhoneNumbers();
+        if (typeof loadCallCenterOverview === 'function') loadCallCenterOverview();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Failed to add number: ' + (e.message || ''), 'danger');
+      }
+    };
+
+    window.submitAddContact = async function() {
+      const name = document.getElementById('contact-full-name').value.trim();
+      const phone = document.getElementById('contact-phone').value.trim();
+      const org = document.getElementById('contact-org').value.trim();
+      const notes = document.getElementById('contact-notes').value.trim();
+
+      if (!name || !phone) {
+        if (typeof showToast === 'function') showToast('Please enter both name and phone number', 'warning');
+        return;
+      }
+
+      try {
+        await callCenterFetch('/api/v1/call-center/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: name,
+            phone_number: phone,
+            company_or_site: org,
+            notes: notes,
+            vip_level: 'STANDARD'
+          })
+        });
+
+        document.getElementById('modal-add-contact').style.display = 'none';
+        if (typeof showToast === 'function') showToast('Contact created successfully in database', 'success');
+        if (typeof loadCallerContacts === 'function') loadCallerContacts();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Error creating contact: ' + (e.message || ''), 'danger');
       }
     };
   </script>

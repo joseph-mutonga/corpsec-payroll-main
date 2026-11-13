@@ -10,7 +10,7 @@ if _workspace_root not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from application.backend.app.core.config import settings
 from application.backend.app.core.database import engine, Base, sync_db_schema
@@ -18,7 +18,7 @@ from application.backend.app.core.limiter import limiter, _rate_limit_exceeded_h
 from slowapi.errors import RateLimitExceeded
 from application.backend.app.models import *
 from application.backend.app.api.v1 import (
-    auth, guards, sites, shifts, attendance, overtime, payroll, payslips, payments, guard_portal, reports, audit, settings as sys_settings, archive, incidents, leave, statutory, roster, regions, off_days, supervisor as supervisor_module, staff as staff_module, documents as documents_module, invoices as invoices_module, assets as assets_module, clients as clients_module, company_history as company_history_module, salary_advances as salary_advances_module, desktop_app as desktop_module, expenses as expenses_module, anonymous_reporting as anonymous_reporting_module, chart_analytics as chart_analytics_module, team_chat as team_chat_module
+    auth, guards, sites, shifts, attendance, overtime, payroll, payslips, payments, guard_portal, reports, audit, settings as sys_settings, archive, incidents, leave, statutory, roster, regions, off_days, supervisor as supervisor_module, staff as staff_module, documents as documents_module, invoices as invoices_module, assets as assets_module, clients as clients_module, company_history as company_history_module, salary_advances as salary_advances_module, desktop_app as desktop_module, expenses as expenses_module, anonymous_reporting as anonymous_reporting_module, chart_analytics as chart_analytics_module, team_chat as team_chat_module, call_center as call_center_module
 )
 
 # Ensure database tables exist and schema columns are synchronized
@@ -79,6 +79,7 @@ app.include_router(expenses_module.router, prefix=settings.API_V1_STR)
 app.include_router(anonymous_reporting_module.router, prefix=settings.API_V1_STR)
 app.include_router(chart_analytics_module.router, prefix=settings.API_V1_STR)
 app.include_router(team_chat_module.router, prefix=settings.API_V1_STR)
+app.include_router(call_center_module.router, prefix=settings.API_V1_STR)
 
 # Serve Static Assets & SPA index.html
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend"))
@@ -137,6 +138,22 @@ def read_manifest():
     return {"error": "manifest not found"}
 
 
+@app.get("/version.json")
+@app.get("/api/v1/version")
+@app.get("/api/v1/system/version")
+def read_system_version_manifest():
+    from application.backend.app.api.v1.desktop_app import get_release_fingerprint
+    data = get_release_fingerprint()
+    return JSONResponse(
+        content=data,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
+
+
 @app.get("/portal-sw.js")
 def read_portal_service_worker():
     sw_file = os.path.join(frontend_dir, "portal-sw.js")
@@ -146,7 +163,9 @@ def read_portal_service_worker():
             media_type="application/javascript",
             headers={
                 "Content-Disposition": "inline",
-                "Cache-Control": "no-cache",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
                 "Service-Worker-Allowed": "/",
             },
         )

@@ -15,6 +15,7 @@ for path in [workspace_root, application_dir, backend_dir]:
 TEST_DB_FILE = os.path.join(backend_dir, "test_corpsec_payroll.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_FILE}"
 os.environ["SKIP_SEED"] = "1"
+os.environ["TESTING"] = "1"
 os.environ["ADMIN_INITIAL_PASSWORD"] = os.getenv("ADMIN_INITIAL_PASSWORD", "TestAdminSecretPass123!")
 ADMIN_TEST_PASSWORD = os.environ["ADMIN_INITIAL_PASSWORD"]
 

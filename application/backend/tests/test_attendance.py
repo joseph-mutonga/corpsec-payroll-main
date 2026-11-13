@@ -7,22 +7,46 @@ from application.backend.app.models.audit import AuditLog
 from application.backend.app.services.attendance_service import calculate_shift_hours
 
 
+from application.backend.app.core.security import create_access_token
+from application.backend.app.models.user import User, UserRole
+
+
 def get_guard_headers(client, employee_number="CS-00452", password="Guard@123456"):
-    login_resp = client.post(
-        "/api/v1/auth/login",
-        json={"email": "john.mwangi@corpsec.co.ke", "password": password}
-    )
-    token = login_resp.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    from application.backend.app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        guard_user = db.query(User).filter(User.email == "john.mwangi@corpsec.co.ke").first()
+        if not guard_user:
+            guard = db.query(Guard).filter(Guard.employee_number == employee_number).first()
+            guard_user = User(
+                email="john.mwangi@corpsec.co.ke",
+                phone="0713345678",
+                role=UserRole.GUARD.value,
+                guard_id=guard.id if guard else 1
+            )
+            db.add(guard_user)
+            db.commit()
+            db.refresh(guard_user)
+        token = create_access_token(data={"sub": str(guard_user.id), "role": guard_user.role, "user_id": guard_user.id})
+        return {"Authorization": f"Bearer {token}"}
+    finally:
+        db.close()
 
 
 def get_admin_headers(client):
-    login_resp = client.post(
-        "/api/v1/auth/login",
-        json={"email": "admin@corpsec.co.ke", "password": os.getenv("ADMIN_INITIAL_PASSWORD")}
-    )
-    token = login_resp.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    from application.backend.app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.role == UserRole.ADMIN.value).first()
+        if not admin:
+            admin = User(email="admin@corpsec.co.ke", role=UserRole.ADMIN.value)
+            db.add(admin)
+            db.commit()
+            db.refresh(admin)
+        token = create_access_token(data={"sub": str(admin.id), "role": admin.role, "user_id": admin.id})
+        return {"Authorization": f"Bearer {token}"}
+    finally:
+        db.close()
 
 
 def test_calculate_shift_hours():

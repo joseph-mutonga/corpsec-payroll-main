@@ -1,0 +1,28 @@
+{
+  "app_name": "CorpSec Payroll & Security Workforce System",
+  "version": "2.5.3",
+  "build_number": 2026111304,
+  "release_name": "CorpSec Enterprise 2.5",
+  "release_date": "2026-11-13",
+  "silent_update": true,
+  "check_interval_seconds": 30,
+  "assets": [
+    "/static/js/app.js",
+    "/static/css/styles.css",
+    "/static/js/portal.js",
+    "/static/css/portal.css",
+    "/static/js/silent-updater.js",
+    "/static/js/call-center.js",
+    "/static/css/call-center.css",
+    "/manifest.json",
+    "/portal-sw.js"
+  ],
+  "features": [
+    "Full recurrent expenditures management (Add, Edit, Mark Paid, History, and Remove)",
+    "Petty cash float top-up enhancements with direct database persistence",
+    "Monthly expense inspection and KPI recalculations",
+    "Call Centre WebRTC softphone and real-time queues",
+    "Automatic silent background update detection and seamless hot-swap"
+  ]
+}
+

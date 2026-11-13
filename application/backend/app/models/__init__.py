@@ -48,10 +48,26 @@ from application.backend.app.models.user_session import UserSession
 from application.backend.app.models.email_otp import EmailOTP
 from application.backend.app.models.anonymous_message import AnonymousMessage
 from application.backend.app.models.team_message import TeamMessage, TeamChatRead
+from application.backend.app.models.call_center import (
+    PhoneNumber,
+    CallQueue,
+    QueueMember,
+    AgentStatus,
+    CallLog,
+    CallNote,
+    CallerContact
+)
 
 __all__ = [
     "Base",
     "User",
+    "PhoneNumber",
+    "CallQueue",
+    "QueueMember",
+    "AgentStatus",
+    "CallLog",
+    "CallNote",
+    "CallerContact",
     "UserSession",
     "EmailOTP",
     "AnonymousMessage",

@@ -1,10 +1,15 @@
-const CACHE_NAME = 'corpsec-guard-portal-v4';
+const CACHE_NAME = 'corpsec-auto-update-v9';
 const APP_SHELL = [
+  '/',
   '/portal',
+  '/version.json',
   '/manifest.json',
   '/portal-sw.js',
+  '/static/css/styles.css',
+  '/static/js/app.js',
   '/static/css/portal.css',
   '/static/js/portal.js',
+  '/static/js/silent-updater.js',
   '/static/images/corpsec_logo_badge.png',
   '/static/images/corpsec_pwa_192.png',
   '/static/images/corpsec_pwa_512.png',
@@ -87,7 +92,7 @@ async function networkFirstPortal(request) {
 }
 
 async function cacheFirstShell(request) {
-  const cached = await caches.match(request, { ignoreSearch: true });
+  const cached = await caches.match(request);
   if (cached && !isUnsafeToCache(cached)) {
     return cached;
   }
@@ -109,13 +114,26 @@ async function networkFirstShell(request) {
     }
     return response;
   } catch (error) {
-    const cached = await caches.match(request, { ignoreSearch: true });
+    const cached = await caches.match(request);
     if (cached && !isUnsafeToCache(cached)) {
       return cached;
     }
     throw error;
   }
 }
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.action === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data && event.data.action === 'CLEAR_OLD_CACHES') {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(
+        keys.filter((key) => key !== CACHE_NAME).map((k) => caches.delete(k))
+      ))
+    );
+  }
+});
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;

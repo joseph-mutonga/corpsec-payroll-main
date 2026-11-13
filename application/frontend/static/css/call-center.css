@@ -1,0 +1,932 @@
+/* ==========================================================================
+   CorpSec Call Centre System - Stylesheet
+   Matches Modern SaaS Call Center Layout, Softphone Dialer & Green Accents
+   ========================================================================== */
+
+:root {
+  --cc-primary: #22C55E;        /* Vibrant green matching screenshot */
+  --cc-primary-dark: #16A34A;
+  --cc-primary-light: #DCFCE7;
+  --cc-primary-ring: rgba(34, 197, 94, 0.25);
+  --cc-bg-card: #FFFFFF;
+  --cc-bg-subtle: #F8FAFC;
+  --cc-border: #E2E8F0;
+  --cc-text-dark: #0F172A;
+  --cc-text-muted: #64748B;
+  --cc-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --cc-shadow-md: 0 4px 14px -2px rgba(15, 23, 42, 0.07);
+  --cc-shadow-lg: 0 10px 25px -3px rgba(15, 23, 42, 0.12);
+}
+
+/* Agent Status Pill in Top Bar */
+.agent-status-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.agent-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  background: #F1F5F9;
+  color: #334155;
+}
+
+.agent-status-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--cc-shadow-sm);
+}
+
+.agent-status-pill.status-available {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+  color: #065F46;
+}
+
+.agent-status-pill.status-on_call {
+  background: #FEF3C7;
+  border-color: #FDE68A;
+  color: #92400E;
+}
+
+.agent-status-pill.status-break {
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+  color: #1E40AF;
+}
+
+.agent-status-pill.status-offline {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #64748B;
+}
+
+.status-indicator-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #94A3B8;
+}
+
+.status-available .status-indicator-dot {
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+.status-on_call .status-indicator-dot {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
+}
+
+.status-break .status-indicator-dot {
+  background: #3B82F6;
+}
+
+.status-offline .status-indicator-dot {
+  background: #94A3B8;
+}
+
+/* Call Center Main Section Wrapper */
+.cc-wrapper {
+  display: flex;
+  background: #F8FAFC;
+  border: 1px solid var(--cc-border);
+  border-radius: 16px;
+  min-height: calc(100vh - 120px);
+  overflow: hidden;
+  box-shadow: var(--cc-shadow-sm);
+}
+
+/* Call Center Sub-Sidebar (Matching Screenshot) */
+.cc-sub-sidebar {
+  width: 250px;
+  background: #FFFFFF;
+  border-right: 1px solid var(--cc-border);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 12px;
+  flex-shrink: 0;
+}
+
+.cc-sub-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 14px 8px;
+  border-bottom: 1px solid #F1F5F9;
+  margin-bottom: 12px;
+}
+
+.cc-sub-sidebar-header h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--cc-text-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cc-sub-sidebar-search {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 0 4px;
+}
+
+.cc-sub-sidebar-search input {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 9999px;
+  font-size: 12px;
+  color: var(--cc-text-dark);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.cc-sub-sidebar-search input:focus {
+  background: #FFFFFF;
+  border-color: var(--cc-primary);
+  box-shadow: 0 0 0 3px var(--cc-primary-ring);
+}
+
+.cc-sub-sidebar-search .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  color: #94A3B8;
+  pointer-events: none;
+}
+
+.cc-nav-group-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #94A3B8;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 12px 10px 6px 10px;
+}
+
+.cc-sub-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  margin-bottom: 3px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.cc-sub-nav-item:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+}
+
+.cc-sub-nav-item.active {
+  background: #FFFFFF;
+  color: var(--cc-primary);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.cc-sub-nav-item .cc-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cc-sub-nav-item .cc-item-icon {
+  font-size: 15px;
+  width: 18px;
+  text-align: center;
+  display: inline-block;
+  opacity: 0.85;
+}
+
+.cc-sub-nav-item.active .cc-item-icon {
+  color: var(--cc-primary);
+  opacity: 1;
+}
+
+.cc-sub-nav-pill-badge {
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.cc-sub-nav-item.active .cc-sub-nav-pill-badge {
+  background: var(--cc-primary-light);
+  color: var(--cc-primary-dark);
+}
+
+/* Call Center Main Workspace Pane */
+.cc-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: #F8FAFC;
+}
+
+.cc-workspace-header {
+  background: #FFFFFF;
+  border-bottom: 1px solid var(--cc-border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.cc-workspace-title-group h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--cc-text-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cc-workspace-title-group p {
+  font-size: 12px;
+  color: var(--cc-text-muted);
+  margin: 3px 0 0 0;
+}
+
+.cc-workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cc-workspace-body {
+  padding: 22px 24px;
+  flex: 1;
+}
+
+/* KPI Summary Metric Cards */
+.cc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.cc-kpi-card {
+  background: #FFFFFF;
+  border: 1px solid var(--cc-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: var(--cc-shadow-sm);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cc-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cc-shadow-md);
+}
+
+.cc-kpi-info h4 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cc-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 8px 0;
+}
+
+.cc-kpi-val {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--cc-text-dark);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.cc-kpi-sub {
+  font-size: 11px;
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cc-kpi-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.cc-kpi-icon-green { background: #ECFDF5; color: #10B981; }
+.cc-kpi-icon-blue { background: #EFF6FF; color: #3B82F6; }
+.cc-kpi-icon-amber { background: #FEF3C7; color: #F59E0B; }
+.cc-kpi-icon-red { background: #FEF2F2; color: #EF4444; }
+
+/* Tables in Call Center */
+.cc-table-card {
+  background: #FFFFFF;
+  border: 1px solid var(--cc-border);
+  border-radius: 14px;
+  box-shadow: var(--cc-shadow-sm);
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+
+.cc-table-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--cc-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFFFF;
+}
+
+.cc-table-header h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cc-text-dark);
+  margin: 0;
+}
+
+.cc-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.cc-table th {
+  background: #F8FAFC;
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--cc-border);
+}
+
+.cc-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #F1F5F9;
+  color: var(--cc-text-dark);
+  vertical-align: middle;
+}
+
+.cc-table tr:hover td {
+  background: #F8FAFC;
+}
+
+/* Call Direction Badge */
+.cc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cc-badge-inbound { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+.cc-badge-outbound { background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; }
+.cc-badge-missed { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+.cc-badge-completed { background: #F0FDF4; color: #15803D; }
+.cc-badge-queued { background: #FFFBEB; color: #B45309; }
+.cc-badge-ringing { background: #EFF6FF; color: #1D4ED8; animation: pulseRing 1.5s infinite; }
+.cc-badge-in_call { background: #ECFDF5; color: #047857; }
+
+@keyframes pulseRing {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* Audio Player Compact Widget */
+.cc-audio-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #F1F5F9;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.cc-audio-player audio {
+  height: 28px;
+  max-width: 180px;
+}
+
+/* ==========================================================================
+   Persistent Floating Softphone Dialer Widget
+   ========================================================================== */
+#softphone-widget-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  font-family: inherit;
+}
+
+/* Minimized Softphone Floating Button */
+.softphone-minimized-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #0F172A;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
+  cursor: pointer;
+  border: 2px solid #334155;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.softphone-minimized-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.4);
+  background: #1E293B;
+}
+
+.softphone-minimized-btn.on-call {
+  background: #16A34A;
+  border-color: #4ADE80;
+  animation: pulseCallBtn 2s infinite;
+}
+
+.softphone-minimized-btn.ringing {
+  background: #2563EB;
+  border-color: #60A5FA;
+  animation: shakeDialer 0.6s infinite;
+}
+
+@keyframes pulseCallBtn {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); }
+  70% { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+@keyframes shakeDialer {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px) rotate(-2deg); }
+  75% { transform: translateX(4px) rotate(2deg); }
+}
+
+/* Expanded Softphone Modal / Dock */
+.softphone-expanded-card {
+  width: 340px;
+  background: #FFFFFF;
+  border-radius: 20px;
+  border: 1px solid var(--cc-border);
+  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUpSoftphone 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpSoftphone {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.softphone-top-header {
+  background: #0F172A;
+  color: #FFFFFF;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.softphone-top-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.softphone-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.softphone-icon-btn {
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.softphone-icon-btn:hover {
+  background: #1E293B;
+  color: #FFFFFF;
+}
+
+/* Softphone Body */
+.softphone-body {
+  padding: 16px 20px 20px 20px;
+  background: #FFFFFF;
+}
+
+/* Number Display Screen */
+.softphone-screen {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+.softphone-screen input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  outline: none;
+  letter-spacing: 0.5px;
+  font-family: monospace;
+}
+
+.softphone-screen-backspace {
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: color 0.15s ease;
+}
+
+.softphone-screen-backspace:hover {
+  color: #EF4444;
+}
+
+/* Caller Auto-Lookup Hint */
+.softphone-contact-preview {
+  font-size: 11px;
+  color: #64748B;
+  margin-top: -10px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+  min-height: 16px;
+}
+
+/* DTMF Keypad Grid */
+.softphone-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.softphone-key {
+  height: 52px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.softphone-key:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  transform: translateY(-1px);
+}
+
+.softphone-key:active {
+  background: #E2E8F0;
+  transform: translateY(1px) scale(0.97);
+}
+
+.softphone-key-digit {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  line-height: 1;
+}
+
+.softphone-key-letters {
+  font-size: 9px;
+  font-weight: 700;
+  color: #94A3B8;
+  letter-spacing: 1px;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+
+/* Call Actions (Dial Button) */
+.softphone-dial-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.btn-dial-call {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  background: #22C55E;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-dial-call:hover {
+  background: #16A34A;
+  transform: translateY(-1px);
+}
+
+/* In-Call Active State Screen */
+.softphone-active-call-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 6px 0;
+}
+
+.softphone-call-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #EFF6FF;
+  border: 3px solid #BFDBFE;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #2563EB;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.softphone-call-avatar.connected {
+  border-color: #86EFAC;
+  background: #ECFDF5;
+  color: #16A34A;
+}
+
+.softphone-call-contact-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0F172A;
+  margin-bottom: 3px;
+}
+
+.softphone-call-number {
+  font-size: 13px;
+  color: #64748B;
+  font-family: monospace;
+  margin-bottom: 8px;
+}
+
+.softphone-call-timer {
+  display: inline-block;
+  background: #F1F5F9;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 18px;
+  letter-spacing: 0.5px;
+}
+
+/* In-Call Controls Grid (Mute, Hold, Transfer, Notes) */
+.softphone-incall-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 18px;
+}
+
+.softphone-incall-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 56px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.softphone-incall-btn:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+}
+
+.softphone-incall-btn.active {
+  background: #FEF3C7;
+  border-color: #FDE68A;
+  color: #92400E;
+}
+
+.softphone-incall-btn.muted {
+  background: #FEE2E2;
+  border-color: #FECACA;
+  color: #DC2626;
+}
+
+.softphone-incall-btn .icon {
+  font-size: 16px;
+}
+
+.btn-dial-hangup {
+  width: 100%;
+  height: 48px;
+  background: #EF4444;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-dial-hangup:hover {
+  background: #DC2626;
+}
+
+/* Incoming Call Alert Modal/Banner */
+.softphone-incoming-banner {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
+  animation: pulseIncoming 1s infinite alternate;
+}
+
+@keyframes pulseIncoming {
+  from { background: #EFF6FF; }
+  to { background: #DBEAFE; }
+}
+
+.softphone-incoming-details {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.softphone-incoming-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-incoming-answer {
+  flex: 1;
+  background: #22C55E;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-incoming-decline {
+  flex: 1;
+  background: #EF4444;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* IVR Visual Flow Tree */
+.cc-ivr-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cc-ivr-node {
+  background: #FFFFFF;
+  border: 1px solid var(--cc-border);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+}
+
+.cc-ivr-node::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: -16px;
+  width: 2px;
+  height: 16px;
+  background: #CBD5E1;
+}
+
+.cc-ivr-node:first-child::before {
+  display: none;
+}
+
+/* Live Simulation Banner */
+.cc-sim-banner {
+  background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%);
+  color: #FFFFFF;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cc-sim-banner h4 {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.cc-sim-banner p {
+  margin: 0;
+  font-size: 12px;
+  color: #C7D2FE;
+}
+

@@ -24,7 +24,7 @@ def get_analytics_overview(
     year: Optional[int] = Query(None, description="Calendar year for monthly activity trend"),
     month: Optional[int] = Query(None, description="Specific calendar month (1-12) to inspect"),
     db: Session = Depends(get_db),
-    admin: User = Depends(authorize_chart_analytics)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """
     Performance Overview Analytics endpoint.
