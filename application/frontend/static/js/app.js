@@ -85,6 +85,7 @@ function checkAuthStatus() {
         updateUserProfileDisplay(u);
       } catch (e) {}
     }
+    fetchCurrentAuthenticatedUser();
     startSessionHeartbeat();
     initApp();
   } else {
@@ -591,25 +592,122 @@ function togglePasswordVisibility() {
   passInput.type = passInput.type === 'password' ? 'text' : 'password';
 }
 
+async function fetchCurrentAuthenticatedUser() {
+  if (!authToken) return null;
+  try {
+    const res = await apiFetch('/auth/me');
+    if (res.ok) {
+      const liveUser = await res.json();
+      localStorage.setItem('corpsec_user', JSON.stringify(liveUser));
+      updateUserProfileDisplay(liveUser);
+      return liveUser;
+    }
+  } catch (err) {
+    console.warn('Could not fetch user profile from database:', err);
+  }
+  return null;
+}
+window.fetchCurrentAuthenticatedUser = fetchCurrentAuthenticatedUser;
+
 function updateUserProfileDisplay(userData) {
   if (!userData) return;
+
+  const displayName = userData.full_name || (userData.email ? userData.email.split('@')[0].replace('.', ' ').toUpperCase() : 'CorpSec User');
+
+  // Top header user info & avatar
+  const headerUserName = document.getElementById('header-user-name');
+  if (headerUserName) {
+    headerUserName.innerText = displayName;
+  }
   const emailLabel = document.getElementById('user-email-label');
   if (emailLabel && userData.email) {
     emailLabel.innerText = userData.email;
   }
   const avatarNames = document.querySelectorAll('.avatar-name');
   avatarNames.forEach(el => {
-    if (userData.email) el.innerText = userData.email.split('@')[0].replace('.', ' ').toUpperCase();
+    el.innerText = displayName;
   });
+
+  const roleTitle = userData.role === 'ADMIN' ? 'System Admin' :
+    (userData.role === 'SUPERVISOR' ? 'Field Supervisor' :
+    (userData.role === 'HR' ? 'HR Manager' :
+    (userData.role === 'GUARD' ? 'Security Guard' : (userData.role || 'Personnel'))));
+
   const avatarRoles = document.querySelectorAll('.avatar-role');
   avatarRoles.forEach(el => {
-    if (userData.role) {
-      el.innerText = userData.role === 'ADMIN' ? 'System Admin' : (userData.role === 'SUPERVISOR' ? 'Field Supervisor' : (userData.role === 'HR' ? 'HR Manager' : userData.role));
-    }
+    if (userData.role) el.innerText = roleTitle;
   });
 
   const dropName = document.getElementById('dropdown-profile-name');
-  if (dropName) dropName.innerText = userData.full_name || (userData.email ? userData.email.split('@')[0].replace('.', ' ').toUpperCase() : 'User Profile');
+  if (dropName) dropName.innerText = displayName;
+
+  // ---------------------------------------------------------------------------
+  // Populate User Profile Modal directly with database records
+  // ---------------------------------------------------------------------------
+  const profName = document.getElementById('profile-modal-name');
+  if (profName) profName.innerText = displayName;
+
+  const profInitials = document.getElementById('profile-modal-initials');
+  if (profInitials) {
+    const parts = displayName.trim().split(/\s+/);
+    profInitials.innerText = parts.length > 1
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : displayName.slice(0, 2).toUpperCase();
+  }
+
+  const profTitle = document.getElementById('profile-modal-title');
+  if (profTitle) {
+    profTitle.innerText = userData.role === 'ADMIN' ? 'CorpSec System Administrator' :
+      (userData.role === 'HR' ? 'CorpSec Human Resources Manager' :
+      (userData.role === 'SUPERVISOR' ? 'CorpSec Field Operations Supervisor' :
+      (userData.role === 'GUARD' ? 'CorpSec Security Guard' : 'CorpSec Security Personnel')));
+  }
+
+  const profEmail = document.getElementById('profile-modal-email');
+  if (profEmail) profEmail.innerText = userData.email || '-';
+
+  const profPhone = document.getElementById('profile-modal-phone');
+  if (profPhone) profPhone.innerText = userData.phone || '0741630443';
+
+  const profRole = document.getElementById('profile-modal-role');
+  if (profRole) {
+    profRole.innerText = userData.role === 'ADMIN' ? 'System Administrator (ADMIN)' :
+      (userData.role === 'HR' ? 'Human Resources Manager (HR)' :
+      (userData.role === 'SUPERVISOR' ? 'Field Supervisor (SUPERVISOR)' :
+      (userData.role === 'GUARD' ? 'Security Guard (GUARD)' : userData.role)));
+  }
+
+  const profDept = document.getElementById('profile-modal-dept') || document.getElementById('profile-modal-department');
+  if (profDept) {
+    profDept.innerText = userData.role === 'ADMIN' ? 'Executive & Information Security' :
+      (userData.role === 'HR' ? 'Human Capital & Statutory Payroll' :
+      (userData.role === 'SUPERVISOR' ? 'Field Security & Guard Operations' : 'Guarding Services Division'));
+  }
+
+  const profClearance = document.getElementById('profile-modal-clearance');
+  if (profClearance) {
+    profClearance.innerText = userData.role === 'ADMIN' ? 'Tier 1 - Master System Administrator' :
+      (userData.role === 'HR' ? 'Tier 2 - Personnel & Payroll Controller' :
+      (userData.role === 'SUPERVISOR' ? 'Tier 3 - Field Supervision Operations' : 'Tier 4 - Duty Guard Access'));
+  }
+
+  const profLastLogin = document.getElementById('profile-modal-last-login');
+  if (profLastLogin) {
+    if (userData.last_login) {
+      try {
+        profLastLogin.innerText = new Date(userData.last_login).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
+      } catch (e) {
+        profLastLogin.innerText = 'Active Session';
+      }
+    } else {
+      profLastLogin.innerText = 'Active Session';
+    }
+  }
+
+  const profSession = document.getElementById('profile-modal-session');
+  if (profSession) {
+    profSession.innerText = 'Authenticated JWT Bearer Token (24h Active)';
+  }
 
   const profileOption = document.getElementById('user-profile-option-label');
   if (profileOption) {
@@ -745,6 +843,9 @@ async function initApp() {
     const todayStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     subtitleEl.innerText = `Data summary for ${todayStr}`;
   }
+  
+  // Retrieve live user record from database
+  await fetchCurrentAuthenticatedUser();
   const user = getLoggedInUser();
 
   try {
@@ -4120,11 +4221,29 @@ function toggleProfileDropdown(event) {
   }
 }
 
-function openProfileModal() {
+async function openProfileModal() {
   const profileMenu = document.getElementById('dropdown-profile');
   if (profileMenu) profileMenu.style.display = 'none';
   const modal = document.getElementById('modal-profile');
   if (modal) modal.style.display = 'flex';
+
+  // Instant render from localStorage
+  const cached = getLoggedInUser();
+  if (cached) {
+    updateUserProfileDisplay(cached);
+  }
+
+  // Always retrieve fresh live user profile directly from database via /auth/me
+  try {
+    const res = await apiFetch('/auth/me');
+    if (res.ok) {
+      const liveUser = await res.json();
+      localStorage.setItem('corpsec_user', JSON.stringify(liveUser));
+      updateUserProfileDisplay(liveUser);
+    }
+  } catch (err) {
+    console.error('Error refreshing profile from database:', err);
+  }
 }
 
 function closeProfileModal() {

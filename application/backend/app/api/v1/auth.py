@@ -704,8 +704,10 @@ def read_current_user(current_user: User = Depends(get_current_user)):
     if not current_user.full_name:
         if current_user.guard:
             current_user.full_name = current_user.guard.full_name
+        elif "mutonga" in (current_user.email or "").lower() or "joseph" in (current_user.email or "").lower():
+            current_user.full_name = "Joseph Mutonga"
         elif current_user.role == "ADMIN":
-            current_user.full_name = "Fiona Johnson"
+            current_user.full_name = "Joseph Mutonga"
         elif current_user.role == "HR":
             current_user.full_name = "Sarah Njeri"
         else:

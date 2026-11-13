@@ -1,4 +1,4 @@
-const CACHE_NAME = 'corpsec-auto-update-v9';
+const CACHE_NAME = 'corpsec-auto-update-v10';
 const APP_SHELL = [
   '/',
   '/portal',
