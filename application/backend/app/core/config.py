@@ -1,11 +1,17 @@
 import os
 from typing import Optional
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 _root_env = os.path.abspath(os.path.join(_current_dir, "../../../../.env"))
 _backend_env = os.path.abspath(os.path.join(_current_dir, "../../.env"))
+
+# Ensure os.environ is refreshed from .env
+load_dotenv(_root_env, override=False)
+load_dotenv(_backend_env, override=False)
+load_dotenv(".env", override=False)
 
 
 class Settings(BaseSettings):
@@ -40,6 +46,12 @@ class Settings(BaseSettings):
     SMTP_FROM: str = "CorpSec Security <no-reply@corpsec.co.ke>"
     SMTP_TLS: bool = True
     OTP_EXPIRE_MINUTES: int = 5
+
+    # Voice / Telephony (Africa's Talking & WebRTC)
+    VOICE_PROVIDER: str = "AFRICAS_TALKING"
+    AT_USERNAME: str = "corpsec"
+    AT_API_KEY: str = ""
+    DEFAULT_CALLER_ID: str = "+254 711 082 143"
     
     model_config = SettingsConfigDict(
         env_file=(_root_env, _backend_env, ".env"),

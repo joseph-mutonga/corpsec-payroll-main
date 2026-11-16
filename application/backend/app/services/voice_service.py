@@ -1,11 +1,16 @@
 import os
+import re
 import json
 import uuid
 import datetime
+import urllib.request
+import urllib.parse
+import urllib.error
 from typing import Dict, List, Optional, Any
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
+from application.backend.app.core.config import settings
 from application.backend.app.models.call_center import (
     CallQueue,
     QueueMember,
@@ -74,6 +79,23 @@ class CallCenterWebSocketManager:
 ws_manager = CallCenterWebSocketManager()
 
 
+def format_e164(phone: str) -> str:
+    """
+    Normalizes a phone number to standard E.164 format (+254...).
+    Accepts: '0741630443', '0113346350', '+254 741 630 443', '254741630443', etc.
+    """
+    if not phone:
+        return ""
+    clean = re.sub(r"[^\d+]", "", str(phone).strip())
+    if clean.startswith("+"):
+        return clean
+    if clean.startswith("254"):
+        return f"+{clean}"
+    if clean.startswith("0") and len(clean) >= 10:
+        return f"+254{clean[1:]}"
+    return f"+254{clean}"
+
+
 class VoiceProviderService:
     """
     Programmable Voice Abstraction supporting Twilio, Africa's Talking,
@@ -81,18 +103,120 @@ class VoiceProviderService:
     """
     def __init__(self):
         # Environment configuration placeholders
-        self.provider = os.getenv("VOICE_PROVIDER", "TWILIO")  # TWILIO, AFRICAS_TALKING, WEBRTC_SIMULATOR
+        self.provider = getattr(settings, "VOICE_PROVIDER", None) or os.getenv("VOICE_PROVIDER", "AFRICAS_TALKING")  # TWILIO, AFRICAS_TALKING, WEBRTC_SIMULATOR
         self.twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID", "AC_placeholder_corpsec_callcenter")
         self.twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN", "auth_placeholder_corpsec")
         self.twilio_twiml_app_sid = os.getenv("TWILIO_TWIML_APP_SID", "AP_placeholder_twiml")
-        self.africastalking_username = os.getenv("AT_USERNAME", "corpsec_voice")
-        self.africastalking_api_key = os.getenv("AT_API_KEY", "at_placeholder_api_key")
-        self.default_caller_id = os.getenv("DEFAULT_CALLER_ID", "+254 20 790 0000")
 
-    def generate_webrtc_token(self, agent_identity: str) -> Dict[str, Any]:
+    @property
+    def at_username(self) -> str:
+        return getattr(settings, "AT_USERNAME", None) or os.getenv("AT_USERNAME", "corpsec")
+
+    @property
+    def at_api_key(self) -> str:
+        return getattr(settings, "AT_API_KEY", None) or os.getenv("AT_API_KEY", "")
+
+    @property
+    def default_caller_id(self) -> str:
+        return getattr(settings, "DEFAULT_CALLER_ID", None) or os.getenv("DEFAULT_CALLER_ID", "+254 711 082 143")
+
+    def initiate_africastalking_call(self, to_phone: str, from_phone: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Calls Africa's Talking Voice API to place an outbound call.
+        Returns dict with success status, sessionId, and any error message.
+        """
+        username = self.at_username
+        api_key = self.at_api_key
+        caller_id = format_e164(from_phone or self.default_caller_id)
+        destination = format_e164(to_phone)
+
+        if not api_key:
+            return {"success": False, "error": "Africa's Talking API key (AT_API_KEY) is not configured in .env"}
+
+        url = "https://voice.africastalking.com/call"
+        payload = urllib.parse.urlencode({
+            "username": username,
+            "from": caller_id,
+            "to": destination
+        }).encode("utf-8")
+
+        headers = {
+            "apiKey": api_key,
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        req = urllib.request.Request(url, data=payload, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as res:
+                body = res.read().decode("utf-8")
+                data = json.loads(body)
+                error_msg = data.get("errorMessage")
+                if error_msg and error_msg != "None":
+                    return {"success": False, "error": error_msg, "raw": data}
+                entries = data.get("entries", [])
+                if entries:
+                    entry = entries[0]
+                    entry_status = entry.get("status", "")
+                    if entry_status.lower() in ["queued", "success"]:
+                        return {
+                            "success": True,
+                            "session_id": entry.get("sessionId"),
+                            "status": entry_status,
+                            "phone_number": entry.get("phoneNumber"),
+                            "raw": data
+                        }
+                    else:
+                        return {"success": False, "error": f"Call entry status: {entry_status}", "raw": data}
+                return {"success": False, "error": "No entries returned from Africa's Talking", "raw": data}
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8")
+            try:
+                err_json = json.loads(err_body)
+                detail = err_json.get("errorMessage") or err_json.get("detail") or err_body
+            except Exception:
+                detail = err_body
+            return {"success": False, "error": f"Africa's Talking HTTP {e.code}: {detail}"}
+        except Exception as ex:
+            return {"success": False, "error": f"Failed to connect to Africa's Talking: {str(ex)}"}
+
+    def generate_webrtc_token(self, agent_identity: str, phone_number: Optional[str] = None) -> Dict[str, Any]:
         """
         Generates client credentials/token for in-browser WebRTC softphone voice streaming.
+        If provider is AFRICAS_TALKING, requests a real capability token from Africa's Talking.
         """
+        provider = os.getenv("VOICE_PROVIDER", "AFRICAS_TALKING").upper()
+        if "AFRICA" in provider and self.at_api_key:
+            caller_num = format_e164(phone_number or self.default_caller_id)
+            url = "https://webrtc.africastalking.com/capability-token/request"
+            payload = json.dumps({
+                "username": self.at_username,
+                "clientName": agent_identity.replace("@", "_").replace(".", "_"),
+                "phoneNumber": caller_num,
+                "incoming": True,
+                "outgoing": True
+            }).encode("utf-8")
+            headers = {
+                "apiKey": self.at_api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            try:
+                req = urllib.request.Request(url, data=payload, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as res:
+                    data = json.loads(res.read().decode("utf-8"))
+                    return {
+                        "token": data.get("token"),
+                        "client_name": data.get("clientName", agent_identity),
+                        "life_time_sec": data.get("lifeTimeSec", 86400),
+                        "provider": "AFRICAS_TALKING",
+                        "incoming": data.get("incoming", True),
+                        "outgoing": data.get("outgoing", True),
+                        "phone_number": caller_num
+                    }
+            except Exception:
+                pass
+
         token_id = f"vtoken_{uuid.uuid4().hex[:16]}"
         return {
             "token": token_id,

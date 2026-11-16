@@ -1,10 +1,12 @@
+import os
 import uuid
 import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session, joinedload
 
 from application.backend.app.api.deps import get_db, get_current_user
+from application.backend.app.core.config import settings
 from application.backend.app.models.user import User, UserRole
 from application.backend.app.models.call_center import (
     PhoneNumber,
@@ -37,7 +39,7 @@ from application.backend.app.schemas.call_center import (
     SimulateCallRequest,
     CallCenterOverviewResponse
 )
-from application.backend.app.services.voice_service import ws_manager, voice_service
+from application.backend.app.services.voice_service import ws_manager, voice_service, format_e164
 
 router = APIRouter(prefix="/call-center", tags=["Call Centre System"])
 
@@ -838,28 +840,80 @@ async def initiate_outbound_call(
 ):
     """
     Softphone Outbound Dial: Initiates an outbound call session.
+    For Africa's Talking, executes standard PSTN call bridging:
+    calls the agent's mobile phone first, then when the agent answers,
+    bridges to the customer destination number via callback VoiceXML.
     """
-    dest = payload.destination_number.strip()
-    caller_id = payload.caller_id_number or "+254 20 790 0000"
+    dest = (payload.destination_number or "").strip()
+    if not dest:
+        raise HTTPException(status_code=400, detail="Destination phone number is required.")
 
-    # Lookup contact
-    contact = db.query(CallerContact).filter(CallerContact.phone_number == dest).first()
-    caller_name = contact.full_name if contact else "Outbound Destination"
+    # 1. Normalize numbers to E.164
+    clean_dest = format_e164(dest)
+    if len(clean_dest) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid destination phone number '{dest}'. Please enter a valid number (e.g. 07XXXXXXXX, 01XXXXXXXX, or +254XXXXXXXXX)."
+        )
 
+    agent_phone_raw = current_user.phone
+    if not agent_phone_raw:
+        raise HTTPException(
+            status_code=400,
+            detail="Your user profile does not have a phone number configured. Please update your profile phone number to initiate outbound calls."
+        )
+
+    clean_agent_phone = format_e164(agent_phone_raw)
+    if len(clean_agent_phone) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Your profile phone number '{agent_phone_raw}' is invalid. Please configure a valid mobile number (e.g. 07XXXXXXXX)."
+        )
+
+    # 2. Virtual Caller ID (from registered Africa's Talking number or payload)
+    caller_id = payload.caller_id_number or getattr(settings, "DEFAULT_CALLER_ID", None) or os.getenv("DEFAULT_CALLER_ID", "+254 711 082 143")
+    clean_caller_id = format_e164(caller_id)
+
+    # 3. Lookup contact
+    contact = db.query(CallerContact).filter(
+        (CallerContact.phone_number == clean_dest) |
+        (CallerContact.phone_number == dest)
+    ).first()
+    caller_name = contact.full_name if contact else (payload.destination_name or clean_dest)
+
+    provider = (getattr(settings, "VOICE_PROVIDER", None) or os.getenv("VOICE_PROVIDER", "AFRICAS_TALKING")).upper()
     sid = f"CA-OUT-{uuid.uuid4().hex[:10].upper()}"
+
+    # 4. If Africa's Talking, initiate the agent-first outbound bridging call
+    if "AFRICA" in provider:
+        at_call_res = voice_service.initiate_africastalking_call(
+            to_phone=clean_agent_phone,
+            from_phone=clean_caller_id
+        )
+
+        if not at_call_res.get("success"):
+            error_detail = at_call_res.get("error", "Africa's Talking call failed.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Africa's Talking Call Initiation Error: {error_detail}"
+            )
+
+        sid = at_call_res.get("session_id") or sid
 
     log = CallLog(
         call_sid=sid,
         direction="OUTBOUND",
-        caller_number=caller_id,
+        caller_number=clean_agent_phone,
         caller_name=current_user.full_name or "CorpSec Agent",
-        recipient_number=dest,
+        recipient_number=clean_dest,
         queue_id=None,
         agent_id=current_user.id,
-        status="IN_PROGRESS",
+        status="DIALING",
         duration_seconds=0,
         wait_time_seconds=0,
         recording_url="/static/audio/sample_call_recording.mp3",
+        disposition="Outbound Dial",
+        notes=f"Agent: {clean_agent_phone} -> Customer: {clean_dest}",
         created_at=datetime.datetime.now()
     )
     db.add(log)
@@ -886,12 +940,13 @@ async def initiate_outbound_call(
     })
 
     return {
-        "status": "connected",
+        "status": "dialing",
         "call_id": log.id,
         "call_sid": log.call_sid,
-        "recipient": dest,
+        "recipient": clean_dest,
         "recipient_name": caller_name,
-        "webrtc_session": f"sess_{uuid.uuid4().hex[:12]}"
+        "agent_phone": clean_agent_phone,
+        "message": f"Calling your phone ({clean_agent_phone}) via {clean_caller_id}. Please answer your phone to connect to {clean_dest}."
     }
 
 
@@ -1185,3 +1240,403 @@ async def call_center_websocket_endpoint(
         ws_manager.disconnect(websocket, user_id)
     except Exception:
         ws_manager.disconnect(websocket, user_id)
+
+
+# ==============================================================================
+# 10. PUBLIC TELEPHONY WEBHOOKS (TWILIO, AFRICA'S TALKING, GENERIC SIP/VOICE)
+# ==============================================================================
+
+@router.api_route("/voice/inbound", methods=["GET", "POST"])
+@router.api_route("/webhook", methods=["GET", "POST"])
+@router.api_route("/webhook/voice", methods=["GET", "POST"])
+@router.api_route("/webhook/twilio", methods=["GET", "POST"])
+async def incoming_voice_webhook(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Public webhook endpoint triggered when an incoming call arrives from Twilio,
+    Africa's Talking, or external SIP/PBX providers.
+    Rings the assigned agent softphone in real-time and responds with appropriate TwiML/XML or JSON.
+    """
+    # 1. Parse incoming parameters from Form-data, JSON, or Query parameters
+    params: dict = {}
+    try:
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            params = await request.json()
+        elif "form" in content_type:
+            form_data = await request.form()
+            params = dict(form_data)
+        else:
+            params = dict(request.query_params)
+    except Exception:
+        params = dict(request.query_params)
+
+    # 2. Extract standard telephony parameters
+    is_active = str(params.get("isActive", "1")).strip()
+    call_sid = (
+        params.get("CallSid") or
+        params.get("sessionId") or
+        params.get("call_id") or
+        f"CA-{uuid.uuid4().hex[:12].upper()}"
+    )
+
+    # If Africa's Talking sends isActive=0, the call has terminated
+    if is_active == "0":
+        duration = int(params.get("durationInSeconds") or params.get("duration") or 0)
+        rec_url = params.get("recordingUrl")
+        call = db.query(CallLog).filter(CallLog.call_sid == call_sid).first()
+        if call:
+            call.status = "COMPLETED"
+            call.ended_at = datetime.datetime.now()
+            if duration > 0:
+                call.duration_seconds = duration
+            if rec_url:
+                call.recording_url = rec_url
+            db.commit()
+            await ws_manager.broadcast("call:ended", {"call_id": call.id, "call_sid": call_sid, "duration": duration})
+        return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response/>', media_type="application/xml")
+
+    # 3. Check if this is an OUTBOUND call bridging callback (agent answered their phone)
+    existing_outbound = db.query(CallLog).filter(
+        CallLog.call_sid == call_sid,
+        CallLog.direction == "OUTBOUND"
+    ).first()
+
+    if existing_outbound:
+        customer_phone = format_e164(existing_outbound.recipient_number)
+        existing_outbound.status = "IN_PROGRESS"
+        db.commit()
+
+        # Broadcast live answered event to the agent softphone dashboard
+        await ws_manager.broadcast("call:answered", {
+            "call_id": existing_outbound.id,
+            "call_sid": existing_outbound.call_sid,
+            "recipient_number": customer_phone,
+            "agent_id": existing_outbound.agent_id
+        })
+
+        bridge_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Connecting your call to the client.</Say>
+    <Dial phoneNumbers="{customer_phone}" record="true" sequential="true" />
+</Response>"""
+        return Response(content=bridge_xml, media_type="application/xml")
+
+    caller_number = (
+        params.get("From") or
+        params.get("callerNumber") or
+        params.get("from") or
+        params.get("caller") or
+        "+254 700 000 000"
+    ).strip()
+
+    recipient_number = (
+        params.get("To") or
+        params.get("destinationNumber") or
+        params.get("to") or
+        params.get("called") or
+        "+254 20 790 0000"
+    ).strip()
+
+    caller_name = params.get("CallerName") or ""
+
+    # Check for WebRTC client outbound dialing
+    if caller_number.startswith("agent_") or caller_number.startswith("client_"):
+        target_dest = format_e164(recipient_number)
+        return Response(
+            content=f'<?xml version="1.0" encoding="UTF-8"?><Response><Say>Connecting your call.</Say><Dial phoneNumbers="{target_dest}" record="true" sequential="true"/></Response>',
+            media_type="application/xml"
+        )
+
+    # 4. Match dialed phone number in DB to determine queue / greeting
+    clean_recip = recipient_number.replace("+254", "").replace(" ", "").replace("-", "")
+    phone_rec = db.query(PhoneNumber).filter(
+        (PhoneNumber.phone_number == recipient_number) |
+        (PhoneNumber.phone_number.contains(clean_recip))
+    ).first()
+
+    queue_id = phone_rec.assigned_queue_id if phone_rec and phone_rec.assigned_queue_id else None
+    assigned_agent_id = phone_rec.assigned_agent_id if phone_rec else None
+
+    # Fallback to default queue if none assigned
+    if not queue_id:
+        default_queue = db.query(CallQueue).filter(CallQueue.is_active == True).first()
+        queue_id = default_queue.id if default_queue else 1
+
+    queue = db.query(CallQueue).filter(CallQueue.id == queue_id).first()
+
+    # 5. Lookup or create caller contact
+    clean_caller = caller_number.replace("+254", "").replace(" ", "").replace("-", "")
+    contact = db.query(CallerContact).filter(
+        (CallerContact.phone_number == caller_number) |
+        (CallerContact.phone_number.contains(clean_caller))
+    ).first()
+
+    if contact:
+        contact.total_calls += 1
+        if not caller_name:
+            caller_name = contact.full_name
+    else:
+        if not caller_name:
+            caller_name = "Incoming Caller"
+        try:
+            contact = CallerContact(
+                phone_number=caller_number,
+                full_name=caller_name,
+                company_or_site="Public Inbound",
+                vip_level="STANDARD",
+                total_calls=1
+            )
+            db.add(contact)
+            db.flush()
+        except Exception:
+            pass
+
+    # 6. ACD route selection for an Available agent with a valid mobile phone
+    target_agent = None
+    target_agent_id = assigned_agent_id or voice_service.route_inbound_call(db, queue_id)
+    if target_agent_id:
+        cand = db.query(User).filter(User.id == target_agent_id, User.status == "ACTIVE").first()
+        if cand and cand.phone:
+            st = db.query(AgentStatus).filter(AgentStatus.user_id == cand.id).first()
+            if st and st.status in ["AVAILABLE", "ONLINE"]:
+                target_agent = cand
+
+    if not target_agent:
+        # Search for any online/available agent across the system who has a phone
+        available_status_records = (
+            db.query(AgentStatus)
+            .filter(AgentStatus.status.in_(["AVAILABLE", "ONLINE"]))
+            .order_by(AgentStatus.last_status_change.asc())
+            .all()
+        )
+        for st_rec in available_status_records:
+            cand = db.query(User).filter(User.id == st_rec.user_id, User.status == "ACTIVE").first()
+            if cand and cand.phone:
+                target_agent = cand
+                target_agent_id = cand.id
+                break
+
+    greeting = (phone_rec.ivr_greeting if phone_rec and phone_rec.ivr_greeting else None) or \
+               (queue.welcome_greeting if queue and queue.welcome_greeting else "Thank you for calling CorpSec Emergency Dispatch. Connecting your call to an on-duty operations controller.")
+
+    # 7. Check whether caller is Africa's Talking, Twilio, XML, or JSON
+    accept_hdr = request.headers.get("accept", "")
+    user_agent = request.headers.get("user-agent", "").lower()
+    is_africastalking = "isActive" in params or "sessionId" in params or "callerNumber" in params or "africastalking" in user_agent
+    is_twilio = "twilio" in user_agent or "CallSid" in params or "twiml" in params
+
+    # 8. IF AN AGENT IS AVAILABLE: Route call and dial agent
+    if target_agent and target_agent.phone:
+        clean_agent_phone = format_e164(target_agent.phone)
+
+        # Create CallLog entry in DB
+        call = CallLog(
+            call_sid=call_sid,
+            direction="INBOUND",
+            caller_number=caller_number,
+            caller_name=caller_name,
+            recipient_number=recipient_number,
+            queue_id=queue_id,
+            agent_id=target_agent.id,
+            status="RINGING",
+            duration_seconds=0,
+            wait_time_seconds=1,
+            recording_url="/static/audio/sample_call_recording.mp3" if (phone_rec and phone_rec.record_calls) else None,
+            disposition="Incoming Call",
+            created_at=datetime.datetime.now()
+        )
+        db.add(call)
+        db.commit()
+        db.refresh(call)
+
+        # Ring agent softphone on desktop via WebSocket
+        call_event_data = {
+            "call_id": call.id,
+            "call_sid": call.call_sid,
+            "caller_number": call.caller_number,
+            "caller_name": call.caller_name,
+            "recipient_number": recipient_number,
+            "queue_name": queue.name if queue else "Emergency Dispatch",
+            "queue_id": queue_id,
+            "vip_level": contact.vip_level if contact else "STANDARD",
+            "company_or_site": contact.company_or_site if contact else "Corporate Inbound"
+        }
+        await ws_manager.send_to_agent(target_agent.id, "call:incoming", call_event_data)
+        await ws_manager.broadcast("queue:call_waiting", call_event_data)
+
+        if is_africastalking:
+            # Standard Africa's Talking Voice XML: Bridges caller directly to agent's phone
+            at_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>{greeting}</Say>
+    <Dial phoneNumbers="{clean_agent_phone}" record="true" sequential="true" />
+</Response>"""
+            return Response(content=at_xml, media_type="application/xml")
+
+        if is_twilio:
+            rec_flag = "record-from-answer" if (phone_rec and phone_rec.record_calls) else "do-not-record"
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">{greeting}</Say>
+    <Dial timeout="30" record="{rec_flag}">
+        <Client>agent_{target_agent.id}</Client>
+    </Dial>
+</Response>"""
+            return Response(content=twiml, media_type="application/xml")
+
+        if "xml" in accept_hdr:
+            return Response(
+                content=f'<?xml version="1.0" encoding="UTF-8"?><Response><Say>{greeting}</Say><Dial phoneNumbers="{clean_agent_phone}" record="true" sequential="true"/></Response>',
+                media_type="application/xml"
+            )
+
+        return {
+            "status": "success",
+            "message": "Call routed successfully",
+            "call_id": call.id,
+            "call_sid": call.call_sid,
+            "routed_to_agent_id": target_agent.id,
+            "agent_phone": clean_agent_phone,
+            "queue_id": queue_id,
+            "caller": caller_number
+        }
+
+    # 9. IF NO AGENT IS AVAILABLE: Play polite busy message and end cleanly
+    busy_message = (
+        "Thank you for calling CorpSec Investigations and Guarding Services. "
+        "All our operations controllers and dispatch agents are currently busy assisting other callers. "
+        "Please leave a message or try your call again shortly. Goodbye."
+    )
+
+    # Log missed call in DB
+    missed_call = CallLog(
+        call_sid=call_sid,
+        direction="INBOUND",
+        caller_number=caller_number,
+        caller_name=caller_name,
+        recipient_number=recipient_number,
+        queue_id=queue_id,
+        agent_id=None,
+        status="MISSED",
+        duration_seconds=0,
+        wait_time_seconds=0,
+        disposition="No Agent Available",
+        notes="Call terminated cleanly: all agents busy",
+        created_at=datetime.datetime.now()
+    )
+    db.add(missed_call)
+    db.commit()
+
+    await ws_manager.broadcast("call:missed", {
+        "call_id": missed_call.id,
+        "caller_number": caller_number,
+        "caller_name": caller_name,
+        "reason": "No Agent Available"
+    })
+
+    if is_africastalking or "xml" in accept_hdr:
+        at_busy_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>{busy_message}</Say>
+</Response>"""
+        return Response(content=at_busy_xml, media_type="application/xml")
+
+    if is_twilio:
+        twiml_busy = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">{busy_message}</Say>
+</Response>"""
+        return Response(content=twiml_busy, media_type="application/xml")
+
+    return {
+        "status": "busy",
+        "message": busy_message,
+        "call_sid": call_sid,
+        "caller": caller_number
+    }
+
+
+@router.api_route("/voice/status", methods=["GET", "POST"])
+@router.api_route("/webhook/status", methods=["GET", "POST"])
+async def call_status_callback(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Receives call progress callbacks (ringing, answered, completed, busy, no-answer)
+    from telephony provider.
+    """
+    params = {}
+    try:
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            params = await request.json()
+        elif "form" in content_type:
+            params = dict(await request.form())
+        else:
+            params = dict(request.query_params)
+    except Exception:
+        params = dict(request.query_params)
+
+    call_sid = params.get("CallSid") or params.get("sessionId") or params.get("call_id")
+    call_status = (params.get("CallStatus") or params.get("status") or "completed").upper()
+    duration = int(params.get("CallDuration") or params.get("duration") or 0)
+
+    if call_sid:
+        call = db.query(CallLog).filter(CallLog.call_sid == call_sid).first()
+        if call:
+            if call_status in ["COMPLETED", "HANGUP", "ENDED"]:
+                call.status = "COMPLETED"
+                call.ended_at = datetime.datetime.now()
+                if duration > 0:
+                    call.duration_seconds = duration
+                await ws_manager.broadcast("call:ended", {"call_id": call.id, "call_sid": call_sid})
+            elif call_status in ["IN-PROGRESS", "ANSWERED"]:
+                call.status = "IN_PROGRESS"
+                await ws_manager.broadcast("call:answered", {"call_id": call.id, "call_sid": call_sid})
+            elif call_status in ["BUSY", "NO-ANSWER", "FAILED", "CANCELED"]:
+                call.status = "MISSED"
+                call.disposition = f"Provider: {call_status.title()}"
+                call.ended_at = datetime.datetime.now()
+                await ws_manager.broadcast("call:missed", {"call_id": call.id, "call_sid": call_sid})
+            db.commit()
+
+    return {"status": "ok", "call_sid": call_sid, "received_status": call_status}
+
+
+@router.api_route("/voice/recording", methods=["GET", "POST"])
+@router.api_route("/webhook/recording", methods=["GET", "POST"])
+async def call_recording_callback(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Receives recorded audio URL from provider once call recording completes.
+    """
+    params = {}
+    try:
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            params = await request.json()
+        elif "form" in content_type:
+            params = dict(await request.form())
+        else:
+            params = dict(request.query_params)
+    except Exception:
+        params = dict(request.query_params)
+
+    call_sid = params.get("CallSid") or params.get("sessionId")
+    recording_url = params.get("RecordingUrl") or params.get("recording_url")
+
+    if call_sid and recording_url:
+        call = db.query(CallLog).filter(CallLog.call_sid == call_sid).first()
+        if call:
+            call.recording_url = recording_url
+            db.commit()
+            await ws_manager.broadcast("recording:ready", {"call_id": call.id, "recording_url": recording_url})
+
+    return {"status": "ok", "recording_url": recording_url}
+

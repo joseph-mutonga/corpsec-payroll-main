@@ -10,11 +10,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261113_v7">
-  <link rel="stylesheet" href="/static/css/call-center.css?v=20261113_v7">
-  <script src="/static/js/app.js?v=20261113_v7"></script>
-  <script src="/static/js/silent-updater.js?v=20261113_v7"></script>
-  <script src="/static/js/call-center.js?v=20261113_v7"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261115_v4">
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261115_v4">
+  <script src="/static/js/app.js?v=20261115_v4"></script>
+  <script src="/static/js/silent-updater.js?v=20261115_v4"></script>
+  <script src="/static/js/call-center.js?v=20261115_v4"></script>
 </head>
 <body>
 
@@ -2566,10 +2566,11 @@
 
               <!-- ================= Sub-View 2: Call History ================= -->
               <div id="cc-view-history" class="cc-subview" style="display:none;">
-                <div class="cc-table-card">
-                  <div class="cc-table-header" style="flex-wrap:wrap; gap:12px;">
+                <div class="cc-table-card cc-history-card">
+                  <div class="cc-table-header cc-history-header" style="flex-wrap:wrap; gap:12px;">
                     <div style="display:flex; align-items:center; gap:12px;">
-                      <h4>📑 Comprehensive Call Records & Recordings</h4>
+                      <h4 style="margin:0;">📑 Comprehensive Call Records & Recordings</h4>
+                      <span id="cc-history-count-badge" class="cc-sub-nav-pill-badge" style="background:#EFF6FF; color:#2563EB; font-weight:700;">0 calls</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
                       <input type="text" id="history-search-input" placeholder="Search caller, agent..." onkeyup="if(event.key==='Enter') loadCallHistory()" style="padding:6px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:12px; width:200px;">
@@ -2581,8 +2582,8 @@
                       <button class="btn btn-secondary" onclick="loadCallHistory()" style="font-size:12px; padding:6px 12px;">🔍 Filter</button>
                     </div>
                   </div>
-                  <div style="overflow-x:auto;">
-                    <table class="cc-table">
+                  <div class="cc-history-scroll-container cc-table-scrollable" id="cc-history-scroll-container">
+                    <table class="cc-table cc-history-table">
                       <thead>
                         <tr>
                           <th>Direction</th>
@@ -2733,13 +2734,19 @@
 
               <!-- ================= Sub-View 9: Recordings ================= -->
               <div id="cc-view-recordings" class="cc-subview" style="display:none;">
-                <div class="cc-table-card">
-                  <div class="cc-table-header">
-                    <h4>⏺️ Audio Call Recordings Archive</h4>
-                    <button class="btn btn-secondary" onclick="loadCallRecordings()">🔄 Refresh Recordings</button>
+                <div class="cc-table-card cc-recordings-card">
+                  <div class="cc-table-header cc-recordings-header" style="flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                      <h4 style="margin:0;">⏺️ Audio Call Recordings Archive</h4>
+                      <span id="cc-recordings-count-badge" class="cc-sub-nav-pill-badge" style="background:#EFF6FF; color:#2563EB; font-weight:700;">0 recordings</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <input type="text" id="recordings-search-input" placeholder="🔍 Search caller, agent, number..." onkeyup="filterCallRecordings(this.value)" style="padding:6px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:12px; width:220px;">
+                      <button class="btn btn-secondary" onclick="loadCallRecordings()" style="font-size:12px; padding:6px 12px;">🔄 Refresh Recordings</button>
+                    </div>
                   </div>
-                  <div style="overflow-x:auto;">
-                    <table class="cc-table">
+                  <div class="cc-recordings-scroll-container" id="cc-recordings-scroll-container">
+                    <table class="cc-table cc-recordings-table">
                       <thead>
                         <tr>
                           <th>Caller</th>
@@ -9740,7 +9747,7 @@
       }
 
       try {
-        await callCenterFetch('/api/v1/call-center/numbers', {
+        await callCenterFetch('/call-center/numbers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -9774,7 +9781,7 @@
       }
 
       try {
-        await callCenterFetch('/api/v1/call-center/contacts', {
+        await callCenterFetch('/call-center/contacts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

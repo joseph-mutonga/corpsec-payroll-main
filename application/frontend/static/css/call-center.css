@@ -409,6 +409,103 @@
   background: #F8FAFC;
 }
 
+/* ==========================================================================
+   Independent Scrollable Container: Audio Call Recordings & History Archive
+   ========================================================================== */
+.cc-recordings-card,
+.cc-history-card {
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
+  border: 1px solid var(--cc-border);
+  border-radius: 14px;
+  box-shadow: var(--cc-shadow-sm);
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+
+.cc-recordings-header,
+.cc-history-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #FFFFFF;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--cc-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cc-recordings-scroll-container,
+.cc-history-scroll-container,
+.cc-table-scrollable {
+  overflow-y: auto;
+  overflow-x: auto;
+  max-height: calc(100vh - 350px);
+  min-height: 420px;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F8FAFC;
+}
+
+.cc-recordings-scroll-container::-webkit-scrollbar,
+.cc-history-scroll-container::-webkit-scrollbar,
+.cc-table-scrollable::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.cc-recordings-scroll-container::-webkit-scrollbar-track,
+.cc-history-scroll-container::-webkit-scrollbar-track,
+.cc-table-scrollable::-webkit-scrollbar-track {
+  background: #F8FAFC;
+  border-radius: 4px;
+}
+
+.cc-recordings-scroll-container::-webkit-scrollbar-thumb,
+.cc-history-scroll-container::-webkit-scrollbar-thumb,
+.cc-table-scrollable::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+.cc-recordings-scroll-container::-webkit-scrollbar-thumb:hover,
+.cc-history-scroll-container::-webkit-scrollbar-thumb:hover,
+.cc-table-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.cc-recordings-table thead th,
+.cc-history-table thead th,
+.cc-recordings-scroll-container thead th,
+.cc-history-scroll-container thead th,
+.cc-table-scrollable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #F8FAFC;
+  box-shadow: 0 1px 0 var(--cc-border);
+}
+
+@media (max-height: 800px) {
+  .cc-recordings-scroll-container,
+  .cc-history-scroll-container,
+  .cc-table-scrollable {
+    max-height: 460px;
+  }
+}
+
+@media (max-width: 768px) {
+  .cc-recordings-scroll-container,
+  .cc-history-scroll-container,
+  .cc-table-scrollable {
+    max-height: 60vh;
+    min-height: 280px;
+  }
+}
+
 /* Call Direction Badge */
 .cc-badge {
   display: inline-flex;

@@ -42,8 +42,15 @@
       options.headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const apiBase = typeof API_BASE !== 'undefined' ? API_BASE : '';
-    const fullUrl = endpoint.startsWith('http') ? endpoint : `${apiBase}${endpoint}`;
+    const apiBase = typeof API_BASE !== 'undefined' ? API_BASE : '/api/v1';
+    let cleanEndpoint = endpoint;
+    if (apiBase && cleanEndpoint.startsWith(apiBase)) {
+      cleanEndpoint = cleanEndpoint.substring(apiBase.length);
+    }
+    if (!cleanEndpoint.startsWith('/')) {
+      cleanEndpoint = '/' + cleanEndpoint;
+    }
+    const fullUrl = endpoint.startsWith('http') ? endpoint : `${apiBase}${cleanEndpoint}`;
 
     const res = await fetch(fullUrl, options);
 
@@ -245,11 +252,19 @@
     if (msg.event === 'call:incoming') {
       onIncomingCallReceived(msg.data);
     } else if (msg.event === 'call:answered') {
-      if (window.CallCenter.currentCall && window.CallCenter.currentCall.id === msg.data.call_id) {
+      if (window.CallCenter.currentCall && (
+        !msg.data.call_id ||
+        window.CallCenter.currentCall.id === msg.data.call_id ||
+        window.CallCenter.currentCall.call_sid === msg.data.call_sid
+      )) {
         onCallConnected(msg.data);
       }
     } else if (msg.event === 'call:ended') {
-      if (window.CallCenter.currentCall && window.CallCenter.currentCall.id === msg.data.call_id) {
+      if (window.CallCenter.currentCall && (
+        !msg.data.call_id ||
+        window.CallCenter.currentCall.id === msg.data.call_id ||
+        window.CallCenter.currentCall.call_sid === msg.data.call_sid
+      )) {
         onCallTerminated(msg.data);
       }
       refreshActiveViews();
@@ -280,7 +295,7 @@
     if (dropdown) dropdown.style.display = 'none';
 
     try {
-      const res = await callCenterFetch('/api/v1/call-center/agent-status', {
+      const res = await callCenterFetch('/call-center/agent-status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: status })
@@ -330,7 +345,7 @@
 
   async function fetchCurrentAgentStatus() {
     try {
-      const res = await callCenterFetch('/api/v1/call-center/agent-status');
+      const res = await callCenterFetch('/call-center/agent-status');
       if (res && res.status) {
         updateAgentStatusUI(res.status);
       }
@@ -399,7 +414,7 @@
 
     window.CallCenter.lookupDebounceTimer = setTimeout(async () => {
       try {
-        const contact = await callCenterFetch(`/api/v1/call-center/contacts/lookup?phone=${encodeURIComponent(trimmed)}`);
+        const contact = await callCenterFetch(`/call-center/contacts/lookup?phone=${encodeURIComponent(trimmed)}`);
         if (contact && contact.found && contact.full_name) {
           const org = contact.company_or_site || 'Client Contact';
           preview.innerHTML = `👤 <strong>${contact.full_name}</strong> (${org})`;
@@ -412,13 +427,29 @@
     }, 300);
   }
 
+  // Helper to format Kenyan phone numbers to E.164 (+254...)
+  function formatPhoneNumberE164(phone) {
+    if (!phone) return '';
+    const clean = String(phone).replace(/[^\d+]/g, '').trim();
+    if (clean.startsWith('+')) return clean;
+    if (clean.startsWith('254')) return '+' + clean;
+    if (clean.startsWith('0') && clean.length >= 10) return '+254' + clean.slice(1);
+    return '+254' + clean;
+  }
+
   // Dial Outbound Call
   window.softphoneDialCall = async function (overrideNumber) {
     const input = document.getElementById('softphone-number-input');
-    const destination = overrideNumber || (input ? input.value.trim() : '');
+    const rawDestination = overrideNumber || (input ? input.value.trim() : '');
 
-    if (!destination) {
+    if (!rawDestination) {
       if (typeof showToast === 'function') showToast('Please enter a phone number to dial', 'warning');
+      return;
+    }
+
+    const destination = formatPhoneNumberE164(rawDestination);
+    if (destination.length < 10) {
+      if (typeof showToast === 'function') showToast(`Invalid phone number: ${rawDestination}. Please enter a valid 10-digit number.`, 'warning');
       return;
     }
 
@@ -426,12 +457,12 @@
     startRingingAudio();
 
     try {
-      const res = await callCenterFetch('/api/v1/call-center/calls/dial', {
+      const res = await callCenterFetch('/call-center/calls/dial', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           destination_number: destination,
-          caller_id_number: '+254 20 790 0000'
+          caller_id_number: '+254 711 082 143'
         })
       });
 
@@ -441,18 +472,24 @@
           call_sid: res.call_sid,
           caller_name: res.recipient_name || destination,
           caller_number: destination,
-          status: 'IN_PROGRESS'
+          agent_phone: res.agent_phone,
+          status: 'DIALING'
         };
         showActiveCallScreen(window.CallCenter.currentCall);
         setCallCenterAgentStatus('ON_CALL');
+
+        if (typeof showToast === 'function') {
+          showToast(res.message || `Outbound bridge active: calling your phone (${res.agent_phone}) to connect to ${destination}.`, 'info');
+        }
       } else {
         stopRingingAudio();
-        if (typeof showToast === 'function') showToast('Failed to initiate outbound call', 'danger');
+        if (typeof showToast === 'function') showToast('Failed to initiate outbound call: empty response from server', 'danger');
       }
     } catch (e) {
       stopRingingAudio();
       console.error('Call dial error', e);
-      if (typeof showToast === 'function') showToast('Error connecting call: ' + (e.message || ''), 'danger');
+      const errMsg = e.message || 'Error connecting call';
+      if (typeof showToast === 'function') showToast(errMsg, 'danger');
     }
   };
 
@@ -488,7 +525,7 @@
     if (!window.CallCenter.currentCall) return;
 
     try {
-      const res = await callCenterFetch(`/api/v1/call-center/calls/${window.CallCenter.currentCall.id || window.CallCenter.currentCall.call_id}/answer`, {
+      const res = await callCenterFetch(`/call-center/calls/${window.CallCenter.currentCall.id || window.CallCenter.currentCall.call_id}/answer`, {
         method: 'POST'
       });
 
@@ -514,7 +551,7 @@
 
     try {
       const callId = window.CallCenter.currentCall.id || window.CallCenter.currentCall.call_id;
-      await callCenterFetch(`/api/v1/call-center/calls/${callId}/hangup`, {
+      await callCenterFetch(`/call-center/calls/${callId}/hangup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ disposition: 'REJECTED', notes: 'Call declined by agent' })
@@ -610,7 +647,7 @@
     const btn = document.getElementById('btn-softphone-hold');
 
     try {
-      await callCenterFetch(`/api/v1/call-center/calls/${callId}/hold`, {
+      await callCenterFetch(`/call-center/calls/${callId}/hold`, {
         method: 'POST'
       });
 
@@ -647,7 +684,7 @@
     const callId = window.CallCenter.currentCall.id || window.CallCenter.currentCall.call_id;
 
     try {
-      await callCenterFetch(`/api/v1/call-center/calls/${callId}/transfer`, {
+      await callCenterFetch(`/call-center/calls/${callId}/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -677,7 +714,7 @@
       const notesEl = document.getElementById('active-call-quick-notes');
       const dispEl = document.getElementById('active-call-disposition');
 
-      await callCenterFetch(`/api/v1/call-center/calls/${callId}/hangup`, {
+      await callCenterFetch(`/call-center/calls/${callId}/hangup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -699,6 +736,14 @@
 
   function onCallConnected(data) {
     stopRingingAudio();
+    if (window.CallCenter.currentCall) {
+      window.CallCenter.currentCall.status = 'IN_PROGRESS';
+      const numberEl = document.getElementById('active-call-number');
+      if (numberEl) {
+        const destNum = (data && data.recipient_number) || window.CallCenter.currentCall.caller_number || '';
+        numberEl.innerText = `${destNum} (Connected)`;
+      }
+    }
   }
 
   function onCallTerminated(data) {
@@ -751,7 +796,7 @@
      ========================================================================== */
   window.loadCallCenterOverview = async function () {
     try {
-      const data = await callCenterFetch('/api/v1/call-center/overview');
+      const data = await callCenterFetch('/call-center/overview');
       if (!data) return;
       window.CallCenter.overviewData = data;
 
@@ -800,7 +845,7 @@
     if (!container) return;
 
     try {
-      const queues = await callCenterFetch('/api/v1/call-center/queues');
+      const queues = await callCenterFetch('/call-center/queues');
       if (!queues || !queues.length) {
         container.innerHTML = `<div style="padding:16px; color:#64748B; text-align:center;">No active queues configured</div>`;
         return;
@@ -845,7 +890,7 @@
     if (!list) return;
 
     try {
-      const calls = await callCenterFetch('/api/v1/call-center/calls?limit=5');
+      const calls = await callCenterFetch('/call-center/calls?limit=5');
       if (!calls || !calls.length) {
         list.innerHTML = `<div style="padding:12px; color:#64748B; font-size:12px;">No recent calls</div>`;
         return;
@@ -878,11 +923,15 @@
       const search = (document.getElementById('history-search-input')?.value || '').trim();
       const direction = document.getElementById('history-filter-direction')?.value || '';
 
-      let url = `/api/v1/call-center/calls?limit=50`;
+      let url = `/call-center/calls?limit=50`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (direction) url += `&direction=${encodeURIComponent(direction)}`;
 
       const calls = await callCenterFetch(url);
+      const countBadge = document.getElementById('cc-history-count-badge');
+      if (countBadge) {
+        countBadge.innerText = `${(calls || []).length} call${(calls || []).length === 1 ? '' : 's'}`;
+      }
       if (!calls || !calls.length) {
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No call logs found in database matching your criteria.</td></tr>`;
         return;
@@ -946,7 +995,7 @@
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading virtual numbers from database...</td></tr>`;
 
     try {
-      const numbers = await callCenterFetch('/api/v1/call-center/numbers');
+      const numbers = await callCenterFetch('/call-center/numbers');
       if (!numbers || !numbers.length) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px; color:#64748B;">No virtual phone numbers provisioned in database.</td></tr>`;
         return;
@@ -999,7 +1048,7 @@
     grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:#64748B;">Loading queues from database...</div>`;
 
     try {
-      const queues = await callCenterFetch('/api/v1/call-center/queues');
+      const queues = await callCenterFetch('/call-center/queues');
       if (!queues || !queues.length) {
         grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:#64748B;">No queues found in database.</div>`;
         return;
@@ -1070,7 +1119,7 @@
 
     try {
       const search = (document.getElementById('contacts-search-input')?.value || '').trim();
-      let url = `/api/v1/call-center/contacts`;
+      let url = `/call-center/contacts`;
       if (search) url += `?search=${encodeURIComponent(search)}`;
 
       const contacts = await callCenterFetch(url);
@@ -1123,8 +1172,8 @@
     if (!container) return;
 
     try {
-      const queues = await callCenterFetch('/api/v1/call-center/queues');
-      const numbers = await callCenterFetch('/api/v1/call-center/numbers');
+      const queues = await callCenterFetch('/call-center/queues');
+      const numbers = await callCenterFetch('/call-center/numbers');
 
       const primaryNum = numbers && numbers.length ? numbers[0].phone_number : '+254 20 790 0000';
       const qEmergency = queues.find(q => q.name.toLowerCase().includes('emergency')) || queues[0] || { name: 'Emergency Guard Dispatch' };
@@ -1209,7 +1258,7 @@
     grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:#64748B;">Loading team presence from database...</div>`;
 
     try {
-      const agents = await callCenterFetch('/api/v1/call-center/agents');
+      const agents = await callCenterFetch('/call-center/agents');
       if (!agents || !agents.length) {
         grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:#64748B;">No agents registered in Call Center yet.</div>`;
         return;
@@ -1258,6 +1307,57 @@
   /* ==========================================================================
      14. Sub-View: Recordings Library
      ========================================================================== */
+  function renderRecordingsRows(calls) {
+    const tbody = document.getElementById('cc-recordings-table-body');
+    if (!tbody) return;
+
+    if (!calls || !calls.length) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:32px; color:#64748B;">No audio recordings found matching criteria.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = calls.map(c => `
+      <tr>
+        <td>
+          <div style="font-weight:700; color:#0F172A;">${c.caller_name || 'Caller'}</div>
+          <div style="font-size:11px; color:#64748B; font-family:monospace;">${c.caller_number}</div>
+        </td>
+        <td>${c.agent_name || 'Agent'}</td>
+        <td>${formatDate(c.created_at || c.started_at)}</td>
+        <td style="font-weight:700;">${formatCallDuration(c.duration_seconds)}</td>
+        <td>
+          <div class="cc-audio-player">
+            <audio controls src="${c.recording_url}" preload="metadata"></audio>
+          </div>
+        </td>
+        <td>
+          <a href="${c.recording_url}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:4px 8px; text-decoration:none;">
+            ⬇ Download
+          </a>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  window.filterCallRecordings = function (query) {
+    const data = window.CallCenter.recordingsData || [];
+    const countBadge = document.getElementById('cc-recordings-count-badge');
+    const q = (query || '').toLowerCase().trim();
+    if (!q) {
+      if (countBadge) countBadge.innerText = `${data.length} recording${data.length === 1 ? '' : 's'}`;
+      renderRecordingsRows(data);
+      return;
+    }
+    const filtered = data.filter(c =>
+      (c.caller_name || '').toLowerCase().includes(q) ||
+      (c.caller_number || '').toLowerCase().includes(q) ||
+      (c.agent_name || '').toLowerCase().includes(q) ||
+      (c.disposition || '').toLowerCase().includes(q)
+    );
+    if (countBadge) countBadge.innerText = `${filtered.length} of ${data.length}`;
+    renderRecordingsRows(filtered);
+  };
+
   window.loadCallRecordings = async function () {
     const tbody = document.getElementById('cc-recordings-table-body');
     if (!tbody) return;
@@ -1265,33 +1365,20 @@
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading recordings from database...</td></tr>`;
 
     try {
-      const calls = await callCenterFetch('/api/v1/call-center/recordings');
-      if (!calls || !calls.length) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:32px; color:#64748B;">No audio recordings found in database yet.</td></tr>`;
-        return;
+      const calls = await callCenterFetch('/call-center/recordings');
+      window.CallCenter.recordingsData = calls || [];
+
+      const countBadge = document.getElementById('cc-recordings-count-badge');
+      if (countBadge) {
+        countBadge.innerText = `${(calls || []).length} recording${(calls || []).length === 1 ? '' : 's'}`;
       }
 
-      tbody.innerHTML = calls.map(c => `
-        <tr>
-          <td>
-            <div style="font-weight:700; color:#0F172A;">${c.caller_name || 'Caller'}</div>
-            <div style="font-size:11px; color:#64748B; font-family:monospace;">${c.caller_number}</div>
-          </td>
-          <td>${c.agent_name || 'Agent'}</td>
-          <td>${formatDate(c.created_at || c.started_at)}</td>
-          <td style="font-weight:700;">${formatCallDuration(c.duration_seconds)}</td>
-          <td>
-            <div class="cc-audio-player">
-              <audio controls src="${c.recording_url}" preload="metadata"></audio>
-            </div>
-          </td>
-          <td>
-            <a href="${c.recording_url}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:4px 8px; text-decoration:none;">
-              ⬇ Download
-            </a>
-          </td>
-        </tr>
-      `).join('');
+      const searchInput = document.getElementById('recordings-search-input');
+      if (searchInput && searchInput.value) {
+        window.filterCallRecordings(searchInput.value);
+      } else {
+        renderRecordingsRows(calls);
+      }
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#EF4444;">Error loading recordings: ${e.message}</td></tr>`;
     }
@@ -1307,7 +1394,7 @@
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading missed calls from database...</td></tr>`;
 
     try {
-      const calls = await callCenterFetch('/api/v1/call-center/missed');
+      const calls = await callCenterFetch('/call-center/missed');
       if (!calls || !calls.length) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:32px; color:#10B981; font-weight:700;">🎉 No missed calls! All callers were handled.</td></tr>`;
         return;
@@ -1346,7 +1433,7 @@
     if (!container) return;
 
     try {
-      const data = await callCenterFetch('/api/v1/call-center/overview');
+      const data = await callCenterFetch('/call-center/overview');
       const total = data.total_calls_today || 0;
       const missed = data.missed_today || 0;
       const avgDuration = data.avg_duration_seconds || 0;
@@ -1394,7 +1481,7 @@
     if (modal) modal.style.display = 'none';
 
     try {
-      const res = await callCenterFetch('/api/v1/call-center/calls/simulate-incoming', {
+      const res = await callCenterFetch('/call-center/calls/simulate-incoming', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1429,7 +1516,7 @@
     const notes = document.getElementById('notes-textarea').value;
 
     try {
-      await callCenterFetch(`/api/v1/call-center/calls/${callId}/notes`, {
+      await callCenterFetch(`/call-center/calls/${callId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: notes })

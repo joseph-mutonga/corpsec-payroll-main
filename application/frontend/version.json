@@ -1,9 +1,9 @@
 {
   "app_name": "CorpSec Payroll & Security Workforce System",
-  "version": "2.5.3",
-  "build_number": 2026111304,
-  "release_name": "CorpSec Enterprise 2.5",
-  "release_date": "2026-11-13",
+  "version": "2.5.7",
+  "build_number": 2026111504,
+  "release_name": "CorpSec Enterprise 2.5.7",
+  "release_date": "2026-11-15",
   "silent_update": true,
   "check_interval_seconds": 30,
   "assets": [
@@ -25,4 +25,3 @@
     "Automatic silent background update detection and seamless hot-swap"
   ]
 }
-
