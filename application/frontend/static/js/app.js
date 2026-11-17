@@ -868,7 +868,7 @@ async function initApp() {
   }
 }
 
-function switchTab(tabId) {
+function switchTab(tabId, updateHistory = true) {
   const user = getLoggedInUser();
   if (user && user.role === 'SUPERVISOR' && (tabId === 'payroll' || tabId === 'payments' || tabId === 'salary-advances' || tabId === 'statutory' || tabId === 'staff' || tabId === 'audit' || tabId === 'documents' || tabId === 'invoices' || tabId === 'clients' || tabId === 'assets' || tabId === 'company-history' || tabId === 'expenses')) {
     showToast('Access Denied: Expenses, petty cash, payroll, and finances are restricted to Admin & HR.', 'danger');
@@ -931,6 +931,13 @@ function switchTab(tabId) {
 
   window.currentActiveTab = tabId;
 
+  if (updateHistory && window.history && window.history.pushState) {
+    const targetHash = '#' + tabId;
+    if (window.location.hash !== targetHash) {
+      window.history.pushState({ tabId }, titles[tabId] || 'Dashboard', targetHash);
+    }
+  }
+
   if (tabId === 'dashboard') {
     loadDashboardData();
   }
@@ -980,7 +987,26 @@ function switchTab(tabId) {
     loadAnalyticsData();
     loadGuards();
     loadSites();
-    loadTeamChat();
+  }
+}
+
+// Browser Back & Forward Navigation Handler
+window.addEventListener('popstate', (event) => {
+  const targetTab = (event.state && event.state.tabId) || (window.location.hash ? window.location.hash.replace('#', '') : 'dashboard');
+  if (targetTab && targetTab !== window.currentActiveTab) {
+    switchTab(targetTab, false);
+  }
+});
+
+// Restore active tab from URL hash on load
+if (window.location.hash) {
+  const initialHashTab = window.location.hash.replace('#', '');
+  if (initialHashTab) {
+    window.addEventListener('DOMContentLoaded', () => {
+      if (document.getElementById(`panel-${initialHashTab}`)) {
+        switchTab(initialHashTab, false);
+      }
+    });
   }
 }
 
@@ -14239,12 +14265,126 @@ function selectWhatsAppChat(contactId) {
   loadWhatsAppActiveMessages();
 }
 
+window.waCurrentPinned = [];
+window.waPinnedIndex = 0;
+window.waActivePinnedId = null;
+
+function formatChatDateDivider(dateStr) {
+  if (!dateStr) return { text: 'TODAY', cls: 'today', icon: '📅' };
+  const d = new Date(dateStr);
+  const now = new Date();
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const targetDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (targetDay.getTime() === today.getTime()) {
+    return { text: 'TODAY', cls: 'today', icon: '📅' };
+  } else if (targetDay.getTime() === yesterday.getTime()) {
+    return { text: 'YESTERDAY', cls: 'yesterday', icon: '📅' };
+  } else {
+    const formatted = d.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric'
+    }).toUpperCase();
+    return { text: formatted, cls: 'other', icon: '📅' };
+  }
+}
+
+function updateWhatsAppPinnedBar(pinnedList) {
+  const bar = document.getElementById('wa-pinned-bar');
+  if (!bar) return;
+
+  if (!pinnedList || pinnedList.length === 0) {
+    bar.style.display = 'none';
+    window.waCurrentPinned = [];
+    window.waActivePinnedId = null;
+    return;
+  }
+
+  window.waCurrentPinned = pinnedList;
+  bar.style.display = 'flex';
+
+  const countEl = document.getElementById('wa-pinned-count');
+  if (countEl) {
+    countEl.innerText = pinnedList.length;
+  }
+
+  // Pick the most recent pinned message
+  const activePin = pinnedList[pinnedList.length - 1];
+  window.waActivePinnedId = activePin.id;
+
+  const snippetEl = document.getElementById('wa-pinned-snippet');
+  if (snippetEl) {
+    const sender = activePin.sender_name ? `${activePin.sender_name}: ` : '';
+    const body = activePin.message || (activePin.attachment_name ? `📎 ${activePin.attachment_name}` : 'Attachment');
+    snippetEl.innerText = `${sender}${body}`;
+  }
+}
+
+window.handlePinnedBarClick = function () {
+  if (!window.waCurrentPinned || !window.waCurrentPinned.length) return;
+
+  const targetId = window.waActivePinnedId;
+  if (targetId) {
+    const el = document.getElementById(`wa-msg-${targetId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('wa-bubble-highlight');
+      void el.offsetWidth;
+      el.classList.add('wa-bubble-highlight');
+    }
+  }
+
+  // If there are multiple pinned messages, cycle through them
+  if (window.waCurrentPinned.length > 1) {
+    window.waPinnedIndex = ((window.waPinnedIndex || 0) + 1) % window.waCurrentPinned.length;
+    const nextPin = window.waCurrentPinned[window.waPinnedIndex];
+    window.waActivePinnedId = nextPin.id;
+
+    const snippetEl = document.getElementById('wa-pinned-snippet');
+    if (snippetEl) {
+      const sender = nextPin.sender_name ? `${nextPin.sender_name}: ` : '';
+      const body = nextPin.message || (nextPin.attachment_name ? `📎 ${nextPin.attachment_name}` : 'Attachment');
+      snippetEl.innerText = `${sender}${body}`;
+    }
+  }
+};
+
+window.unpinCurrentPinnedMessage = function () {
+  if (window.waActivePinnedId) {
+    window.toggleWhatsAppPinMessage(window.waActivePinnedId);
+  }
+};
+
+window.toggleWhatsAppPinMessage = async function (messageId) {
+  try {
+    const res = await apiFetch(`/team-chat/messages/${messageId}/pin`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error('Could not update pin status');
+    const data = await res.json();
+    if (typeof showToast === 'function') {
+      showToast(data.message || (data.is_pinned ? 'Message pinned 📌' : 'Message unpinned'), 'success');
+    }
+    await loadWhatsAppActiveMessages(true);
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast(err.message || 'Error updating pin', 'danger');
+    }
+  }
+};
+
 async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
   const container = document.getElementById('wa-messages-body');
   if (!container) return;
 
   if (!isBackgroundPoll) {
-    container.innerHTML = '<div class="wa-date-pill">TODAY</div><div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading conversation...</div>';
+    container.innerHTML = '<div class="wa-date-pill today"><span>📅</span> TODAY</div><div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading conversation...</div>';
   }
 
   try {
@@ -14259,8 +14399,9 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
     const currentUser = getLoggedInUser() || {};
 
     if (!messages || messages.length === 0) {
+      updateWhatsAppPinnedBar([]);
       container.innerHTML = `
-        <div class="wa-date-pill">TODAY</div>
+        <div class="wa-date-pill today"><span>📅</span> TODAY</div>
         <div style="text-align:center; padding:50px 20px; color:#8696a0;">
           <div style="font-size:36px; margin-bottom:10px;">💬</div>
           <div style="font-size:15px; font-weight:600; color:#e9edef;">No messages yet with ${escapeHtml(waActiveContact.name)}</div>
@@ -14273,10 +14414,29 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
     const myId = currentUser.user_id || currentUser.id;
     const myEmail = (currentUser.email || '').toLowerCase().trim();
 
-    container.innerHTML = '<div class="wa-date-pill">TODAY</div>' + messages.map(m => {
+    let lastDateKey = null;
+    let messagesHtml = '';
+    const pinnedList = [];
+
+    messages.forEach(m => {
+      if (m.is_pinned) {
+        pinnedList.push(m);
+      }
+
+      const d = new Date(m.created_at);
+      const dateKey = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      if (dateKey !== lastDateKey) {
+        const divider = formatChatDateDivider(m.created_at);
+        messagesHtml += `
+          <div class="wa-date-pill ${divider.cls}" data-date-key="${dateKey}">
+            <span>${divider.icon}</span> <span>${divider.text}</span>
+          </div>
+        `;
+        lastDateKey = dateKey;
+      }
+
       const isOut = (myId && Number(m.user_id) === Number(myId)) ||
                     (myEmail && m.sender_name && m.sender_name.toLowerCase().trim() === myEmail);
-      const d = new Date(m.created_at);
       const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       const senderRoleColor = {
@@ -14326,43 +14486,58 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
       }
 
       const textHtml = m.message ? `<div style="margin-top:${attachmentHtml ? '4px' : '0'}; font-size:13.5px; line-height:1.45; word-wrap:break-word;">${m.message}</div>` : '';
+      const pinTagHtml = m.is_pinned ? `<div class="wa-bubble-pin-tag"><span>📌</span> Pinned Message</div>` : '';
+      const pinBtnHtml = `
+        <button type="button" class="wa-bubble-pin-action ${m.is_pinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleWhatsAppPinMessage(${m.id})" title="${m.is_pinned ? 'Unpin message' : 'Pin message'}">
+          📌
+        </button>
+      `;
 
       if (isOut) {
-        // WhatsApp checkmarks: double blue ticks if read by recipient, double grey ticks if delivered
         const ticksHtml = m.is_read
           ? '<span class="wa-blue-ticks" title="Read">✓✓</span>'
           : '<span class="wa-grey-ticks" title="Delivered">✓✓</span>';
 
-        return `
-          <div class="wa-bubble-wrap out">
-            <div class="wa-bubble wa-bubble-out">
+        messagesHtml += `
+          <div class="wa-bubble-wrap out" id="wa-msg-${m.id}">
+            <div class="wa-bubble wa-bubble-out ${m.is_pinned ? 'pinned' : ''}">
+              ${pinTagHtml}
               ${attachmentHtml}
               ${textHtml}
               <div class="wa-bubble-meta">
                 <span>${timeStr}</span>
                 ${ticksHtml}
+                ${pinBtnHtml}
               </div>
             </div>
           </div>
         `;
       } else {
-        return `
-          <div class="wa-bubble-wrap in">
-            <div class="wa-bubble wa-bubble-in">
+        messagesHtml += `
+          <div class="wa-bubble-wrap in" id="wa-msg-${m.id}">
+            <div class="wa-bubble wa-bubble-in ${m.is_pinned ? 'pinned' : ''}">
+              ${pinTagHtml}
               ${waActiveContact.is_group ? `<span class="wa-sender-lbl" style="color:${senderRoleColor};">${escapeHtml(m.sender_name)}</span>` : ''}
               ${attachmentHtml}
               ${textHtml}
               <div class="wa-bubble-meta">
                 <span>${timeStr}</span>
+                ${pinBtnHtml}
               </div>
             </div>
           </div>
         `;
       }
-    }).join('');
+    });
 
-    // Keep chat scrolled to bottom
-    container.scrollTop = container.scrollHeight;
+    container.innerHTML = messagesHtml;
+    updateWhatsAppPinnedBar(pinnedList);
+
+    // Keep chat scrolled to bottom unless user is scrolled up reading earlier messages
+    const wasNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 140;
+    if (!isBackgroundPoll || wasNearBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
 
   } catch (err) {
     console.error('loadWhatsAppActiveMessages error:', err);

@@ -269,6 +269,8 @@ def get_release_fingerprint():
             "/static/js/portal.js",
             "/static/css/portal.css",
             "/static/js/silent-updater.js",
+            "/static/js/call-center.js",
+            "/static/css/call-center.css",
             "/manifest.json",
             "/portal-sw.js"
         ],
@@ -302,7 +304,9 @@ def get_release_fingerprint():
         "static/css/styles.css",
         "static/js/portal.js",
         "static/css/portal.css",
-        "static/js/silent-updater.js"
+        "static/js/silent-updater.js",
+        "static/js/call-center.js",
+        "static/css/call-center.css"
     ]
 
     for cf in critical_files:

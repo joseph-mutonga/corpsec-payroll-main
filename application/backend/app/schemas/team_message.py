@@ -26,6 +26,7 @@ class TeamMessageResponse(BaseModel):
     attachment_type: Optional[str] = None
     attachment_size: Optional[int] = None
     is_read: bool = False
+    is_pinned: bool = False
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -221,6 +221,8 @@ def sync_db_schema():
                         cursor.execute("ALTER TABLE team_messages ADD COLUMN attachment_size INTEGER;")
                     if "is_read" not in tm_cols:
                         cursor.execute("ALTER TABLE team_messages ADD COLUMN is_read BOOLEAN DEFAULT 0;")
+                    if "is_pinned" not in tm_cols:
+                        cursor.execute("ALTER TABLE team_messages ADD COLUMN is_pinned BOOLEAN DEFAULT 0;")
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS team_chat_reads (
@@ -272,7 +274,8 @@ def sync_db_schema():
                 ("attachment_name", "VARCHAR(255) NULL"),
                 ("attachment_type", "VARCHAR(100) NULL"),
                 ("attachment_size", "INT NULL"),
-                ("is_read", "BOOLEAN DEFAULT FALSE")
+                ("is_read", "BOOLEAN DEFAULT FALSE"),
+                ("is_pinned", "BOOLEAN DEFAULT FALSE")
             ]
             with engine.connect() as db_conn:
                 for col_name, col_def in tm_cols_to_add:

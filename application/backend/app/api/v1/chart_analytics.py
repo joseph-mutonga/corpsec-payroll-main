@@ -42,7 +42,7 @@ def getChartAnalyticsDashboard(
         records = db.query(PayrollRecord).filter(PayrollRecord.payroll_period_id == p.id).all()
         gross_sum = sum(r.gross_pay or 0.0 for r in records)
         net_sum = sum(r.net_pay or 0.0 for r in records)
-        shifts_sum = sum(r.shifts_worked or 0 for r in records)
+        shifts_sum = sum(getattr(r, "days_worked", 0) or 0 for r in records)
         m_label = month_names[p.month - 1] if 1 <= p.month <= 12 else f"M{p.month}"
         monthly_trend.append({
             "period_id": p.id,

@@ -502,3 +502,59 @@ def deleteTeamMessage(
     db.delete(msg)
     db.commit()
     return {"status": "success", "message": "Message deleted."}
+
+
+@router.post("/messages/{message_id}/pin")
+def togglePinMessage(
+    message_id: int,
+    current_user: User = Depends(authorize_chart_analytics),
+    db: Session = Depends(get_db)
+):
+    """
+    Pins or unpins a message in the Team Chat channel.
+    """
+    msg = db.query(TeamMessage).filter(TeamMessage.id == message_id).first()
+    if not msg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
+
+    msg.is_pinned = not getattr(msg, "is_pinned", False)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "status": "success",
+        "id": msg.id,
+        "is_pinned": msg.is_pinned,
+        "message": "Message pinned successfully." if msg.is_pinned else "Message unpinned successfully."
+    }
+
+
+@router.get("/pinned-messages", response_model=List[TeamMessageResponse])
+def getPinnedMessages(
+    receiver_id: Optional[int] = Query(None, description="Optional target user ID for direct messages; None for group"),
+    current_user: User = Depends(authorize_chart_analytics),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves all pinned messages for the active conversation (Group Operations or 1-on-1 DM).
+    """
+    if receiver_id is None:
+        pinned = (
+            db.query(TeamMessage)
+            .filter(TeamMessage.receiver_id.is_(None), TeamMessage.is_pinned.is_(True))
+            .order_by(desc(TeamMessage.created_at))
+            .all()
+        )
+    else:
+        pinned = (
+            db.query(TeamMessage)
+            .filter(
+                or_(
+                    and_(TeamMessage.user_id == current_user.id, TeamMessage.receiver_id == receiver_id),
+                    and_(TeamMessage.user_id == receiver_id, TeamMessage.receiver_id == current_user.id)
+                ),
+                TeamMessage.is_pinned.is_(True)
+            )
+            .order_by(desc(TeamMessage.created_at))
+            .all()
+        )
+    return pinned

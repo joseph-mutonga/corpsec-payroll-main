@@ -7,10 +7,11 @@ _workspace_root = os.path.abspath(os.path.join(_current_dir, "../../../"))
 if _workspace_root not in sys.path:
     sys.path.insert(0, _workspace_root)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from application.backend.app.core.config import settings
 from application.backend.app.core.database import engine, Base, sync_db_schema
@@ -44,6 +45,32 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    """
+    Ensures HTML, JS, CSS, manifests, and version manifests are never cached stalely
+    by client browsers or intermediate proxies. Browsers will always revalidate
+    and fetch the latest application release immediately.
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if (
+            path in ["/", "/portal", "/portal.html", "/version.json", "/manifest.json", "/portal-sw.js"]
+            or path.startswith("/static/js/")
+            or path.startswith("/static/css/")
+            or path.endswith(".js")
+            or path.endswith(".css")
+            or path.endswith(".json")
+        ):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+
+app.add_middleware(NoCacheStaticMiddleware)
 
 # Include API Routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)

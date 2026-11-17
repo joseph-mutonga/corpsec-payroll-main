@@ -10,11 +10,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261115_v4">
-  <link rel="stylesheet" href="/static/css/call-center.css?v=20261115_v4">
-  <script src="/static/js/app.js?v=20261115_v4"></script>
-  <script src="/static/js/silent-updater.js?v=20261115_v4"></script>
-  <script src="/static/js/call-center.js?v=20261115_v4"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261117_v7">
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261117_v7">
+  <script src="/static/js/app.js?v=20261117_v7"></script>
+  <script src="/static/js/silent-updater.js?v=20261117_v7"></script>
+  <script src="/static/js/call-center.js?v=20261117_v7"></script>
 </head>
 <body>
 
@@ -1713,48 +1713,6 @@
               </tbody>
             </table>
           </div>
-        </div>
-
-        <!-- 4. Operations Team Chat & Discussion (Admin, HR, Staff & Supervisors) -->
-        <div class="report-card" style="margin-top:24px; border:1px solid #CBD5E1; border-radius:14px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.04);">
-          <div class="report-card-header" style="border-bottom:1px solid #F1F5F9; padding-bottom:12px; margin-bottom:14px;">
-            <div style="display:flex; align-items:center; gap:12px;">
-              <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, #0D7682 0%, #14B8A6 100%); color:#FFF; display:flex; align-items:center; justify-content:center; font-size:20px;">
-                💬
-              </div>
-              <div>
-                <h3 class="report-card-title" style="margin:0; font-size:16px;">Operations Team Chat &amp; Operational Briefings</h3>
-                <p class="report-card-subtitle" style="margin:2px 0 0; font-size:12px; color:#64748B;">
-                  Direct operational communication between System Admin, HR, Corporate Staff, and Field Supervisors
-                </p>
-              </div>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span class="badge" style="background:#ECFDF5; color:#065F46; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px;">
-                🟢 Active Channel
-              </span>
-              <button class="btn btn-secondary" onclick="loadTeamChat()" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:4px;">
-                🔄 Refresh Chat
-              </button>
-            </div>
-          </div>
-
-          <!-- Chat Messages Container -->
-          <div id="team-chat-feed" style="max-height:360px; min-height:180px; overflow-y:auto; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;">
-            <div style="text-align:center; padding:30px; color:#64748B;">Loading team discussion...</div>
-          </div>
-
-          <!-- Chat Input Form -->
-          <form id="team-chat-form" onsubmit="sendTeamChatMessage(event)" style="display:flex; gap:10px; align-items:center;">
-            <input type="text" id="team-chat-input" placeholder="Type an operational note, directive, or query for Admin, HR, Staff &amp; Supervisors..."
-              required maxlength="3000"
-              style="flex:1; border:1px solid #CBD5E1; border-radius:8px; padding:10px 14px; font-size:13px; font-family:inherit; outline:none;"
-            />
-            <button type="submit" id="btn-team-chat-send" class="btn btn-primary" style="background:#0D7682; border-color:#0D7682; padding:10px 20px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
-              <span id="btn-team-send-text">Send 💬</span>
-              <span id="btn-team-send-spinner" style="display:none;">⏳</span>
-            </button>
-          </form>
         </div>
 
       </section>
@@ -9380,7 +9338,8 @@
        ========================================================================== -->
   <div id="softphone-widget-container">
     <!-- Minimized Floating Pill Button -->
-    <div id="softphone-minimized" class="softphone-minimized-btn" onclick="toggleSoftphone(true)" title="Open Call Center Softphone">
+    <div id="softphone-minimized" class="softphone-minimized-btn" onclick="toggleSoftphone(true)" title="Open Softphone (Drag to move anywhere)">
+      <span class="softphone-drag-grip" title="Drag to move">⋮⋮</span>
       <span style="font-size:18px;">📞</span>
       <span id="minimized-call-status" style="font-size:12px; font-weight:700;">Softphone Ready</span>
     </div>

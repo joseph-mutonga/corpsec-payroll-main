@@ -17,7 +17,7 @@
   const STORAGE_KEY_LAST_CHECK = 'corpsec_last_update_check';
   const STORAGE_KEY_UPDATE_PENDING = 'corpsec_pending_update_reload';
 
-  const CHECK_INTERVAL_MS = 45000; // Poll server every 45 seconds
+  const CHECK_INTERVAL_MS = 15000; // Poll server every 15 seconds
   const VERSION_ENDPOINT = '/api/v1/desktop/version';
 
   let isUpdating = false;
@@ -210,9 +210,15 @@
   /**
    * Applies the downloaded update by reloading with clean cache.
    */
-  function applyPendingUpdate() {
+  async function applyPendingUpdate() {
     sessionStorage.setItem('corpsec_just_updated', 'true');
-    // Reload bypassing cache
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (e) {}
+    // Hard reload bypassing cache
     window.location.reload();
   }
 

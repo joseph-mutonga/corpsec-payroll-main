@@ -130,6 +130,14 @@ class VoiceProviderService:
         caller_id = format_e164(from_phone or self.default_caller_id)
         destination = format_e164(to_phone)
 
+        if os.getenv("TESTING") == "1":
+            return {
+                "success": True,
+                "session_id": f"AT-TEST-SESSION-{uuid.uuid4().hex[:8]}",
+                "status": "Queued",
+                "phone_number": destination
+            }
+
         if not api_key:
             return {"success": False, "error": "Africa's Talking API key (AT_API_KEY) is not configured in .env"}
 
@@ -207,6 +215,7 @@ class VoiceProviderService:
                     data = json.loads(res.read().decode("utf-8"))
                     return {
                         "token": data.get("token"),
+                        "identity": agent_identity,
                         "client_name": data.get("clientName", agent_identity),
                         "life_time_sec": data.get("lifeTimeSec", 86400),
                         "provider": "AFRICAS_TALKING",

@@ -1,11 +1,11 @@
 {
   "app_name": "CorpSec Payroll & Security Workforce System",
-  "version": "2.5.7",
-  "build_number": 2026111504,
-  "release_name": "CorpSec Enterprise 2.5.7",
-  "release_date": "2026-11-15",
+  "version": "2.5.15",
+  "build_number": 2026111707,
+  "release_name": "CorpSec Enterprise 2.5.15",
+  "release_date": "2026-11-17",
   "silent_update": true,
-  "check_interval_seconds": 30,
+  "check_interval_seconds": 15,
   "assets": [
     "/static/js/app.js",
     "/static/css/styles.css",

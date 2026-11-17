@@ -26,6 +26,7 @@ class TeamMessage(Base):
     attachment_type = Column(String(100), nullable=True)
     attachment_size = Column(Integer, nullable=True)
     is_read = Column(Boolean, default=False, nullable=False)
+    is_pinned = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
 
     user = relationship("User", foreign_keys=[user_id])

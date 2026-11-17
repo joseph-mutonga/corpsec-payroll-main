@@ -187,6 +187,7 @@ class CallerContactResponse(CallerContactBase):
 class DialRequest(BaseModel):
     destination_number: str
     caller_id_number: Optional[str] = None
+    destination_name: Optional[str] = None
 
 class CallActionRequest(BaseModel):
     notes: Optional[str] = None

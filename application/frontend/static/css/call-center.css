@@ -548,7 +548,7 @@
 }
 
 /* ==========================================================================
-   Persistent Floating Softphone Dialer Widget
+   Persistent Floating Softphone Dialer Widget (Draggable Anywhere on Screen)
    ========================================================================== */
 #softphone-widget-container {
   position: fixed;
@@ -556,6 +556,19 @@
   right: 24px;
   z-index: 9999;
   font-family: inherit;
+  touch-action: none;
+}
+
+#softphone-widget-container.is-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+#softphone-widget-container.is-dragging .softphone-minimized-btn,
+#softphone-widget-container.is-dragging .softphone-expanded-card {
+  transition: none !important;
+  cursor: grabbing !important;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45) !important;
 }
 
 /* Minimized Softphone Floating Button */
@@ -568,10 +581,34 @@
   color: #FFFFFF;
   border-radius: 9999px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
-  cursor: pointer;
+  cursor: grab;
   border: 2px solid #334155;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.softphone-minimized-btn:active {
+  cursor: grabbing;
+}
+
+.softphone-drag-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+  font-size: 13px;
+  cursor: grab;
+  letter-spacing: -2px;
+  margin-right: -2px;
+  opacity: 0.6;
+  user-select: none;
+}
+
+.softphone-minimized-btn:hover .softphone-drag-grip {
+  opacity: 1;
+  color: #E2E8F0;
 }
 
 .softphone-minimized-btn:hover {
@@ -629,6 +666,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.softphone-top-header:active {
+  cursor: grabbing;
 }
 
 .softphone-top-title {

@@ -355,14 +355,176 @@
   }
 
   /* ==========================================================================
-     4. Persistent Softphone Widget Controls
+     4. Persistent Softphone Widget Controls & Draggable Engine
      ========================================================================== */
-  window.toggleSoftphone = function (forceState) {
+  function initDraggableSoftphone() {
+    const container = document.getElementById('softphone-widget-container');
+    const minimized = document.getElementById('softphone-minimized');
+    const header = document.querySelector('.softphone-top-header');
+
+    if (!container || !minimized) return;
+    if (container.dataset.dragInitialized === 'true') return;
+    container.dataset.dragInitialized = 'true';
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+    let hasMoved = false;
+    const DRAG_THRESHOLD = 8;
+
+    function clampPosition(left, top, elWidth, elHeight) {
+      const padding = 12;
+      const width = elWidth || container.offsetWidth || 180;
+      const height = elHeight || container.offsetHeight || 48;
+      const maxLeft = Math.max(padding, window.innerWidth - width - padding);
+      const maxTop = Math.max(padding, window.innerHeight - height - padding);
+
+      const clampedLeft = Math.max(padding, Math.min(maxLeft, left));
+      const clampedTop = Math.max(padding, Math.min(maxTop, top));
+      return { left: clampedLeft, top: clampedTop };
+    }
+
+    function setPosition(left, top) {
+      container.style.bottom = 'auto';
+      container.style.right = 'auto';
+      container.style.left = `${Math.round(left)}px`;
+      container.style.top = `${Math.round(top)}px`;
+    }
+
+    function savePosition(left, top) {
+      try {
+        localStorage.setItem('corpsec_softphone_pos', JSON.stringify({ left: Math.round(left), top: Math.round(top) }));
+      } catch (e) {}
+    }
+
+    function restoreSavedPosition() {
+      try {
+        const saved = localStorage.getItem('corpsec_softphone_pos');
+        if (saved) {
+          const pos = JSON.parse(saved);
+          if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+            const rect = container.getBoundingClientRect();
+            const clamped = clampPosition(pos.left, pos.top, rect.width || 180, rect.height || 48);
+            setPosition(clamped.left, clamped.top);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Restore saved position on load
+    restoreSavedPosition();
+
+    // Keep widget on screen when viewport is resized
+    window.addEventListener('resize', () => {
+      if (container.style.left) {
+        const rect = container.getBoundingClientRect();
+        const currentLeft = parseFloat(container.style.left) || rect.left;
+        const currentTop = parseFloat(container.style.top) || rect.top;
+        const clamped = clampPosition(currentLeft, currentTop, rect.width, rect.height);
+        setPosition(clamped.left, clamped.top);
+      }
+    });
+
+    let activePointerId = null;
+
+    function onPointerDown(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
+
+      isDragging = true;
+      hasMoved = false;
+      activePointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = container.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      container.classList.add('is-dragging');
+
+      try {
+        if (e.currentTarget && e.currentTarget.setPointerCapture && e.pointerId !== undefined) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+      } catch (err) {}
+
+      document.addEventListener('pointermove', onPointerMove, { passive: false });
+      document.addEventListener('pointerup', onPointerUp);
+      document.addEventListener('pointercancel', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!hasMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        hasMoved = true;
+      }
+
+      if (hasMoved) {
+        if (e.cancelable) e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const rawLeft = initialLeft + dx;
+        const rawTop = initialTop + dy;
+        const clamped = clampPosition(rawLeft, rawTop, rect.width, rect.height);
+        setPosition(clamped.left, clamped.top);
+      }
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('is-dragging');
+
+      try {
+        if (e && e.currentTarget && e.currentTarget.releasePointerCapture && activePointerId !== null) {
+          e.currentTarget.releasePointerCapture(activePointerId);
+        }
+      } catch (err) {}
+      activePointerId = null;
+
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('pointercancel', onPointerUp);
+
+      if (hasMoved) {
+        window.__softphoneJustDragged = true;
+        setTimeout(() => {
+          window.__softphoneJustDragged = false;
+        }, 180);
+
+        const rect = container.getBoundingClientRect();
+        savePosition(rect.left, rect.top);
+      } else {
+        // Direct tap/click on minimized pill: immediately open softphone!
+        window.toggleSoftphone(true, true);
+      }
+    }
+
+    minimized.addEventListener('pointerdown', onPointerDown);
+    if (header) {
+      header.addEventListener('pointerdown', onPointerDown);
+    }
+  }
+
+  window.initDraggableSoftphone = initDraggableSoftphone;
+
+  window.toggleSoftphone = function (forceState, ignoreDragCheck = false) {
+    if (!ignoreDragCheck && window.__softphoneJustDragged) return;
+
     const widget = document.getElementById('softphone-widget-container');
     const expanded = document.getElementById('softphone-expanded');
     const minimized = document.getElementById('softphone-minimized');
 
-    if (!widget || !expanded || !minimized) return;
+    if (!widget || !expanded || !minimized) {
+      console.warn('Softphone elements not found in DOM');
+      return;
+    }
 
     if (typeof forceState === 'boolean') {
       window.CallCenter.isSoftphoneOpen = forceState;
@@ -373,7 +535,26 @@
     if (window.CallCenter.isSoftphoneOpen) {
       expanded.style.display = 'flex';
       minimized.style.display = 'none';
-      getAudioContext(); // user gesture unlocks audio
+      try { getAudioContext(); } catch (err) {} // user gesture unlocks audio
+
+      // Ensure expanded modal stays fully within screen viewport
+      requestAnimationFrame(() => {
+        if (!widget.style.left && !widget.style.top) return;
+        const rect = widget.getBoundingClientRect();
+        const padding = 12;
+        const effectiveWidth = Math.max(rect.width, 340);
+        const effectiveHeight = Math.max(rect.height, 520);
+        let left = parseFloat(widget.style.left) || rect.left;
+        let top = parseFloat(widget.style.top) || rect.top;
+        if (left + effectiveWidth > window.innerWidth - padding) {
+          left = Math.max(padding, window.innerWidth - effectiveWidth - padding);
+        }
+        if (top + effectiveHeight > window.innerHeight - padding) {
+          top = Math.max(padding, window.innerHeight - effectiveHeight - padding);
+        }
+        widget.style.left = `${Math.round(left)}px`;
+        widget.style.top = `${Math.round(top)}px`;
+      });
     } else {
       expanded.style.display = 'none';
       minimized.style.display = 'flex';
@@ -822,8 +1003,8 @@
       const badgeTeam = document.getElementById('badge-cc-team');
       const badgeMissed = document.getElementById('badge-cc-missed');
 
-      if (badgeNumbers) badgeNumbers.innerText = data.virtual_numbers_count ?? 2;
-      if (badgeQueues) badgeQueues.innerText = data.active_queues_count ?? (data.active_queues ? data.active_queues.length : 2);
+      if (badgeNumbers) badgeNumbers.innerText = data.virtual_numbers_count ?? 0;
+      if (badgeQueues) badgeQueues.innerText = data.active_queues_count ?? (data.active_queues ? data.active_queues.length : 0);
       if (badgeTeam) badgeTeam.innerText = activeAgents;
       if (badgeMissed) badgeMissed.innerText = missedCalls;
     } catch (e) {
@@ -1576,12 +1757,18 @@
     fetchCurrentAgentStatus();
     loadCallCenterOverview();
     switchCallCenterSubTab('phone');
+    initDraggableSoftphone();
   };
 
-  // Auto-init status when DOM loads
-  document.addEventListener('DOMContentLoaded', () => {
-    fetchCurrentAgentStatus();
-    initCallCenterWebSocket();
-  });
+  // Auto-init status & draggable floating softphone when DOM loads
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initDraggableSoftphone();
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchCurrentAgentStatus();
+      initCallCenterWebSocket();
+      initDraggableSoftphone();
+    });
+  }
 
 })();

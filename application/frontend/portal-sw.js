@@ -1,4 +1,4 @@
-const CACHE_NAME = 'corpsec-auto-update-v14';
+const CACHE_NAME = 'corpsec-auto-update-v21';
 const APP_SHELL = [
   '/',
   '/portal',
@@ -10,6 +10,8 @@ const APP_SHELL = [
   '/static/css/portal.css',
   '/static/js/portal.js',
   '/static/js/silent-updater.js',
+  '/static/js/call-center.js',
+  '/static/css/call-center.css',
   '/static/images/corpsec_logo_badge.png',
   '/static/images/corpsec_pwa_192.png',
   '/static/images/corpsec_pwa_512.png',
@@ -28,8 +30,11 @@ function isApiRequest(url) {
 
 function isAppShellRequest(url) {
   return (
+    url.pathname === '/' ||
+    url.pathname === '/index.html' ||
     url.pathname === '/portal' ||
     url.pathname === '/portal/' ||
+    url.pathname === '/version.json' ||
     url.pathname === '/manifest.json' ||
     url.pathname === '/portal-sw.js' ||
     url.pathname.startsWith('/static/')
@@ -53,12 +58,15 @@ function isHtmlResponse(response) {
 }
 
 self.addEventListener('install', (event) => {
+  // Activate immediately without waiting for existing tabs to close
+  self.skipWaiting();
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await Promise.all(
-      APP_SHELL.map((url) => cache.add(url).catch(() => undefined))
-    );
-    await self.skipWaiting();
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      await Promise.all(
+        APP_SHELL.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
+      );
+    } catch (e) {}
   })());
 });
 
@@ -74,40 +82,29 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
-async function networkFirstPortal(request) {
+// Network-First for HTML navigation: Always get latest version from server; fallback to cache only offline
+async function networkFirstDocument(request, pathname) {
+  const cacheKey = pathname.startsWith('/portal') ? '/portal' : '/';
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-cache' });
     if (!isUnsafeToCache(response) && isHtmlResponse(response)) {
       const cache = await caches.open(CACHE_NAME);
-      await cache.put('/portal', response.clone());
+      await cache.put(cacheKey, response.clone());
     }
     return response;
   } catch (error) {
-    const cached = await caches.match('/portal');
-    if (cached && !isUnsafeToCache(cached) && isHtmlResponse(cached)) {
+    const cached = await caches.match(cacheKey);
+    if (cached && !isUnsafeToCache(cached)) {
       return cached;
     }
     throw error;
   }
 }
 
-async function cacheFirstShell(request) {
-  const cached = await caches.match(request);
-  if (cached && !isUnsafeToCache(cached)) {
-    return cached;
-  }
-
-  const response = await fetch(request);
-  if (!isUnsafeToCache(response)) {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, response.clone());
-  }
-  return response;
-}
-
-async function networkFirstShell(request) {
+// Network-First for JS, CSS, and static assets: Always fetch newest bundle from server
+async function networkFirstAsset(request) {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-cache' });
     if (!isUnsafeToCache(response)) {
       const cache = await caches.open(CACHE_NAME);
       await cache.put(request, response.clone());
@@ -123,8 +120,13 @@ async function networkFirstShell(request) {
 }
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.action === 'SKIP_WAITING') {
+  if (event.data && (event.data.action === 'SKIP_WAITING' || event.data.action === 'PURGE_ALL_AND_CLAIM')) {
     self.skipWaiting();
+    event.waitUntil((async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })());
   }
   if (event.data && event.data.action === 'CLEAR_OLD_CACHES') {
     event.waitUntil(
@@ -142,31 +144,23 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never intercept payslips/API — those must not be treated as the PWA document.
+  // Never intercept API or PDF payslips — those must always hit the backend
   if (isApiRequest(url) || isPdfRequest(url)) return;
 
   if (!isAppShellRequest(url)) return;
 
-  const isPortalDocument =
+  const isDocument =
     request.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname === '/index.html' ||
     url.pathname === '/portal' ||
     url.pathname === '/portal/';
 
-  if (isPortalDocument) {
-    event.respondWith(networkFirstPortal(request));
+  if (isDocument) {
+    event.respondWith(networkFirstDocument(request, url.pathname));
     return;
   }
 
-  const isLiveAsset =
-    url.pathname.endsWith('.js') ||
-    url.pathname.endsWith('.css') ||
-    url.pathname === '/manifest.json' ||
-    url.pathname === '/portal-sw.js';
-
-  if (isLiveAsset) {
-    event.respondWith(networkFirstShell(request));
-    return;
-  }
-
-  event.respondWith(cacheFirstShell(request));
+  // Network-first for all scripts, CSS, and static files
+  event.respondWith(networkFirstAsset(request));
 });
