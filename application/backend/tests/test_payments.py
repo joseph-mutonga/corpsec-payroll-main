@@ -323,3 +323,49 @@ def test_payment_security_and_rbac(client, setup_payment_test_data):
     # Unauthenticated should be unauthorized (401)
     res_unauth = client.get(f"/api/v1/payments/bank/{period_id}")
     assert res_unauth.status_code == 401
+
+
+def test_current_month_unpaid_payment_schedule_visibility(client, db):
+    """
+    Verifies that the current month's payment schedule can be viewed in advance
+    even though salaries have not yet been disbursed to workers.
+    """
+    from datetime import datetime
+    now = datetime.now()
+    admin_headers = get_admin_headers(client)
+
+    # 1. Fetch periods - verifies ensure_current_month_payroll_period automatically provisions current month
+    periods_resp = client.get("/api/v1/payroll/periods", headers=admin_headers)
+    assert periods_resp.status_code == 200
+    periods = periods_resp.json()
+    cur_period = next((p for p in periods if p["year"] == now.year and p["month"] == now.month), None)
+    assert cur_period is not None, f"Current month period ({now.year}-{now.month}) must exist in payroll periods"
+
+    # 2. Query reconciliation & payment schedules for the current month
+    recon_resp = client.get(f"/api/v1/payments/reconciliation/{cur_period['id']}", headers=admin_headers)
+    assert recon_resp.status_code == 200
+    recon = recon_resp.json()
+
+    assert recon["is_current_month"] is True
+    assert recon["period_id"] == cur_period["id"]
+    # The period is unpaid (status is CALCULATED / CONFIRMED, not CLOSED)
+    assert recon["is_paid"] is False
+    assert recon["total_records_count"] > 0, "Active workers must have calculated net pay records"
+    assert recon["total_payroll_net_pay"] > 0
+
+    # Verify items have unpaid/ready status
+    for item in recon["bank_items"]:
+        assert item["is_paid"] is False
+        assert "UNPAID" in item["status"]
+        assert item["payment_status"] == "UNPAID"
+        assert item["amount"] > 0
+        assert item["bank_name"]
+        assert item["bank_account"]
+
+    for item in recon["mpesa_items"]:
+        assert item["is_paid"] is False
+        assert "UNPAID" in item["status"]
+        assert item["payment_status"] == "UNPAID"
+        assert item["amount"] > 0
+        assert item["mpesa_number"]
+

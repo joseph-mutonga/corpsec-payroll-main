@@ -3553,29 +3553,47 @@ async function loadPayments(selectedPeriodId = null) {
     const periods = await pRes.json();
     if (!periods.length) return;
 
-    // Populate period selector dropdown if present
-    const pSel = document.getElementById('payments-period-selector');
-    if (pSel) {
-      const currentVal = selectedPeriodId || pSel.value || currentPaymentsPeriodId;
-      pSel.innerHTML = periods.map(p => `<option value="${p.id}" ${String(p.id) === String(currentVal) ? 'selected' : ''}>${p.period_name} (${p.status})</option>`).join('');
-    }
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
 
+    // Determine active period: prioritize explicit selection, then current month, then existing dropdown, then first
     let activePeriod = null;
     if (selectedPeriodId) {
       activePeriod = periods.find(p => String(p.id) === String(selectedPeriodId));
     }
+    if (!activePeriod && !selectedPeriodId && !currentPaymentsPeriodId) {
+      activePeriod = periods.find(p => p.year === curYear && p.month === curMonth);
+    }
+    const pSel = document.getElementById('payments-period-selector');
     if (!activePeriod && pSel && pSel.value) {
       activePeriod = periods.find(p => String(p.id) === String(pSel.value));
     }
     if (!activePeriod) {
-      activePeriod = periods.find(p => p.status === 'CONFIRMED' || p.status === 'CALCULATED') || periods[0];
+      activePeriod = periods.find(p => p.year === curYear && p.month === curMonth) ||
+                     periods.find(p => p.status === 'CONFIRMED' || p.status === 'CALCULATED') ||
+                     periods[0];
     }
     currentPaymentsPeriodId = activePeriod.id;
-    if (pSel) pSel.value = activePeriod.id;
+
+    // Populate period selector dropdown with status & current month indicators
+    if (pSel) {
+      pSel.innerHTML = periods.map(p => {
+        const isCurrent = (p.year === curYear && p.month === curMonth);
+        const statusText = (p.status === 'CLOSED' || p.status === 'PAID')
+          ? 'PAID / CLOSED'
+          : (isCurrent ? 'Current Month — Calculated (Unpaid)' : p.status);
+        return `<option value="${p.id}" ${String(p.id) === String(activePeriod.id) ? 'selected' : ''}>${p.period_name} (${statusText})</option>`;
+      }).join('');
+      pSel.value = activePeriod.id;
+    }
 
     const reconRes = await apiFetch(`/payments/reconciliation/${activePeriod.id}`);
     if (!reconRes.ok) return;
     const recon = await reconRes.json();
+
+    const isCurrentMonth = Boolean(recon.is_current_month || (activePeriod.year === curYear && activePeriod.month === curMonth));
+    const isPaid = Boolean(recon.is_paid || activePeriod.status === 'CLOSED' || activePeriod.status === 'PAID');
 
     const container = document.getElementById('panel-payments');
     let summaryBox = document.getElementById('payments-recon-summary');
@@ -3588,6 +3606,56 @@ async function loadPayments(selectedPeriodId = null) {
 
     if (summaryBox) {
       const isReconciled = recon.is_reconciled;
+
+      let currentMonthBannerHtml = '';
+      if (isCurrentMonth) {
+        if (!isPaid) {
+          currentMonthBannerHtml = `
+            <div style="background:linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border:1px solid #3B82F6; border-radius:12px; padding:14px 18px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="font-size:26px; line-height:1;">ℹ️</div>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#1E40AF; display:flex; align-items:center; gap:8px;">
+                    <span>Current Month Payment Schedule: ${recon.period_name}</span>
+                    <span class="badge" style="background:#2563EB; color:#FFF; font-size:11px; padding:3px 8px; border-radius:12px;">UNPAID / SCHEDULED</span>
+                  </div>
+                  <div style="font-size:12px; color:#1E3A8A; margin-top:3px;">
+                    Net salary disbursements calculated for <strong>${recon.total_records_count} active workers</strong> (Total: <strong>KES ${recon.total_payroll_net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</strong>).
+                    Schedules are ready for advance review and bank export, pending batch release / M-Pesa payout to workers.
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span class="badge" style="background:#1D4ED8; color:#FFF; font-size:12px; font-weight:700; padding:6px 14px; border-radius:20px;">
+                  ⏳ PENDING DISBURSEMENT (UNPAID)
+                </span>
+              </div>
+            </div>
+          `;
+        } else {
+          currentMonthBannerHtml = `
+            <div style="background:linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%); border:1px solid #22C55E; border-radius:12px; padding:14px 18px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="font-size:26px; line-height:1;">✅</div>
+                <div>
+                  <div style="font-size:14px; font-weight:800; color:#166534;">
+                    Current Month Payment Schedule: ${recon.period_name} (DISBURSED / PAID)
+                  </div>
+                  <div style="font-size:12px; color:#15803D; margin-top:3px;">
+                    All bank and M-Pesa salaries for this month have been successfully disbursed and reconciled.
+                  </div>
+                </div>
+              </div>
+              <div>
+                <span class="badge" style="background:#16A34A; color:#FFF; font-size:12px; font-weight:700; padding:6px 14px; border-radius:20px;">
+                  ✅ PAID
+                </span>
+              </div>
+            </div>
+          `;
+        }
+      }
+
       let unroutedHtml = '';
       if (recon.unrouted_items && recon.unrouted_items.length > 0) {
         unroutedHtml = `
@@ -3614,6 +3682,7 @@ async function loadPayments(selectedPeriodId = null) {
       }
 
       summaryBox.innerHTML = `
+        ${currentMonthBannerHtml}
         ${unroutedHtml}
         ${dupHtml}
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px;">
@@ -3662,8 +3731,18 @@ async function loadPayments(selectedPeriodId = null) {
     if (!tbody) return;
     tbody.innerHTML = '';
 
+    const hasNoItems = (recon.bank_items.length === 0 && recon.mpesa_items.length === 0 && (!recon.unrouted_items || recon.unrouted_items.length === 0));
+    if (hasNoItems) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No payment disbursement records found for this period. Click 🔄 Refresh to recalculate.</td></tr>';
+      return;
+    }
+
     recon.bank_items.forEach(item => {
       const tr = document.createElement('tr');
+      const statusBadge = (item.is_paid || isPaid)
+        ? '<span class="badge" style="background:#16A34A; color:#FFF; font-weight:700;">✅ PAID</span>'
+        : '<span class="badge" style="background:#2563EB; color:#FFF; font-weight:700; font-size:11px;" title="Calculated net salary pending bank batch transfer">⏳ PENDING PAYMENT</span>';
+
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
         <td>${escapeHtml(item.guard_name)}</td>
@@ -3671,7 +3750,7 @@ async function loadPayments(selectedPeriodId = null) {
         <td>${escapeHtml(item.bank_name)}</td>
         <td><code>${escapeHtml(item.bank_account)}</code></td>
         <td><b>KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
-        <td><span class="badge badge-active">${item.status}</span></td>
+        <td>${statusBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
             ⏸️ Hold
@@ -3683,6 +3762,10 @@ async function loadPayments(selectedPeriodId = null) {
 
     recon.mpesa_items.forEach(item => {
       const tr = document.createElement('tr');
+      const statusBadge = (item.is_paid || isPaid)
+        ? '<span class="badge" style="background:#16A34A; color:#FFF; font-weight:700;">✅ PAID</span>'
+        : '<span class="badge" style="background:#059669; color:#FFF; font-weight:700; font-size:11px;" title="Calculated net salary pending M-Pesa disbursement">⏳ PENDING PAYMENT</span>';
+
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
         <td>${escapeHtml(item.guard_name)}</td>
@@ -3690,7 +3773,7 @@ async function loadPayments(selectedPeriodId = null) {
         <td>Safaricom M-Pesa</td>
         <td><code>${escapeHtml(item.mpesa_number)}</code></td>
         <td><b>KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
-        <td><span class="badge badge-active">${item.status}</span></td>
+        <td>${statusBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
             ⏸️ Hold
@@ -3749,17 +3832,56 @@ async function loadPayments(selectedPeriodId = null) {
   }
 }
 
-async function exportBankScheduleExcel() {
+async function exportBankScheduleExcel(template = 'standard') {
   const pSel = document.getElementById('payments-period-selector');
   const periodId = (pSel && pSel.value) || currentPaymentsPeriodId || await getLatestPeriodId();
-  await downloadAuthenticatedFile(`/payments/bank/${periodId}/export-excel`, `Bank_Payment_Schedule_Period_${periodId}.xlsx`);
+  const url = template === 'im_batch' ? `/payments/bank/${periodId}/export-im-batch` : `/payments/bank/${periodId}/export-excel`;
+  await downloadAuthenticatedFile(url, `Bank_Payment_Schedule_Period_${periodId}.xlsx`);
 }
 
-async function exportMpesaScheduleExcel() {
+async function exportMpesaScheduleExcel(template = 'standard') {
   const pSel = document.getElementById('payments-period-selector');
   const periodId = (pSel && pSel.value) || currentPaymentsPeriodId || await getLatestPeriodId();
-  await downloadAuthenticatedFile(`/payments/mpesa/${periodId}/export-excel`, `Mpesa_Payment_Schedule_Period_${periodId}.xlsx`);
+  const url = template === 'im_batch' ? `/payments/mpesa/${periodId}/export-im-mobile` : `/payments/mpesa/${periodId}/export-excel`;
+  await downloadAuthenticatedFile(url, `Mpesa_Payment_Schedule_Period_${periodId}.xlsx`);
 }
+
+async function downloadBankSalaryTemplate() {
+  await downloadAuthenticatedFile('/payments/bank/template', 'IM_Bank_Salary_Batch_Template.xlsx');
+}
+
+async function downloadMpesaSalaryTemplate() {
+  await downloadAuthenticatedFile('/payments/mpesa/template', 'IM_Mobile_Money_Template.xlsx');
+}
+
+async function downloadStatutoryPayrollTemplate() {
+  await downloadAuthenticatedFile('/payroll/template/statutory-payroll', 'Statutory_Payroll_Template.xlsx');
+}
+
+async function exportStatutoryPayrollExcel(periodId = null) {
+  const pSel = document.getElementById('payroll-period-select') || document.getElementById('payments-period-selector');
+  const targetPeriodId = periodId || (pSel && pSel.value) || currentPaymentsPeriodId || await getLatestPeriodId();
+  if (!targetPeriodId) {
+    showToast('Please select a payroll period to export statutory returns.', 'warning');
+    return;
+  }
+  await downloadAuthenticatedFile(`/payroll/${targetPeriodId}/export-statutory-template`, `Statutory_Payroll_Return_Period_${targetPeriodId}.xlsx`);
+}
+
+function onAwardGuardSelected(guardId) {
+  const sel = document.getElementById('award-guard-select');
+  const targetIdInput = document.getElementById('award-target-id');
+  const recipientNameBox = document.getElementById('award-recipient-name');
+  if (targetIdInput) targetIdInput.value = guardId || '';
+  if (recipientNameBox && sel && sel.selectedIndex >= 0) {
+    const text = sel.options[sel.selectedIndex].text;
+    recipientNameBox.innerText = guardId ? `${text} (Security Guard)` : '-';
+  }
+}
+
+window.downloadStatutoryPayrollTemplate = downloadStatutoryPayrollTemplate;
+window.exportStatutoryPayrollExcel = exportStatutoryPayrollExcel;
+window.onAwardGuardSelected = onAwardGuardSelected;
 
 // --- Payment Schedules Sub-Navigation & Salary Hold Management ---
 function switchPaymentsSubTab(tab) {
@@ -10301,6 +10423,112 @@ async function loadCompanyHistory() {
   }
 }
 
+let cachedRecommendations = [];
+let cachedCompanyServices = [];
+
+async function uploadCompanyDocumentFile(fileInputId) {
+  const fileInput = document.getElementById(fileInputId);
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    return null;
+  }
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await apiFetch('/company/upload-document', {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || 'Failed to upload document');
+  }
+
+  const data = await res.json();
+  return {
+    document_url: data.file_url,
+    document_name: data.file_name
+  };
+}
+
+function viewCompanyDoc(url) {
+  if (!url) {
+    showToast('No document attached.', 'info');
+    return;
+  }
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const sep = url.includes('?') ? '&' : '?';
+  const authedUrl = token ? `${url}${sep}token=${encodeURIComponent(token)}` : url;
+  window.open(authedUrl, '_blank');
+}
+
+function removeProfileDoc() {
+  const urlEl = document.getElementById('prof-document-url');
+  const nameEl = document.getElementById('prof-document-name');
+  const fileEl = document.getElementById('prof-document-file');
+  const prev = document.getElementById('prof-current-doc-preview');
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (fileEl) fileEl.value = '';
+  if (prev) prev.style.display = 'none';
+}
+
+function removeFoundingEditDoc() {
+  const urlEl = document.getElementById('founding-edit-document-url');
+  const nameEl = document.getElementById('founding-edit-document-name');
+  const fileEl = document.getElementById('founding-edit-document-file');
+  const prev = document.getElementById('founding-edit-doc-preview');
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (fileEl) fileEl.value = '';
+  if (prev) prev.style.display = 'none';
+}
+
+function removeMilestoneEditDoc() {
+  const urlEl = document.getElementById('milestone-edit-document-url');
+  const nameEl = document.getElementById('milestone-edit-document-name');
+  const fileEl = document.getElementById('milestone-edit-document-file');
+  const prev = document.getElementById('milestone-edit-doc-preview');
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (fileEl) fileEl.value = '';
+  if (prev) prev.style.display = 'none';
+}
+
+function removeOwnerEditDoc() {
+  const urlEl = document.getElementById('owner-edit-document-url');
+  const nameEl = document.getElementById('owner-edit-document-name');
+  const fileEl = document.getElementById('owner-edit-document-file');
+  const prev = document.getElementById('owner-edit-doc-preview');
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (fileEl) fileEl.value = '';
+  if (prev) prev.style.display = 'none';
+}
+
+function removeRecEditDoc() {
+  const urlEl = document.getElementById('rec-edit-document-url');
+  const nameEl = document.getElementById('rec-edit-document-name');
+  const fileEl = document.getElementById('rec-edit-document-file');
+  const prev = document.getElementById('rec-edit-doc-preview');
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (fileEl) fileEl.value = '';
+  if (prev) prev.style.display = 'none';
+}
+
+function removeSrvEditDoc() {
+  const urlEl = document.getElementById('srv-edit-document-url');
+  const nameEl = document.getElementById('srv-edit-document-name');
+  const fileEl = document.getElementById('srv-edit-document-file');
+  const prev = document.getElementById('srv-edit-doc-preview');
+  if (urlEl) urlEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (fileEl) fileEl.value = '';
+  if (prev) prev.style.display = 'none';
+}
+
 function populateCompanyProfileForm(profile) {
   if (!profile) return;
   const setVal = (id, val) => {
@@ -10319,6 +10547,22 @@ function populateCompanyProfileForm(profile) {
   setVal('prof-mission', profile.mission_statement);
   setVal('prof-vision', profile.vision_statement);
   setVal('prof-core-values', profile.core_values);
+
+  // Document attachment preview
+  const prev = document.getElementById('prof-current-doc-preview');
+  const urlEl = document.getElementById('prof-document-url');
+  const nameEl = document.getElementById('prof-document-name');
+  const txtEl = document.getElementById('prof-doc-name-txt');
+  if (profile.document_url) {
+    if (urlEl) urlEl.value = profile.document_url;
+    if (nameEl) nameEl.value = profile.document_name || 'Official Document';
+    if (txtEl) txtEl.innerText = profile.document_name || 'Official Document';
+    if (prev) prev.style.display = 'inline-flex';
+  } else {
+    if (urlEl) urlEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (prev) prev.style.display = 'none';
+  }
 }
 
 function populateFoundingDetails(founding) {
@@ -10332,6 +10576,15 @@ function populateFoundingDetails(founding) {
   setTxt('founding-guards-val', `${founding.initial_guards_count || 12} Trained Security Officers`);
   setTxt('founding-names-val', founding.founder_names || '-');
   setTxt('founding-story-val', founding.background_story || 'CorpSec was established to deliver world-class security operations across Kenya.');
+
+  const docCont = document.getElementById('founding-doc-container');
+  const docTxt = document.getElementById('founding-doc-name-txt');
+  if (founding.document_url) {
+    if (docTxt) docTxt.innerText = founding.document_name || 'Founding Charter Document';
+    if (docCont) docCont.style.display = 'block';
+  } else {
+    if (docCont) docCont.style.display = 'none';
+  }
 }
 
 function renderMilestonesTimeline(milestones) {
@@ -10357,22 +10610,30 @@ function renderMilestonesTimeline(milestones) {
     const badge = categoryBadges[m.category] || `<span class="badge">${m.category}</span>`;
 
     return `
-      <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #0D7682; border-radius:8px; padding:16px 20px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #0D7682; border-radius:8px; padding:16px 20px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:10px;">
             <strong style="font-size:15px; color:#0F172A;">${escapeHtml(m.title)}</strong>
             ${badge}
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
+          <div style="display:flex; align-items:center; gap:6px;">
             <span style="font-size:12px; font-weight:700; color:#0D7682;">${dateStr}</span>
+            <button class="btn btn-secondary" style="font-size:10px; padding:2px 8px; color:#0D7682; border-color:#99F6E4;" onclick="openEditMilestoneModal('${m.id}')">✏️ Amend</button>
             <button class="btn btn-secondary" style="font-size:10px; padding:2px 6px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteMilestone('${m.id}', '${escapeHtml(m.title)}')">🗑️</button>
           </div>
         </div>
         <p style="font-size:13px; color:#475569; margin:6px 0 8px 0; line-height:1.5;">${escapeHtml(m.description)}</p>
-        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748B;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748B; flex-wrap:wrap; gap:6px;">
           <span>📍 ${escapeHtml(m.location || 'Nairobi HQ')}</span>
           ${m.significance ? `<span style="font-weight:600; color:#059669;">🎯 Impact: ${escapeHtml(m.significance)}</span>` : ''}
         </div>
+        ${m.document_url ? `
+          <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #E2E8F0;">
+            <button class="btn btn-secondary" style="font-size:11px; padding:3px 10px; color:#047857; border-color:#A7F3D0; background:#ECFDF5; display:inline-flex; align-items:center; gap:6px;" onclick="viewCompanyDoc('${escapeHtml(m.document_url)}')">
+              📄 Supporting Document: <strong>${escapeHtml(m.document_name || 'View Document')}</strong>
+            </button>
+          </div>
+        ` : ''}
       </div>
     `;
   }).join('');
@@ -10383,7 +10644,7 @@ function renderOwnershipTable(records) {
   if (!tbody) return;
 
   if (!records || records.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#64748B;">No director or ownership records found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No director or ownership records found.</td></tr>';
     return;
   }
 
@@ -10393,9 +10654,20 @@ function renderOwnershipTable(records) {
     const shares = Number(r.number_of_shares) || 0;
     const isAct = r.status === 'ACTIVE';
 
+    const docLink = r.document_url ? `
+      <div style="margin-top:4px;">
+        <a href="javascript:void(0)" onclick="viewCompanyDoc('${escapeHtml(r.document_url)}')" title="${escapeHtml(r.document_name || 'View Document')}" style="color:#0D7682; font-weight:700; text-decoration:underline; font-size:11px; display:inline-flex; align-items:center; gap:3px;">
+          📄 ${escapeHtml(r.document_name ? (r.document_name.length > 20 ? r.document_name.substring(0, 18) + '...' : r.document_name) : 'Legal Doc')}
+        </a>
+      </div>
+    ` : '';
+
     return `
       <tr>
-        <td><strong>${escapeHtml(r.person_or_entity_name)}</strong></td>
+        <td>
+          <strong>${escapeHtml(r.person_or_entity_name)}</strong>
+          ${docLink}
+        </td>
         <td><span style="background:#F1F5F9; padding:2px 8px; border-radius:4px; font-weight:600; font-size:11px;">${escapeHtml(r.role_title)}</span></td>
         <td style="text-align:right; font-weight:800; color:#0D7682;">${pct.toFixed(2)}%</td>
         <td style="text-align:right; font-weight:600;">${shares.toLocaleString()}</td>
@@ -10405,6 +10677,7 @@ function renderOwnershipTable(records) {
           <span class="badge" style="background:${isAct ? '#ECFDF5' : '#F1F5F9'}; color:${isAct ? '#059669' : '#64748B'};">${r.status}</span>
         </td>
         <td style="text-align:right;">
+          <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; color:#0D7682; border-color:#99F6E4; margin-right:4px;" onclick="openEditOwnershipModal('${r.id}')">✏️ Amend</button>
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteOwnershipRecord('${r.id}', '${escapeHtml(r.person_or_entity_name)}')">🗑️ Remove</button>
         </td>
       </tr>
@@ -10438,6 +10711,16 @@ async function handleUpdateCompanyProfile(e) {
   if (btn) btn.disabled = true;
 
   try {
+    let docUrl = document.getElementById('prof-document-url') ? document.getElementById('prof-document-url').value.trim() || null : null;
+    let docName = document.getElementById('prof-document-name') ? document.getElementById('prof-document-name').value.trim() || null : null;
+
+    // Check if new document selected
+    const uploaded = await uploadCompanyDocumentFile('prof-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
     const payload = {
       company_name: document.getElementById('prof-company-name').value.trim(),
       trading_brand_name: document.getElementById('prof-trading-name').value.trim() || null,
@@ -10450,7 +10733,9 @@ async function handleUpdateCompanyProfile(e) {
       headquarters_address: document.getElementById('prof-hq-address').value.trim() || null,
       mission_statement: document.getElementById('prof-mission').value.trim() || null,
       vision_statement: document.getElementById('prof-vision').value.trim() || null,
-      core_values: document.getElementById('prof-core-values').value.trim() || null
+      core_values: document.getElementById('prof-core-values').value.trim() || null,
+      document_url: docUrl,
+      document_name: docName
     };
 
     const res = await apiFetch('/company/profile', {
@@ -10462,7 +10747,7 @@ async function handleUpdateCompanyProfile(e) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed to update company profile');
 
-    showToast('Official corporate profile updated successfully!', 'success');
+    showToast('Official corporate profile and documents updated successfully!', 'success');
     loadCompanyHistory();
 
   } catch (err) {
@@ -10493,13 +10778,23 @@ async function handleAddMilestoneSubmit(e) {
   if (btn) btn.disabled = true;
 
   try {
+    let docUrl = null;
+    let docName = null;
+    const uploaded = await uploadCompanyDocumentFile('milestone-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
     const payload = {
       title: document.getElementById('milestone-title').value.trim(),
       milestone_date: document.getElementById('milestone-date').value,
       category: document.getElementById('milestone-category').value,
       location: document.getElementById('milestone-location').value.trim() || null,
       description: document.getElementById('milestone-desc').value.trim(),
-      significance: document.getElementById('milestone-impact').value.trim() || null
+      significance: document.getElementById('milestone-impact').value.trim() || null,
+      document_url: docUrl,
+      document_name: docName
     };
 
     const res = await apiFetch('/company/milestones', {
@@ -10517,6 +10812,96 @@ async function handleAddMilestoneSubmit(e) {
 
   } catch (err) {
     showToast('Failed to add milestone: ' + err.message, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openEditMilestoneModal(id) {
+  const m = cachedMilestones.find(item => String(item.id) === String(id));
+  if (!m) {
+    showToast('Milestone record not found', 'warning');
+    return;
+  }
+  document.getElementById('milestone-edit-id').value = m.id;
+  document.getElementById('milestone-edit-title').value = m.title || m.event_title || '';
+  document.getElementById('milestone-edit-date').value = m.milestone_date || m.event_date || '';
+  document.getElementById('milestone-edit-category').value = m.category || 'EXPANSION';
+  document.getElementById('milestone-edit-location').value = m.location || '';
+  document.getElementById('milestone-edit-desc').value = m.description || '';
+  document.getElementById('milestone-edit-impact').value = m.significance || '';
+
+  const prev = document.getElementById('milestone-edit-doc-preview');
+  const urlEl = document.getElementById('milestone-edit-document-url');
+  const nameEl = document.getElementById('milestone-edit-document-name');
+  const txtEl = document.getElementById('milestone-edit-doc-name-txt');
+  const fileEl = document.getElementById('milestone-edit-document-file');
+  if (fileEl) fileEl.value = '';
+
+  if (m.document_url) {
+    if (urlEl) urlEl.value = m.document_url;
+    if (nameEl) nameEl.value = m.document_name || 'Document';
+    if (txtEl) txtEl.innerText = m.document_name || 'Document';
+    if (prev) prev.style.display = 'inline-flex';
+  } else {
+    if (urlEl) urlEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (prev) prev.style.display = 'none';
+  }
+
+  const modal = document.getElementById('modal-edit-milestone');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditMilestoneModal() {
+  const modal = document.getElementById('modal-edit-milestone');
+  if (modal) modal.style.display = 'none';
+  const form = document.getElementById('form-edit-milestone');
+  if (form) form.reset();
+}
+
+async function handleEditMilestoneSubmit(e) {
+  if (e) e.preventDefault();
+  const id = document.getElementById('milestone-edit-id').value;
+  const btn = document.getElementById('btn-update-milestone');
+  if (btn) btn.disabled = true;
+
+  try {
+    let docUrl = document.getElementById('milestone-edit-document-url').value.trim() || null;
+    let docName = document.getElementById('milestone-edit-document-name').value.trim() || null;
+
+    const uploaded = await uploadCompanyDocumentFile('milestone-edit-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
+    const payload = {
+      event_title: document.getElementById('milestone-edit-title').value.trim(),
+      event_date: document.getElementById('milestone-edit-date').value,
+      category: document.getElementById('milestone-edit-category').value,
+      location: document.getElementById('milestone-edit-location').value.trim() || null,
+      description: document.getElementById('milestone-edit-desc').value.trim(),
+      significance: document.getElementById('milestone-edit-impact').value.trim() || null,
+      document_url: docUrl,
+      document_name: docName
+    };
+
+    const res = await apiFetch(`/company/milestones/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update milestone');
+
+    showToast('Corporate milestone amended successfully!', 'success');
+    closeEditMilestoneModal();
+    loadCompanyHistory();
+
+  } catch (err) {
+    showToast('Milestone amendment failed: ' + err.message, 'danger');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -10543,6 +10928,14 @@ async function handleAddOwnershipSubmit(e) {
   if (btn) btn.disabled = true;
 
   try {
+    let docUrl = null;
+    let docName = null;
+    const uploaded = await uploadCompanyDocumentFile('owner-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
     const payload = {
       person_or_entity_name: document.getElementById('owner-name').value.trim(),
       role_title: document.getElementById('owner-role').value,
@@ -10552,7 +10945,9 @@ async function handleAddOwnershipSubmit(e) {
       national_id_or_registration: document.getElementById('owner-id-number').value.trim() || null,
       board_resolution_ref: document.getElementById('owner-resolution').value.trim() || null,
       contact_info: document.getElementById('owner-notes').value.trim() || null,
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      document_url: docUrl,
+      document_name: docName
     };
 
     const res = await apiFetch('/company/ownership', {
@@ -10570,6 +10965,108 @@ async function handleAddOwnershipSubmit(e) {
 
   } catch (err) {
     showToast('Failed to add governance record: ' + err.message, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openEditOwnershipModal(id) {
+  const rec = cachedOwnershipRecords.find(item => String(item.id) === String(id));
+  if (!rec) {
+    showToast('Governance record not found', 'warning');
+    return;
+  }
+  document.getElementById('owner-edit-id').value = rec.id;
+  document.getElementById('owner-edit-name').value = rec.person_or_entity_name || '';
+  document.getElementById('owner-edit-role').value = rec.role || rec.role_title || 'DIRECTOR';
+  document.getElementById('owner-edit-share-pct').value = rec.shareholding_percentage || 0;
+  document.getElementById('owner-edit-shares-count').value = rec.number_of_shares || rec.shares_count || 0;
+  document.getElementById('owner-edit-appoint-date').value = rec.appointment_date || '';
+  document.getElementById('owner-edit-resign-date').value = rec.resignation_date || '';
+  document.getElementById('owner-edit-id-number').value = rec.national_id_or_registration || '';
+  document.getElementById('owner-edit-resolution').value = rec.board_resolution_ref || rec.resolution_reference || '';
+  document.getElementById('owner-edit-status').value = rec.status || 'ACTIVE';
+  document.getElementById('owner-edit-notes').value = rec.notes || rec.contact_info || '';
+
+  const prev = document.getElementById('owner-edit-doc-preview');
+  const urlEl = document.getElementById('owner-edit-document-url');
+  const nameEl = document.getElementById('owner-edit-document-name');
+  const txtEl = document.getElementById('owner-edit-doc-name-txt');
+  const fileEl = document.getElementById('owner-edit-document-file');
+  if (fileEl) fileEl.value = '';
+
+  if (rec.document_url) {
+    if (urlEl) urlEl.value = rec.document_url;
+    if (nameEl) nameEl.value = rec.document_name || 'Legal Document';
+    if (txtEl) txtEl.innerText = rec.document_name || 'Legal Document';
+    if (prev) prev.style.display = 'inline-flex';
+  } else {
+    if (urlEl) urlEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (prev) prev.style.display = 'none';
+  }
+
+  const modal = document.getElementById('modal-edit-ownership');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditOwnershipModal() {
+  const modal = document.getElementById('modal-edit-ownership');
+  if (modal) modal.style.display = 'none';
+  const form = document.getElementById('form-edit-ownership');
+  if (form) form.reset();
+}
+
+async function handleEditOwnershipSubmit(e) {
+  if (e) e.preventDefault();
+  const id = document.getElementById('owner-edit-id').value;
+  const btn = document.getElementById('btn-update-ownership');
+  if (btn) btn.disabled = true;
+
+  try {
+    let docUrl = document.getElementById('owner-edit-document-url').value.trim() || null;
+    let docName = document.getElementById('owner-edit-document-name').value.trim() || null;
+
+    const uploaded = await uploadCompanyDocumentFile('owner-edit-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
+    const payload = {
+      person_or_entity_name: document.getElementById('owner-edit-name').value.trim(),
+      role: document.getElementById('owner-edit-role').value,
+      role_title: document.getElementById('owner-edit-role').value,
+      shareholding_percentage: parseFloat(document.getElementById('owner-edit-share-pct').value) || 0,
+      shares_count: parseInt(document.getElementById('owner-edit-shares-count').value) || 0,
+      number_of_shares: parseInt(document.getElementById('owner-edit-shares-count').value) || 0,
+      appointment_date: document.getElementById('owner-edit-appoint-date').value,
+      resignation_date: document.getElementById('owner-edit-resign-date').value || null,
+      national_id_or_registration: document.getElementById('owner-edit-id-number').value.trim() || null,
+      resolution_reference: document.getElementById('owner-edit-resolution').value.trim() || null,
+      board_resolution_ref: document.getElementById('owner-edit-resolution').value.trim() || null,
+      status: document.getElementById('owner-edit-status').value,
+      notes: document.getElementById('owner-edit-notes').value.trim() || null,
+      contact_info: document.getElementById('owner-edit-notes').value.trim() || null,
+      document_url: docUrl,
+      document_name: docName
+    };
+
+    const res = await apiFetch(`/company/ownership/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update governance record');
+
+    showToast('Governance record amended successfully!', 'success');
+    closeEditOwnershipModal();
+    loadCompanyHistory();
+
+  } catch (err) {
+    showToast('Governance amendment failed: ' + err.message, 'danger');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -11024,6 +11521,24 @@ function openEditFoundingModal() {
     document.getElementById('founding-edit-capital').value = cachedFoundingHistory.initial_capital || 0;
     document.getElementById('founding-edit-story').value = cachedFoundingHistory.background_story || '';
     document.getElementById('founding-edit-first-client').value = cachedFoundingHistory.first_client_name || '';
+
+    const prev = document.getElementById('founding-edit-doc-preview');
+    const urlEl = document.getElementById('founding-edit-document-url');
+    const nameEl = document.getElementById('founding-edit-document-name');
+    const txtEl = document.getElementById('founding-edit-doc-name-txt');
+    const fileEl = document.getElementById('founding-edit-document-file');
+    if (fileEl) fileEl.value = '';
+
+    if (cachedFoundingHistory.document_url) {
+      if (urlEl) urlEl.value = cachedFoundingHistory.document_url;
+      if (nameEl) nameEl.value = cachedFoundingHistory.document_name || 'Founding Document';
+      if (txtEl) txtEl.innerText = cachedFoundingHistory.document_name || 'Founding Document';
+      if (prev) prev.style.display = 'inline-flex';
+    } else {
+      if (urlEl) urlEl.value = '';
+      if (nameEl) nameEl.value = '';
+      if (prev) prev.style.display = 'none';
+    }
   }
   const m = document.getElementById('modal-edit-founding');
   if (m) m.style.display = 'flex';
@@ -11042,6 +11557,15 @@ async function handleEditFoundingSubmit(e) {
   if (btn) btn.disabled = true;
 
   try {
+    let docUrl = document.getElementById('founding-edit-document-url').value.trim() || null;
+    let docName = document.getElementById('founding-edit-document-name').value.trim() || null;
+
+    const uploaded = await uploadCompanyDocumentFile('founding-edit-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
     const payload = {
       founding_date: document.getElementById('founding-edit-date').value,
       original_location: document.getElementById('founding-edit-location').value.trim(),
@@ -11049,7 +11573,9 @@ async function handleEditFoundingSubmit(e) {
       founder_names: document.getElementById('founding-edit-founders').value.trim(),
       initial_capital: parseFloat(document.getElementById('founding-edit-capital').value) || 0,
       background_story: document.getElementById('founding-edit-story').value.trim(),
-      first_client_name: document.getElementById('founding-edit-first-client').value.trim() || null
+      first_client_name: document.getElementById('founding-edit-first-client').value.trim() || null,
+      document_url: docUrl,
+      document_name: docName
     };
 
     const res = await apiFetch('/company/founding', {
@@ -11061,7 +11587,7 @@ async function handleEditFoundingSubmit(e) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed to update founding heritage');
 
-    showToast('Corporate founding heritage updated successfully!', 'success');
+    showToast('Corporate founding heritage and documents updated successfully!', 'success');
     closeEditFoundingModal();
     loadCompanyHistory();
 
@@ -11132,9 +11658,30 @@ window.deleteInventoryItem = deleteInventoryItem;
 window.openEditFoundingModal = openEditFoundingModal;
 window.closeEditFoundingModal = closeEditFoundingModal;
 window.handleEditFoundingSubmit = handleEditFoundingSubmit;
+window.removeFoundingEditDoc = removeFoundingEditDoc;
 
 window.deleteMilestone = deleteMilestone;
 window.deleteOwnershipRecord = deleteOwnershipRecord;
+
+window.uploadCompanyDocumentFile = uploadCompanyDocumentFile;
+window.viewCompanyDoc = viewCompanyDoc;
+window.removeProfileDoc = removeProfileDoc;
+window.openEditMilestoneModal = openEditMilestoneModal;
+window.closeEditMilestoneModal = closeEditMilestoneModal;
+window.removeMilestoneEditDoc = removeMilestoneEditDoc;
+window.handleEditMilestoneSubmit = handleEditMilestoneSubmit;
+window.openEditOwnershipModal = openEditOwnershipModal;
+window.closeEditOwnershipModal = closeEditOwnershipModal;
+window.removeOwnerEditDoc = removeOwnerEditDoc;
+window.handleEditOwnershipSubmit = handleEditOwnershipSubmit;
+window.openEditRecommendationModal = openEditRecommendationModal;
+window.closeEditRecommendationModal = closeEditRecommendationModal;
+window.removeRecEditDoc = removeRecEditDoc;
+window.handleEditRecommendationSubmit = handleEditRecommendationSubmit;
+window.openEditServiceModal = openEditServiceModal;
+window.closeEditServiceModal = closeEditServiceModal;
+window.removeSrvEditDoc = removeSrvEditDoc;
+window.handleEditServiceSubmit = handleEditServiceSubmit;
 
 function filterTransactionsTable() {
   const query = (document.getElementById('transactions-search-input')?.value || '').toLowerCase().trim();
@@ -11663,17 +12210,42 @@ async function openStaffFileModal(staffId) {
     return;
   }
 
-  const staff = (allStaffMembers || []).find(s => s.id === staffId);
+  let staff = (allStaffMembers || []).find(s => s.id === staffId);
+  if (!staff) {
+    try {
+      const res = await apiFetch(`/staff/${staffId}`);
+      if (res.ok) {
+        staff = await res.json();
+        if (!allStaffMembers) allStaffMembers = [];
+        const existingIdx = allStaffMembers.findIndex(s => s.id === staff.id);
+        if (existingIdx >= 0) allStaffMembers[existingIdx] = staff;
+        else allStaffMembers.push(staff);
+      }
+    } catch (e) {
+      console.warn('Could not fetch staff member by ID:', e);
+    }
+  }
+
   currentViewedStaff = staff;
 
   if (staff) {
-    document.getElementById('staff-file-name').innerText = staff.full_name || staff.email.split('@')[0];
-    document.getElementById('staff-file-subinfo').innerText = `Role: ${staff.role} | Email: ${staff.email}`;
-    document.getElementById('staff-file-role-val').innerText = staff.role;
-    document.getElementById('staff-file-phone-val').innerText = staff.phone || '—';
-    document.getElementById('staff-file-status-val').innerText = staff.status;
+    const sName = document.getElementById('staff-file-name');
+    const sSub = document.getElementById('staff-file-subinfo');
+    const sRole = document.getElementById('staff-file-role-val');
+    const sPhone = document.getElementById('staff-file-phone-val');
+    const sStatus = document.getElementById('staff-file-status-val');
+    const sAvatar = document.getElementById('staff-file-avatar');
+
+    if (sName) sName.innerText = staff.full_name || staff.email.split('@')[0];
+    if (sSub) sSub.innerText = `Role: ${staff.role} | Email: ${staff.email}`;
+    if (sRole) sRole.innerText = staff.role;
+    if (sPhone) sPhone.innerText = staff.phone || '—';
+    if (sStatus) {
+      sStatus.innerText = staff.status;
+      sStatus.style.color = staff.status === 'ACTIVE' ? '#10B981' : '#EF4444';
+    }
     const initial = (staff.full_name || staff.email || 'S')[0].toUpperCase();
-    document.getElementById('staff-file-avatar').innerText = initial;
+    if (sAvatar) sAvatar.innerText = initial;
   }
 
   const tbody = document.getElementById('staff-custody-table-body');
@@ -11683,15 +12255,17 @@ async function openStaffFileModal(staffId) {
   if (modal) modal.style.display = 'flex';
 
   try {
-    const [allocRes, txRes, advRes] = await Promise.all([
+    const [allocRes, txRes, advRes, dispRes] = await Promise.all([
       apiFetch(`/assets/allocations?staff_id=${staffId}`).catch(() => ({ ok: false })),
       apiFetch(`/assets/inventory/transactions?staff_id=${staffId}`).catch(() => ({ ok: false })),
-      apiFetch(`/salary-advances?advance_type=STAFF&staff_id=${staffId}`).catch(() => ({ ok: false }))
+      apiFetch(`/salary-advances?advance_type=STAFF&staff_id=${staffId}`).catch(() => ({ ok: false })),
+      apiFetch(`/assets/inventory/transactions?processed_by_user_id=${staffId}`).catch(() => ({ ok: false }))
     ]);
 
     const allocations = (allocRes && allocRes.ok) ? await allocRes.json() : [];
     const inventoryTx = (txRes && txRes.ok) ? await txRes.json() : [];
     const staffAdvances = (advRes && advRes.ok) ? await advRes.json() : [];
+    const dispatchedTx = (dispRes && dispRes.ok) ? await dispRes.json() : [];
 
     const activeCount = allocations.filter(a => a.status === 'ACTIVE').length + inventoryTx.filter(t => t.transaction_type === 'ISSUED').length;
     const countEl = document.getElementById('staff-file-items-count');
@@ -11699,6 +12273,28 @@ async function openStaffFileModal(staffId) {
 
     if (tbody) {
       tbody.innerHTML = renderCustodyRows(allocations, inventoryTx, 'staff', staffId);
+    }
+
+    // Populate Dispatched Items by this officer to guards
+    const dispTbody = document.getElementById('staff-dispatched-table-body');
+    const dispBadge = document.getElementById('staff-dispatched-badge');
+    if (dispBadge) dispBadge.innerText = `${dispatchedTx.length} Dispatches`;
+    if (dispTbody) {
+      if (!dispatchedTx.length) {
+        dispTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No equipment or inventory issued to guards by this officer yet.</td></tr>';
+      } else {
+        dispTbody.innerHTML = dispatchedTx.map(t => `
+          <tr>
+            <td><b>${escapeHtml(t.item_name || 'Item #' + t.item_id)}</b></td>
+            <td><span class="badge" style="background:#F1F5F9; color:#334155;">${escapeHtml(t.item_category || 'Equipment')}</span></td>
+            <td><b>${escapeHtml(t.guard_name || (t.guard_id ? 'Guard #' + t.guard_id : 'All Staff'))}</b></td>
+            <td>${t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
+            <td>Qty: <b>${t.quantity || 1}</b></td>
+            <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${escapeHtml(t.transaction_type || 'ISSUED')}</span></td>
+            <td><small style="color:#64748B;">${escapeHtml(t.notes || 'Official Duty Handover')}</small></td>
+          </tr>
+        `).join('');
+      }
     }
 
     const advTbody = document.getElementById('staff-advances-table-body');
@@ -11739,57 +12335,111 @@ async function openStaffFileModal(staffId) {
           apiFetch(`/staff/${staffId}/activity`).catch(() => ({ ok: false }))
         ]);
 
+        let isStaffOnlineNow = false;
+        let todayTimeFmt = '0h 0m';
+        let lastKnownLocation = 'Terminal Network';
+
         if (dailyRes && dailyRes.ok) {
           const dailyData = await dailyRes.json();
-          const dBody = document.getElementById('staff-daily-hours-body');
+          const dBody = document.getElementById('staff-daily-hours-table-body') || document.getElementById('staff-daily-hours-body');
           if (dBody) {
             dBody.innerHTML = !dailyData.length
-              ? '<tr><td colspan="4" style="text-align:center; padding:12px; color:#64748B;">No daily hours recorded.</td></tr>'
+              ? '<tr><td colspan="7" style="text-align:center; padding:16px; color:#64748B;">No daily hours recorded.</td></tr>'
               : dailyData.map(d => `
                 <tr>
                   <td><b>${d.date}</b></td>
-                  <td>${d.total_hours.toFixed(2)} hrs</td>
-                  <td>${d.total_minutes} mins</td>
-                  <td>${d.session_count} session(s)</td>
+                  <td><b>${d.duration_formatted || d.total_hours.toFixed(2) + ' hrs'}</b></td>
+                  <td>${d.first_login || '—'}</td>
+                  <td>${d.last_active || '—'}</td>
+                  <td>${d.session_count || 1} session(s)</td>
+                  <td><small>${(d.locations && d.locations.length) ? escapeHtml(d.locations.join('; ')) : 'HQ Terminal'}</small></td>
+                  <td>
+                    ${d.status === 'ONLINE NOW'
+                      ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Online Now</span>'
+                      : '<span class="badge" style="background:#F1F5F9; color:#64748B;">Completed</span>'}
+                  </td>
                 </tr>
               `).join('');
+          }
+
+          const totalDaysEl = document.getElementById('staff-metric-total-days');
+          if (totalDaysEl) totalDaysEl.innerText = `${dailyData.length} Days`;
+
+          if (dailyData.length > 0) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayRecord = dailyData.find(d => d.date === todayStr);
+            if (todayRecord) {
+              todayTimeFmt = todayRecord.duration_formatted || `${todayRecord.total_hours.toFixed(2)} hrs`;
+              if (todayRecord.status === 'ONLINE NOW') isStaffOnlineNow = true;
+            }
           }
         }
 
         if (sessRes && sessRes.ok) {
           const sessData = await sessRes.json();
-          const sBody = document.getElementById('staff-sessions-body');
+          const sBody = document.getElementById('staff-sessions-table-body') || document.getElementById('staff-sessions-body');
           if (sBody) {
             sBody.innerHTML = !sessData.length
-              ? '<tr><td colspan="5" style="text-align:center; padding:12px; color:#64748B;">No sessions recorded.</td></tr>'
+              ? '<tr><td colspan="6" style="text-align:center; padding:16px; color:#64748B;">No login sessions recorded.</td></tr>'
               : sessData.map(s => `
                 <tr>
                   <td>${s.login_time ? new Date(s.login_time).toLocaleString() : '—'}</td>
-                  <td>${s.logout_time ? new Date(s.logout_time).toLocaleString() : (s.is_active ? '<span style="color:#059669; font-weight:700;">Active Now</span>' : '—')}</td>
-                  <td>${s.duration_hours.toFixed(2)} hrs</td>
-                  <td>${s.ip_address || '—'}</td>
-                  <td><small>${s.location_name || 'Terminal Network'}</small></td>
+                  <td><b>${escapeHtml(s.location_name || 'Terminal Network')}</b></td>
+                  <td>${s.accuracy ? s.accuracy + ' m' : 'Standard GPS'}</td>
+                  <td><code>${escapeHtml(s.ip_address || '—')}</code></td>
+                  <td>${s.duration_formatted || s.duration_hours.toFixed(2) + ' hrs'}</td>
+                  <td>${s.is_active ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Active Now</span>' : '<span class="badge" style="background:#F1F5F9; color:#64748B;">Ended</span>'}</td>
                 </tr>
               `).join('');
+          }
+
+          if (sessData.length > 0) {
+            const firstSess = sessData[0];
+            if (firstSess.is_active) isStaffOnlineNow = true;
+            if (firstSess.location_name) lastKnownLocation = firstSess.location_name;
           }
         }
 
         if (actRes && actRes.ok) {
           const actData = await actRes.json();
-          const aBody = document.getElementById('staff-activity-body');
+          const aBody = document.getElementById('staff-activity-table-body') || document.getElementById('staff-activity-body');
           if (aBody) {
             aBody.innerHTML = !actData.length
-              ? '<tr><td colspan="4" style="text-align:center; padding:12px; color:#64748B;">No activity logs recorded.</td></tr>'
+              ? '<tr><td colspan="5" style="text-align:center; padding:20px; color:#64748B;">No activity logs recorded.</td></tr>'
               : actData.map(a => `
                 <tr>
-                  <td><small>${a.timestamp ? new Date(a.timestamp).toLocaleString() : '—'}</small></td>
+                  <td><small style="color:#64748B;">${a.timestamp ? new Date(a.timestamp).toLocaleString() : '—'}</small></td>
                   <td><b>${escapeHtml(a.action)}</b></td>
-                  <td><small>${escapeHtml(a.reason || '—')}</small></td>
-                  <td><small>${a.ip_address || '—'}</small></td>
+                  <td><span class="badge" style="background:#F1F5F9; color:#334155; font-size:11px;">${escapeHtml(a.target_entity || 'System')}</span></td>
+                  <td><small>${escapeHtml(a.details || 'Standard operation executed')}</small></td>
+                  <td><code>${escapeHtml(a.ip_address || 'Internal')}</code></td>
                 </tr>
               `).join('');
           }
+
+          const actBadge = document.getElementById('staff-activity-count-badge');
+          if (actBadge) actBadge.innerText = `${actData.length} Actions Logged`;
         }
+
+        // Update Top Metrics Cards
+        const mTime = document.getElementById('staff-metric-today-time');
+        const mLocation = document.getElementById('staff-metric-last-location');
+        const mOnline = document.getElementById('staff-file-online-badge');
+
+        if (mTime) mTime.innerText = todayTimeFmt;
+        if (mLocation) mLocation.innerText = lastKnownLocation;
+        if (mOnline) {
+          if (isStaffOnlineNow) {
+            mOnline.innerHTML = '🟢 Online Now';
+            mOnline.style.background = '#ECFDF5';
+            mOnline.style.color = '#065F46';
+          } else {
+            mOnline.innerHTML = '⚪ Offline';
+            mOnline.style.background = '#F1F5F9';
+            mOnline.style.color = '#64748B';
+          }
+        }
+
       } catch (adminErr) {
         console.warn('Error fetching staff monitoring details:', adminErr);
       }
@@ -13481,19 +14131,27 @@ async function loadCompanyRecommendations() {
   try {
     const res = await apiFetch('/company/recommendations');
     if (!res.ok) throw new Error('Failed to load recommendations');
-    const recs = await res.json();
+    cachedRecommendations = await res.json();
 
     if (!container) return;
     container.innerHTML = '';
 
-    if (recs.length === 0) {
+    if (!cachedRecommendations || cachedRecommendations.length === 0) {
       container.innerHTML = '<div style="text-align:center; padding:32px; color:#64748B;">No formal recommendations recorded yet. Click "+ Add Client Recommendation" to publish one.</div>';
       return;
     }
 
-    recs.forEach(r => {
+    cachedRecommendations.forEach(r => {
       const stars = '⭐'.repeat(r.rating || 5);
       const dateStr = r.recommendation_date ? r.recommendation_date.substring(0, 10) : '';
+
+      const docHtml = r.document_url ? `
+        <div style="margin:8px 0;">
+          <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px; font-weight:700; color:#047857; border-color:#A7F3D0; background:#ECFDF5; display:inline-flex; align-items:center; gap:6px;" onclick="viewCompanyDoc('${escapeHtml(r.document_url)}')">
+            📄 Commendation Letter: <strong>${escapeHtml(r.document_name || 'View Document')}</strong>
+          </button>
+        </div>
+      ` : '';
 
       container.innerHTML += `
         <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between;">
@@ -13503,17 +14161,21 @@ async function loadCompanyRecommendations() {
               <span class="badge" style="background:#F0FDF4; color:#166534; font-size:10px; font-weight:700;">VERIFIED ENDORSEMENT</span>
             </div>
             <blockquote style="margin:0 0 12px 0; font-size:13px; color:#334155; font-style:italic; line-height:1.5;">
-              "${r.recommendation_text || r.statement}"
+              "${escapeHtml(r.recommendation_text || r.statement || '')}"
             </blockquote>
+            ${docHtml}
           </div>
           <div>
             <div style="border-top:1px solid #F1F5F9; padding-top:10px;">
-              <div style="font-weight:800; font-size:13px; color:#0F172A;">${r.author_name || r.recommender_name}</div>
-              <div style="font-size:11px; color:#64748B;">${r.designation || r.recommender_title} — <strong>${r.client_name}</strong></div>
-              ${r.service_scope ? `<div style="font-size:11px; color:#3B5EDB; margin-top:2px;">🛡️ Scope: ${r.service_scope}</div>` : ''}
+              <div style="font-weight:800; font-size:13px; color:#0F172A;">${escapeHtml(r.author_name || r.recommender_name || '')}</div>
+              <div style="font-size:11px; color:#64748B;">${escapeHtml(r.designation || r.recommender_title || '')} — <strong>${escapeHtml(r.client_name)}</strong></div>
+              ${r.service_scope ? `<div style="font-size:11px; color:#3B5EDB; margin-top:2px;">🛡️ Scope: ${escapeHtml(r.service_scope)}</div>` : ''}
               <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
                 <span style="font-size:11px; color:#94A3B8;">📅 ${dateStr}</span>
-                <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#EF4444; border-color:#FCA5A5;" onclick="handleDeleteRecommendation(${r.id})">🗑️ Delete</button>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#0D7682; border-color:#99F6E4;" onclick="openEditRecommendationModal('${r.id}')">✏️ Amend</button>
+                  <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#EF4444; border-color:#FCA5A5;" onclick="handleDeleteRecommendation(${r.id})">🗑️ Delete</button>
+                </div>
               </div>
             </div>
           </div>
@@ -13533,38 +14195,50 @@ async function loadCompanyServices() {
   try {
     const res = await apiFetch('/company/services');
     if (!res.ok) throw new Error('Failed to load services');
-    const srvs = await res.json();
+    cachedCompanyServices = await res.json();
 
     if (!container) return;
     container.innerHTML = '';
 
-    if (srvs.length === 0) {
+    if (!cachedCompanyServices || cachedCompanyServices.length === 0) {
       container.innerHTML = '<div style="text-align:center; padding:32px; color:#64748B;">No service offerings registered. Click "+ Add Service Offering" to create one.</div>';
       return;
     }
 
-    srvs.forEach(s => {
-      const priceStr = s.base_price ? `KES ${Number(s.base_price).toLocaleString()}` : 'Custom Quotation';
+    cachedCompanyServices.forEach(s => {
+      const priceStr = s.base_price ? `KES ${Number(s.base_price).toLocaleString()}` : (s.billing_rate_guideline || 'Custom Quotation');
+
+      const docHtml = s.document_url ? `
+        <div style="margin:8px 0;">
+          <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px; font-weight:700; color:#0369A1; border-color:#BAE6FD; background:#F0F9FF; display:inline-flex; align-items:center; gap:6px;" onclick="viewCompanyDoc('${escapeHtml(s.document_url)}')">
+            📄 Service SLA Brochure: <strong>${escapeHtml(s.document_name || 'View Spec')}</strong>
+          </button>
+        </div>
+      ` : '';
 
       container.innerHTML += `
         <div class="card" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between;">
           <div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:800; font-family:monospace;">${s.service_code}</span>
-              <span class="badge" style="background:#F1F5F9; color:#475569; font-size:11px;">${s.billing_rate_guideline || s.billing_model || 'CONTRACT'}</span>
+              <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:800; font-family:monospace;">${escapeHtml(s.service_code)}</span>
+              <span class="badge" style="background:#F1F5F9; color:#475569; font-size:11px;">${escapeHtml(s.billing_rate_guideline || s.billing_model || 'CONTRACT')}</span>
             </div>
-            <h4 style="margin:4px 0 6px 0; font-size:16px; font-weight:800; color:#0F172A;">${s.service_name}</h4>
-            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:8px; text-transform:uppercase;">${s.category}</div>
-            <p style="font-size:12px; color:#475569; margin:0 0 12px 0; line-height:1.4;">${s.description}</p>
+            <h4 style="margin:4px 0 6px 0; font-size:16px; font-weight:800; color:#0F172A;">${escapeHtml(s.service_name)}</h4>
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:8px; text-transform:uppercase;">${escapeHtml(s.category)}</div>
+            <p style="font-size:12px; color:#475569; margin:0 0 12px 0; line-height:1.4;">${escapeHtml(s.description)}</p>
+            ${docHtml}
           </div>
           <div>
             <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:8px 10px; margin-bottom:10px;">
               <div style="font-size:10px; font-weight:700; color:#64748B;">SLA SPECIFICATION:</div>
-              <div style="font-size:11px; color:#0F172A; font-weight:600;">${s.sla_standard || s.sla_specification || '100% On-Site SLA Compliance'}</div>
+              <div style="font-size:11px; color:#0F172A; font-weight:600;">${escapeHtml(s.sla_standard || s.sla_specification || '100% On-Site SLA Compliance')}</div>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #F1F5F9; padding-top:8px;">
-              <div style="font-size:12px; font-weight:800; color:#059669;">${s.billing_rate_guideline || priceStr}</div>
-              <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#EF4444; border-color:#FCA5A5;" onclick="handleDeleteService(${s.id})">🗑️ Delete</button>
+              <div style="font-size:12px; font-weight:800; color:#059669;">${escapeHtml(priceStr)}</div>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#0D7682; border-color:#99F6E4;" onclick="openEditServiceModal('${s.id}')">✏️ Amend</button>
+                <button class="btn btn-secondary" style="padding:2px 8px; font-size:10px; color:#EF4444; border-color:#FCA5A5;" onclick="handleDeleteService(${s.id})">🗑️ Delete</button>
+              </div>
             </div>
           </div>
         </div>
@@ -13580,12 +14254,16 @@ function openAddRecommendationModal() {
   const modal = document.getElementById('modal-add-recommendation');
   const d = document.getElementById('rec-date');
   if (d) d.value = new Date().toISOString().substring(0, 10);
+  const fileEl = document.getElementById('rec-document-file');
+  if (fileEl) fileEl.value = '';
   if (modal) modal.style.display = 'flex';
 }
 
 function closeAddRecommendationModal() {
   const modal = document.getElementById('modal-add-recommendation');
   if (modal) modal.style.display = 'none';
+  const f = document.getElementById('form-add-recommendation');
+  if (f) f.reset();
 }
 
 async function handleCreateRecommendationSubmit(e) {
@@ -13599,6 +14277,14 @@ async function handleCreateRecommendationSubmit(e) {
   const statement = document.getElementById('rec-statement').value.trim();
 
   try {
+    let docUrl = null;
+    let docName = null;
+    const uploaded = await uploadCompanyDocumentFile('rec-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
     const res = await apiFetch('/company/recommendations', {
       method: 'POST',
       body: JSON.stringify({
@@ -13608,7 +14294,9 @@ async function handleCreateRecommendationSubmit(e) {
         rating,
         recommendation_date,
         recommendation_text: statement,
-        service_scope: contact_info
+        service_scope: contact_info,
+        document_url: docUrl,
+        document_name: docName
       })
     });
 
@@ -13619,12 +14307,104 @@ async function handleCreateRecommendationSubmit(e) {
     }
 
     closeAddRecommendationModal();
-    showToast(`✅ Recommendation for ${client_name} published!`, 'success');
+    showToast(`✅ Recommendation for ${client_name} published with attached documents!`, 'success');
     document.getElementById('form-add-recommendation').reset();
     loadCompanyRecommendations();
 
   } catch (err) {
     showToast('Network error: ' + err.message, 'danger');
+  }
+}
+
+function openEditRecommendationModal(id) {
+  const r = cachedRecommendations.find(item => String(item.id) === String(id));
+  if (!r) {
+    showToast('Recommendation not found', 'warning');
+    return;
+  }
+  document.getElementById('rec-edit-id').value = r.id;
+  document.getElementById('rec-edit-client-name').value = r.client_name || '';
+  document.getElementById('rec-edit-recommender-name').value = r.author_name || r.recommender_name || '';
+  document.getElementById('rec-edit-title').value = r.designation || r.recommender_title || '';
+  document.getElementById('rec-edit-rating').value = r.rating || 5;
+  document.getElementById('rec-edit-date').value = r.recommendation_date ? r.recommendation_date.substring(0, 10) : '';
+  document.getElementById('rec-edit-contact').value = r.service_scope || '';
+  document.getElementById('rec-edit-statement').value = r.recommendation_text || r.statement || '';
+
+  const prev = document.getElementById('rec-edit-doc-preview');
+  const urlEl = document.getElementById('rec-edit-document-url');
+  const nameEl = document.getElementById('rec-edit-document-name');
+  const txtEl = document.getElementById('rec-edit-doc-name-txt');
+  const fileEl = document.getElementById('rec-edit-document-file');
+  if (fileEl) fileEl.value = '';
+
+  if (r.document_url) {
+    if (urlEl) urlEl.value = r.document_url;
+    if (nameEl) nameEl.value = r.document_name || 'Letter';
+    if (txtEl) txtEl.innerText = r.document_name || 'Letter';
+    if (prev) prev.style.display = 'inline-flex';
+  } else {
+    if (urlEl) urlEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (prev) prev.style.display = 'none';
+  }
+
+  const modal = document.getElementById('modal-edit-recommendation');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditRecommendationModal() {
+  const modal = document.getElementById('modal-edit-recommendation');
+  if (modal) modal.style.display = 'none';
+  const f = document.getElementById('form-edit-recommendation');
+  if (f) f.reset();
+}
+
+async function handleEditRecommendationSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('rec-edit-id').value;
+  const btn = document.getElementById('btn-update-rec');
+  if (btn) btn.disabled = true;
+
+  try {
+    let docUrl = document.getElementById('rec-edit-document-url').value.trim() || null;
+    let docName = document.getElementById('rec-edit-document-name').value.trim() || null;
+
+    const uploaded = await uploadCompanyDocumentFile('rec-edit-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
+    const payload = {
+      client_name: document.getElementById('rec-edit-client-name').value.trim(),
+      author_name: document.getElementById('rec-edit-recommender-name').value.trim(),
+      designation: document.getElementById('rec-edit-title').value.trim(),
+      rating: parseInt(document.getElementById('rec-edit-rating').value) || 5,
+      recommendation_date: document.getElementById('rec-edit-date').value,
+      service_scope: document.getElementById('rec-edit-contact').value.trim() || null,
+      recommendation_text: document.getElementById('rec-edit-statement').value.trim(),
+      document_url: docUrl,
+      document_name: docName
+    };
+
+    const res = await apiFetch(`/company/recommendations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update recommendation');
+
+    showToast('Client recommendation amended successfully!', 'success');
+    closeEditRecommendationModal();
+    loadCompanyRecommendations();
+
+  } catch (err) {
+    showToast('Amendment failed: ' + err.message, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -13642,12 +14422,16 @@ async function handleDeleteRecommendation(id) {
 
 function openAddServiceModal() {
   const modal = document.getElementById('modal-add-service');
+  const fileEl = document.getElementById('srv-document-file');
+  if (fileEl) fileEl.value = '';
   if (modal) modal.style.display = 'flex';
 }
 
 function closeAddServiceModal() {
   const modal = document.getElementById('modal-add-service');
   if (modal) modal.style.display = 'none';
+  const f = document.getElementById('form-add-service');
+  if (f) f.reset();
 }
 
 async function handleCreateServiceSubmit(e) {
@@ -13662,6 +14446,14 @@ async function handleCreateServiceSubmit(e) {
   const description = document.getElementById('srv-desc').value.trim();
 
   try {
+    let docUrl = null;
+    let docName = null;
+    const uploaded = await uploadCompanyDocumentFile('srv-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
     const res = await apiFetch('/company/services', {
       method: 'POST',
       body: JSON.stringify({
@@ -13670,7 +14462,9 @@ async function handleCreateServiceSubmit(e) {
         category,
         description,
         sla_standard: sla_specification || '100% Post Coverage',
-        billing_rate_guideline: base_price ? `KES ${base_price.toLocaleString()}` : billing_model
+        billing_rate_guideline: base_price ? `KES ${base_price.toLocaleString()}` : billing_model,
+        document_url: docUrl,
+        document_name: docName
       })
     });
 
@@ -13687,6 +14481,108 @@ async function handleCreateServiceSubmit(e) {
 
   } catch (err) {
     showToast('Network error: ' + err.message, 'danger');
+  }
+}
+
+function openEditServiceModal(id) {
+  const s = cachedCompanyServices.find(item => String(item.id) === String(id));
+  if (!s) {
+    showToast('Security service not found', 'warning');
+    return;
+  }
+  document.getElementById('srv-edit-id').value = s.id;
+  document.getElementById('srv-edit-code').value = s.service_code || '';
+  document.getElementById('srv-edit-name').value = s.service_name || '';
+  document.getElementById('srv-edit-category').value = s.category || 'Manned Guarding';
+  document.getElementById('srv-edit-billing').value = 'MONTHLY_CONTRACT';
+  document.getElementById('srv-edit-sla').value = s.sla_standard || '';
+  document.getElementById('srv-edit-desc').value = s.description || '';
+
+  // Extract price number if present
+  let priceVal = '';
+  if (s.billing_rate_guideline && s.billing_rate_guideline.includes('KES')) {
+    const num = s.billing_rate_guideline.replace(/[^0-9.]/g, '');
+    if (num) priceVal = parseFloat(num);
+  }
+  document.getElementById('srv-edit-price').value = priceVal;
+
+  const prev = document.getElementById('srv-edit-doc-preview');
+  const urlEl = document.getElementById('srv-edit-document-url');
+  const nameEl = document.getElementById('srv-edit-document-name');
+  const txtEl = document.getElementById('srv-edit-doc-name-txt');
+  const fileEl = document.getElementById('srv-edit-document-file');
+  if (fileEl) fileEl.value = '';
+
+  if (s.document_url) {
+    if (urlEl) urlEl.value = s.document_url;
+    if (nameEl) nameEl.value = s.document_name || 'Spec Sheet';
+    if (txtEl) txtEl.innerText = s.document_name || 'Spec Sheet';
+    if (prev) prev.style.display = 'inline-flex';
+  } else {
+    if (urlEl) urlEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (prev) prev.style.display = 'none';
+  }
+
+  const modal = document.getElementById('modal-edit-service');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeEditServiceModal() {
+  const modal = document.getElementById('modal-edit-service');
+  if (modal) modal.style.display = 'none';
+  const f = document.getElementById('form-edit-service');
+  if (f) f.reset();
+}
+
+async function handleEditServiceSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('srv-edit-id').value;
+  const btn = document.getElementById('btn-update-service');
+  if (btn) btn.disabled = true;
+
+  try {
+    let docUrl = document.getElementById('srv-edit-document-url').value.trim() || null;
+    let docName = document.getElementById('srv-edit-document-name').value.trim() || null;
+
+    const uploaded = await uploadCompanyDocumentFile('srv-edit-document-file');
+    if (uploaded) {
+      docUrl = uploaded.document_url;
+      docName = uploaded.document_name;
+    }
+
+    const rawPrice = parseFloat(document.getElementById('srv-edit-price').value);
+    const billing_model = document.getElementById('srv-edit-billing').value;
+    const rateGuideline = isNaN(rawPrice) ? billing_model : `KES ${rawPrice.toLocaleString()}`;
+
+    const payload = {
+      service_code: document.getElementById('srv-edit-code').value.trim().toUpperCase(),
+      service_name: document.getElementById('srv-edit-name').value.trim(),
+      category: document.getElementById('srv-edit-category').value,
+      description: document.getElementById('srv-edit-desc').value.trim(),
+      sla_standard: document.getElementById('srv-edit-sla').value.trim() || null,
+      billing_rate_guideline: rateGuideline,
+      document_url: docUrl,
+      document_name: docName
+    };
+
+    const res = await apiFetch(`/company/services/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to update service');
+
+    showToast('Security service amended successfully!', 'success');
+    closeEditServiceModal();
+    loadCompanyServices();
+
+  } catch (err) {
+    showToast('Service amendment failed: ' + err.message, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 

@@ -536,15 +536,20 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #F1F5F9;
-  padding: 4px 10px;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  padding: 4px 8px;
   border-radius: 20px;
   font-size: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .cc-audio-player audio {
-  height: 28px;
-  max-width: 180px;
+  height: 32px;
+  width: 250px;
+  max-width: 100%;
+  outline: none;
+  border-radius: 16px;
 }
 
 /* ==========================================================================
@@ -644,6 +649,8 @@
 /* Expanded Softphone Modal / Dock */
 .softphone-expanded-card {
   width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
   background: #FFFFFF;
   border-radius: 20px;
   border: 1px solid var(--cc-border);
@@ -710,6 +717,8 @@
 .softphone-body {
   padding: 16px 20px 20px 20px;
   background: #FFFFFF;
+  overflow-y: auto;
+  max-height: calc(100vh - 90px);
 }
 
 /* Number Display Screen */

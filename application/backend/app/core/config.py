@@ -16,7 +16,7 @@ load_dotenv(".env", override=False)
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "CorpSec Payroll System"
-    VERSION: str = "1.0.0"
+    VERSION: str = "2.5.20"
     API_V1_STR: str = "/api/v1"
     
     # Security

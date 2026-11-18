@@ -1,6 +1,11 @@
+import os
+import re
+import secrets
+import mimetypes
 import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from application.backend.app.api.deps import get_db, require_admin_or_hr
@@ -18,14 +23,103 @@ from application.backend.app.models.company_history import (
 from application.backend.app.schemas.company_history import (
     CompanyProfileUpdate, CompanyProfileResponse,
     CompanyFoundingHistoryUpdate, CompanyFoundingHistoryResponse,
-    CompanyMilestoneCreate, CompanyMilestoneResponse,
-    CompanyOwnershipRecordCreate, CompanyOwnershipRecordResponse,
-    CompanyRecommendationCreate, CompanyRecommendationResponse,
-    CompanyServiceCreate, CompanyServiceResponse
+    CompanyMilestoneCreate, CompanyMilestoneUpdate, CompanyMilestoneResponse,
+    CompanyOwnershipRecordCreate, CompanyOwnershipRecordUpdate, CompanyOwnershipRecordResponse,
+    CompanyRecommendationCreate, CompanyRecommendationUpdate, CompanyRecommendationResponse,
+    CompanyServiceCreate, CompanyServiceUpdate, CompanyServiceResponse
 )
 from application.backend.app.api.v1.assets import calculate_current_depreciated_value
 
 router = APIRouter(prefix="/company", tags=["Company History & Profile Management"])
+
+COMPANY_DOCS_DIR = os.path.join(os.getcwd(), "uploads", "company_history")
+os.makedirs(COMPANY_DOCS_DIR, exist_ok=True)
+
+
+# ==================== DOCUMENT ATTACHMENT & SERVING ====================
+@router.post("/upload-document")
+async def upload_company_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """
+    Upload official company documents (e.g. PSRA Licenses, Certificate of Incorporation,
+    Milestone Award Certificates, Board Resolutions, Commendation Letters, Service SLAs).
+    Max file size: 25 MB.
+    """
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No file was provided."
+        )
+
+    original_name = os.path.basename(file.filename).strip()
+    ext = os.path.splitext(original_name)[1].lower()
+    allowed_exts = {
+        ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".svg",
+        ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt"
+    }
+    if ext not in allowed_exts and not (file.content_type and file.content_type.startswith("image/")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File extension '{ext}' is not supported. Supported: PDF, images, Word, Excel, CSV, text."
+        )
+
+    content = await file.read()
+    file_size = len(content)
+    if file_size > 25 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Document exceeds maximum file limit of 25MB."
+        )
+
+    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    rand_token = secrets.token_hex(4)
+    safe_basename = re.sub(r'[^a-zA-Z0-9_.-]', '_', original_name)
+    stored_filename = f"{timestamp_str}_{rand_token}_{safe_basename}"
+    stored_path = os.path.join(COMPANY_DOCS_DIR, stored_filename)
+
+    with open(stored_path, "wb") as f:
+        f.write(content)
+
+    mime_type = file.content_type or "application/octet-stream"
+    file_url = f"/api/v1/company/documents/{stored_filename}"
+
+    return {
+        "status": "success",
+        "file_url": file_url,
+        "file_name": original_name,
+        "file_type": mime_type,
+        "file_size": file_size
+    }
+
+
+@router.get("/documents/{file_name}")
+def get_company_document_file(
+    file_name: str,
+    download: bool = Query(False),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """
+    Serves a company document securely.
+    Supports inline preview (browser, PDF, image) or direct download.
+    """
+    clean_name = os.path.basename(file_name)
+    file_path = os.path.join(COMPANY_DOCS_DIR, clean_name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company document not found.")
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        path=file_path,
+        media_type=mime_type,
+        filename=clean_name,
+        headers={"Content-Disposition": f'{disposition}; filename="{clean_name}"'}
+    )
 
 
 # ==================== COMPANY PROFILE ====================
@@ -62,7 +156,7 @@ def update_company_profile(payload: CompanyProfileUpdate, db: Session = Depends(
         db.add(AuditLog(
             user_id=current_user.id,
             action="UPDATE_COMPANY_PROFILE",
-            details="Updated official corporate profile and registration details"
+            details="Updated official corporate profile, documents and registration details"
         ))
         db.commit()
     except Exception:
@@ -73,7 +167,7 @@ def update_company_profile(payload: CompanyProfileUpdate, db: Session = Depends(
     return res
 
 
-# ==================== FOUNDING HISTORY ====================
+# ==================== FOUNDING HERITAGE ====================
 @router.get("/founding", response_model=CompanyFoundingHistoryResponse)
 def get_company_founding_history(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
     founding = db.query(CompanyFoundingHistory).first()
@@ -131,9 +225,43 @@ def create_company_milestone(payload: CompanyMilestoneCreate, db: Session = Depe
         description=payload.description.strip(),
         location=payload.location,
         significance=payload.significance,
+        document_url=payload.document_url,
+        document_name=payload.document_name,
         recorded_by_user_id=current_user.id
     )
     db.add(m)
+    db.commit()
+    db.refresh(m)
+
+    res = CompanyMilestoneResponse.model_validate(m)
+    res.recorded_by_name = current_user.full_name
+    return res
+
+
+@router.put("/milestones/{milestone_id}", response_model=CompanyMilestoneResponse)
+def update_company_milestone(
+    milestone_id: int,
+    payload: CompanyMilestoneUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    m = db.query(CompanyMilestone).filter(CompanyMilestone.id == milestone_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "title" in data and not data.get("event_title"):
+        data["event_title"] = data.pop("title")
+    if "milestone_date" in data and not data.get("event_date"):
+        data["event_date"] = data.pop("milestone_date")
+
+    for k, v in data.items():
+        if hasattr(m, k) and v is not None:
+            if k == "category" and isinstance(v, str):
+                v = v.upper()
+            setattr(m, k, v)
+
+    m.updated_at = datetime.datetime.now()
     db.commit()
     db.refresh(m)
 
@@ -155,26 +283,82 @@ def delete_company_milestone(milestone_id: int, db: Session = Depends(get_db), c
 # ==================== OWNERSHIP & MANAGEMENT RECORDS ====================
 @router.get("/ownership", response_model=List[CompanyOwnershipRecordResponse])
 def list_ownership_records(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    return db.query(CompanyOwnershipRecord).order_by(CompanyOwnershipRecord.appointment_date.asc()).all()
+    records = db.query(CompanyOwnershipRecord).order_by(CompanyOwnershipRecord.appointment_date.asc()).all()
+    return [CompanyOwnershipRecordResponse.from_orm_model(r) for r in records]
 
 
 @router.post("/ownership", response_model=CompanyOwnershipRecordResponse, status_code=status.HTTP_201_CREATED)
 def create_ownership_record(payload: CompanyOwnershipRecordCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+    role = payload.role or payload.role_title or "DIRECTOR"
+    shares = payload.shares_count if payload.shares_count is not None else payload.number_of_shares
+    res_ref = payload.resolution_reference or payload.board_resolution_ref
     rec = CompanyOwnershipRecord(
         person_or_entity_name=payload.person_or_entity_name.strip(),
-        role=payload.role.upper(),
+        role=role.upper(),
         shareholding_percentage=float(payload.shareholding_percentage),
-        shares_count=int(payload.shares_count),
+        shares_count=int(shares),
         appointment_date=payload.appointment_date,
         resignation_date=payload.resignation_date,
         status=payload.status.upper(),
-        resolution_reference=payload.resolution_reference,
-        notes=payload.notes
+        resolution_reference=res_ref,
+        notes=payload.notes or payload.contact_info,
+        document_url=payload.document_url,
+        document_name=payload.document_name
     )
     db.add(rec)
     db.commit()
     db.refresh(rec)
-    return rec
+    return CompanyOwnershipRecordResponse.from_orm_model(rec)
+
+
+@router.put("/ownership/{record_id}", response_model=CompanyOwnershipRecordResponse)
+def update_ownership_record(
+    record_id: int,
+    payload: CompanyOwnershipRecordUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    rec = db.query(CompanyOwnershipRecord).filter(CompanyOwnershipRecord.id == record_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Ownership record not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "person_or_entity_name" in data and data["person_or_entity_name"]:
+        rec.person_or_entity_name = data["person_or_entity_name"].strip()
+    if "role" in data and data["role"]:
+        rec.role = data["role"].upper()
+    elif "role_title" in data and data["role_title"]:
+        rec.role = data["role_title"].upper()
+    if "shareholding_percentage" in data and data["shareholding_percentage"] is not None:
+        rec.shareholding_percentage = float(data["shareholding_percentage"])
+    if "shares_count" in data and data["shares_count"] is not None:
+        rec.shares_count = int(data["shares_count"])
+    elif "number_of_shares" in data and data["number_of_shares"] is not None:
+        rec.shares_count = int(data["number_of_shares"])
+    if "appointment_date" in data and data["appointment_date"]:
+        rec.appointment_date = data["appointment_date"]
+    if "resignation_date" in data:
+        rec.resignation_date = data["resignation_date"]
+    if "status" in data and data["status"]:
+        rec.status = data["status"].upper()
+    if "resolution_reference" in data:
+        rec.resolution_reference = data["resolution_reference"]
+    elif "board_resolution_ref" in data:
+        rec.resolution_reference = data["board_resolution_ref"]
+    if "notes" in data:
+        rec.notes = data["notes"]
+    elif "contact_info" in data:
+        rec.notes = data["contact_info"]
+    if "document_url" in data:
+        rec.document_url = data["document_url"]
+    if "document_name" in data:
+        rec.document_name = data["document_name"]
+
+    rec.updated_at = datetime.datetime.now()
+    db.commit()
+    db.refresh(rec)
+    return CompanyOwnershipRecordResponse.from_orm_model(rec)
+
 
 @router.delete("/ownership/{record_id}")
 def delete_ownership_record(record_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
@@ -187,30 +371,9 @@ def delete_ownership_record(record_id: int, db: Session = Depends(get_db), curre
     return {"message": f"Ownership record for {name} deleted successfully"}
 
 
-@router.put("/ownership/{record_id}", response_model=CompanyOwnershipRecordResponse)
-def update_ownership_record(record_id: int, payload: CompanyOwnershipRecordCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    rec = db.query(CompanyOwnershipRecord).filter(CompanyOwnershipRecord.id == record_id).first()
-    if not rec:
-        raise HTTPException(status_code=404, detail="Ownership record not found")
-
-    rec.person_or_entity_name = payload.person_or_entity_name.strip()
-    rec.role = payload.role.upper()
-    rec.shareholding_percentage = float(payload.shareholding_percentage)
-    rec.shares_count = int(payload.shares_count)
-    rec.appointment_date = payload.appointment_date
-    rec.resignation_date = payload.resignation_date
-    rec.status = payload.status.upper()
-    rec.resolution_reference = payload.resolution_reference
-    rec.notes = payload.notes
-
-    db.commit()
-    db.refresh(rec)
-    return rec
-
-
 # ==================== GROWTH & PERFORMANCE ANALYTICS ====================
 @router.get("/growth-analytics")
-def get_company_growth_analytics(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
+def get_company_growth_analytics_detailed(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
     """
     Computes real historical data and current organizational metrics.
     Never uses fake statistics or invented values.
@@ -267,62 +430,9 @@ def get_company_growth_analytics(db: Session = Depends(get_db), current_user: Us
         "total_revenue_collected": round(total_revenue_collected, 2),
         "milestones_count": milestones_count,
         "guards_hired_by_year": guards_by_year
-    }# ==================== MILESTONES ====================
-@router.get("/milestones", response_model=List[CompanyMilestoneResponse])
-def list_company_milestones(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    milestones = db.query(CompanyMilestone).order_by(CompanyMilestone.event_date.asc(), CompanyMilestone.id.asc()).all()
-    return [CompanyMilestoneResponse.from_orm_model(m) for m in milestones]
+    }
 
 
-@router.post("/milestones", response_model=CompanyMilestoneResponse, status_code=status.HTTP_201_CREATED)
-def create_company_milestone(payload: CompanyMilestoneCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    title = payload.title or payload.event_title or "Milestone"
-    m_date = payload.milestone_date or payload.event_date or datetime.date.today()
-    m = CompanyMilestone(
-        event_title=title.strip(),
-        category=payload.category.upper(),
-        event_date=m_date,
-        description=payload.description.strip(),
-        location=payload.location,
-        significance=payload.significance,
-        recorded_by_user_id=current_user.id
-    )
-    db.add(m)
-    db.commit()
-    db.refresh(m)
-    return CompanyMilestoneResponse.from_orm_model(m)
-
-
-# ==================== OWNERSHIP & GOVERNANCE ====================
-@router.get("/ownership", response_model=List[CompanyOwnershipRecordResponse])
-def list_company_ownership_records(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    records = db.query(CompanyOwnershipRecord).order_by(CompanyOwnershipRecord.shareholding_percentage.desc()).all()
-    return [CompanyOwnershipRecordResponse.from_orm_model(r) for r in records]
-
-
-@router.post("/ownership", response_model=CompanyOwnershipRecordResponse, status_code=status.HTTP_201_CREATED)
-def create_company_ownership_record(payload: CompanyOwnershipRecordCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    role = payload.role or payload.role_title or "DIRECTOR"
-    shares = payload.shares_count if payload.shares_count is not None else payload.number_of_shares
-    res_ref = payload.resolution_reference or payload.board_resolution_ref
-    rec = CompanyOwnershipRecord(
-        person_or_entity_name=payload.person_or_entity_name.strip(),
-        role=role,
-        shareholding_percentage=float(payload.shareholding_percentage),
-        shares_count=int(shares),
-        appointment_date=payload.appointment_date,
-        resignation_date=payload.resignation_date,
-        status=payload.status,
-        resolution_reference=res_ref,
-        notes=payload.notes or payload.contact_info
-    )
-    db.add(rec)
-    db.commit()
-    db.refresh(rec)
-    return CompanyOwnershipRecordResponse.from_orm_model(rec)
-
-
-# ==================== GROWTH ANALYTICS ====================
 @router.get("/analytics")
 def get_company_growth_analytics(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
     active_guards = db.query(Guard).filter(Guard.status == "ACTIVE").count()
@@ -346,7 +456,6 @@ def get_company_growth_analytics(db: Session = Depends(get_db), current_user: Us
     }
 
 
-
 # ==================== RECOMMENDATIONS ====================
 @router.get("/recommendations", response_model=List[CompanyRecommendationResponse])
 def list_company_recommendations(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
@@ -363,9 +472,35 @@ def create_company_recommendation(payload: CompanyRecommendationCreate, db: Sess
         rating=int(payload.rating),
         recommendation_date=rec_date,
         recommendation_text=payload.recommendation_text.strip(),
-        service_scope=payload.service_scope.strip() if payload.service_scope else None
+        service_scope=payload.service_scope.strip() if payload.service_scope else None,
+        document_url=payload.document_url,
+        document_name=payload.document_name
     )
     db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    return rec
+
+
+@router.put("/recommendations/{rec_id}", response_model=CompanyRecommendationResponse)
+def update_company_recommendation(
+    rec_id: int,
+    payload: CompanyRecommendationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    rec = db.query(CompanyRecommendation).filter(CompanyRecommendation.id == rec_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        if hasattr(rec, k) and v is not None:
+            if isinstance(v, str):
+                v = v.strip()
+            setattr(rec, k, v)
+
+    rec.updated_at = datetime.datetime.now()
     db.commit()
     db.refresh(rec)
     return rec
@@ -389,21 +524,58 @@ def list_company_services(db: Session = Depends(get_db), current_user: User = De
 
 @router.post("/services", response_model=CompanyServiceResponse, status_code=status.HTTP_201_CREATED)
 def create_company_service(payload: CompanyServiceCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_hr)):
-    existing = db.query(CompanyService).filter(CompanyService.service_code == payload.service_code).first()
+    code_val = payload.service_code.strip().upper()
+    existing = db.query(CompanyService).filter(CompanyService.service_code == code_val).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"Service with code '{payload.service_code}' already exists")
+        raise HTTPException(status_code=400, detail=f"Service with code '{code_val}' already exists")
     
     srv = CompanyService(
-        service_code=payload.service_code.strip().upper(),
+        service_code=code_val,
         service_name=payload.service_name.strip(),
         category=payload.category.strip().upper(),
         description=payload.description.strip(),
         sla_standard=payload.sla_standard.strip() if payload.sla_standard else None,
         billing_rate_guideline=payload.billing_rate_guideline.strip() if payload.billing_rate_guideline else None,
         active_sites_count=payload.active_sites_count,
-        is_active=payload.is_active
+        is_active=payload.is_active,
+        document_url=payload.document_url,
+        document_name=payload.document_name
     )
     db.add(srv)
+    db.commit()
+    db.refresh(srv)
+    return srv
+
+
+@router.put("/services/{srv_id}", response_model=CompanyServiceResponse)
+def update_company_service(
+    srv_id: int,
+    payload: CompanyServiceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    srv = db.query(CompanyService).filter(CompanyService.id == srv_id).first()
+    if not srv:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "service_code" in data and data["service_code"]:
+        new_code = data["service_code"].strip().upper()
+        if new_code != srv.service_code:
+            existing = db.query(CompanyService).filter(CompanyService.service_code == new_code).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"Service code '{new_code}' is already in use")
+            srv.service_code = new_code
+
+    for k, v in data.items():
+        if k == "service_code":
+            continue
+        if hasattr(srv, k) and v is not None:
+            if isinstance(v, str):
+                v = v.strip()
+            setattr(srv, k, v)
+
+    srv.updated_at = datetime.datetime.now()
     db.commit()
     db.refresh(srv)
     return srv

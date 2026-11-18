@@ -56,6 +56,23 @@ def list_staff_members(
     return query.order_by(User.id.desc()).all()
 
 
+@router.get("/{user_id}", response_model=StaffResponse)
+def get_staff_member(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Retrieve details for a specific corporate staff member (Admin, HR, or Supervisor)."""
+    staff_roles = [UserRole.ADMIN.value, UserRole.HR.value, UserRole.SUPERVISOR.value]
+    u = db.query(User).filter(User.id == user_id, User.role.in_(staff_roles)).first()
+    if not u:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Corporate staff member with ID {user_id} not found."
+        )
+    return u
+
+
 @router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)
 def create_staff_member(
     payload: StaffCreateRequest,

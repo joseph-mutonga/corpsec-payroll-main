@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from application.backend.app.core.database import Base
 
@@ -106,8 +106,8 @@ class CallLog(Base):
     status = Column(String(30), default="QUEUED", nullable=False)  # QUEUED, RINGING, IN_PROGRESS, COMPLETED, MISSED, VOICEMAIL, REJECTED
     duration_seconds = Column(Integer, default=0, nullable=False)
     wait_time_seconds = Column(Integer, default=0, nullable=False)
-    recording_url = Column(String(255), nullable=True)
-    voicemail_url = Column(String(255), nullable=True)
+    recording_url = Column(Text, nullable=True)
+    voicemail_url = Column(Text, nullable=True)
     disposition = Column(String(50), nullable=True)  # Resolved, Follow-up Required, Guard Dispatched, Spam, Transferred
     notes = Column(Text, nullable=True)
 

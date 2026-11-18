@@ -245,10 +245,53 @@ def test_call_history_recordings_and_missed_endpoints(client, db):
     assert res_calls.status_code == 200
     assert isinstance(res_calls.json(), list)
 
-    # 2. Recordings listing
+    # 2. Recordings listing & Audio Streaming
     res_rec = client.get("/api/v1/call-center/recordings", headers=headers)
     assert res_rec.status_code == 200
-    assert isinstance(res_rec.json(), list)
+    recs = res_rec.json()
+    assert isinstance(recs, list)
+    if len(recs) > 0:
+        rec_id = recs[0]["id"]
+        # Test stream
+        stream_res = client.get(f"/api/v1/call-center/recordings/{rec_id}/stream", headers=headers)
+        assert stream_res.status_code == 200
+        assert "audio/" in stream_res.headers.get("content-type", "")
+        assert stream_res.headers.get("accept-ranges") == "bytes"
+
+        # Test download parameter
+        dl_res = client.get(f"/api/v1/call-center/recordings/{rec_id}/stream?download=true", headers=headers)
+        assert dl_res.status_code == 200
+        assert "attachment" in dl_res.headers.get("content-disposition", "")
+
+    # 3. Save / Upload recording to call
+    call = db.query(CallLog).first()
+    if call:
+        save_res = client.post(
+            f"/api/v1/call-center/calls/{call.id}/recording",
+            headers=headers,
+            data={"recording_url": "https://voice.africastalking.com/recordings/test_save.mp3"}
+        )
+        assert save_res.status_code == 200
+        assert save_res.json()["status"] == "success"
+
+        # Verify saved in database
+        db.refresh(call)
+        assert call.recording_url == "https://voice.africastalking.com/recordings/test_save.mp3"
+
+    # 4. Africa's Talking recording webhook callback
+    webhook_res = client.post(
+        "/api/v1/call-center/voice/recording",
+        json={
+            "sessionId": call.call_sid if call else "ATVO_dummy_session",
+            "recordingUrl": "https://voice.africastalking.com/recordings/at_webhook_test.mp3",
+            "durationInSeconds": 45
+        }
+    )
+    assert webhook_res.status_code == 200
+    if call:
+        db.refresh(call)
+        assert call.recording_url == "https://voice.africastalking.com/recordings/at_webhook_test.mp3"
+        assert call.duration_seconds == 45
 
     # 3. Missed calls listing
     res_missed = client.get("/api/v1/call-center/missed", headers=headers)

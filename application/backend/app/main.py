@@ -137,6 +137,7 @@ def read_root():
 
 
 @app.get("/portal")
+@app.get("/portal.html")
 def read_guard_portal():
     portal_file = os.path.join(frontend_dir, "portal.html")
     if os.path.exists(portal_file):

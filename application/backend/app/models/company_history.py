@@ -33,6 +33,9 @@ class CompanyProfile(Base):
     psra_license_number = Column(String(100), default="PSRA/CORP/2026/0894", nullable=False)
     branches_summary = Column(Text, default="Nairobi (Head Office), Mombasa Coastal Branch, Kisumu Western Branch, Nakuru Rift Valley Branch", nullable=False)
     
+    document_url = Column(String(500), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    
     updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
 
@@ -55,6 +58,9 @@ class CompanyFoundingHistory(Base):
     original_directors_json = Column(Text, default='[{"name": "Col. (Rtd) David K. Cheruiyot", "designation": "Managing Director"}, {"name": "Grace W. Nduta", "designation": "Executive Director"}, {"name": "Dr. Joseph M. Ochieng", "designation": "Non-Executive Director"}]', nullable=False)
     initial_shareholders_json = Column(Text, default='[{"name": "Cheruiyot Holdings Ltd", "percentage": 55.0}, {"name": "Nduta Enterprises", "percentage": 35.0}, {"name": "Ochieng Capital Trust", "percentage": 10.0}]', nullable=False)
     
+    document_url = Column(String(500), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
 
@@ -70,8 +76,12 @@ class CompanyMilestone(Base):
     location = Column(String(150), nullable=True)
     significance = Column(String(255), nullable=True)
     
+    document_url = Column(String(500), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    
     recorded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=True)
 
     recorded_by = relationship("User", foreign_keys=[recorded_by_user_id])
 
@@ -91,7 +101,12 @@ class CompanyOwnershipRecord(Base):
     
     resolution_reference = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
+    
+    document_url = Column(String(500), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=True)
 
 
 class CompanyRecommendation(Base):
@@ -105,7 +120,12 @@ class CompanyRecommendation(Base):
     recommendation_date = Column(Date, default=datetime.date.today, nullable=False)
     recommendation_text = Column(Text, nullable=False)
     service_scope = Column(String(255), nullable=True)
+    
+    document_url = Column(String(500), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=True)
 
 
 class CompanyService(Base):
@@ -120,6 +140,11 @@ class CompanyService(Base):
     billing_rate_guideline = Column(String(255), nullable=True)
     active_sites_count = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    
+    document_url = Column(String(500), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=True)
 
 

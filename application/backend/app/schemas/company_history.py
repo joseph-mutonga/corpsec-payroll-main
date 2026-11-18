@@ -24,6 +24,8 @@ class CompanyProfileBase(BaseModel):
     core_values: str = "Integrity, Vigilance, Professionalism, Accountability"
     psra_license_number: str = "PSRA/2026/A-0042"
     branches_summary: str = "Nairobi HQ, Mombasa Coastal Detachment, Kisumu Lake Detachment, Nakuru Rift Detachment"
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -64,6 +66,8 @@ class CompanyProfileUpdate(BaseModel):
     core_values: Optional[str] = None
     psra_license_number: Optional[str] = None
     branches_summary: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -128,6 +132,8 @@ class CompanyFoundingHistoryBase(BaseModel):
     original_equipment_description: Optional[str] = None
     first_client_name: Optional[str] = None
     first_client_commencement_date: Optional[date] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 
 class CompanyFoundingHistoryUpdate(BaseModel):
@@ -140,6 +146,8 @@ class CompanyFoundingHistoryUpdate(BaseModel):
     original_equipment_description: Optional[str] = None
     first_client_name: Optional[str] = None
     first_client_commencement_date: Optional[date] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 
 class CompanyFoundingHistoryResponse(CompanyFoundingHistoryBase):
@@ -158,7 +166,9 @@ class CompanyFoundingHistoryResponse(CompanyFoundingHistoryBase):
             founder_names=getattr(obj, "founder_summary", None) or "Col. (Rtd) James Mwangi & Capt. Beatrice Wanjiku",
             background_story=getattr(obj, "narrative_history", None) or "Founded in early 2018 by veteran security and risk management professionals.",
             created_at=obj.created_at,
-            updated_at=obj.updated_at
+            updated_at=obj.updated_at,
+            document_url=getattr(obj, "document_url", None),
+            document_name=getattr(obj, "document_name", None)
         )
 
     model_config = ConfigDict(from_attributes=True)
@@ -173,6 +183,8 @@ class CompanyMilestoneBase(BaseModel):
     location: Optional[str] = None
     significance: Optional[str] = None
     order_index: int = 0
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -199,6 +211,8 @@ class CompanyMilestoneUpdate(BaseModel):
     location: Optional[str] = None
     significance: Optional[str] = None
     order_index: Optional[int] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -244,6 +258,8 @@ class CompanyOwnershipRecordBase(BaseModel):
     status: str = "ACTIVE"
     contact_info: Optional[str] = None
     notes: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -283,6 +299,8 @@ class CompanyOwnershipRecordUpdate(BaseModel):
     status: Optional[str] = None
     contact_info: Optional[str] = None
     notes: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 
 class CompanyOwnershipRecordResponse(CompanyOwnershipRecordBase):
@@ -309,6 +327,8 @@ class CompanyOwnershipRecordResponse(CompanyOwnershipRecordBase):
             resolution_reference=res_ref,
             status=obj.status,
             notes=obj.notes,
+            document_url=getattr(obj, "document_url", None),
+            document_name=getattr(obj, "document_name", None),
             created_at=obj.created_at,
             updated_at=getattr(obj, "updated_at", None)
         )
@@ -325,6 +345,20 @@ class CompanyRecommendationCreate(BaseModel):
     recommendation_date: Optional[date] = None
     recommendation_text: str = Field(..., min_length=5)
     service_scope: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
+
+
+class CompanyRecommendationUpdate(BaseModel):
+    client_name: Optional[str] = None
+    author_name: Optional[str] = None
+    designation: Optional[str] = None
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    recommendation_date: Optional[date] = None
+    recommendation_text: Optional[str] = None
+    service_scope: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 
 class CompanyRecommendationResponse(BaseModel):
@@ -336,7 +370,10 @@ class CompanyRecommendationResponse(BaseModel):
     recommendation_date: date
     recommendation_text: str
     service_scope: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -351,6 +388,21 @@ class CompanyServiceCreate(BaseModel):
     billing_rate_guideline: Optional[str] = None
     active_sites_count: int = 0
     is_active: bool = True
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
+
+
+class CompanyServiceUpdate(BaseModel):
+    service_code: Optional[str] = None
+    service_name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    sla_standard: Optional[str] = None
+    billing_rate_guideline: Optional[str] = None
+    active_sites_count: Optional[int] = None
+    is_active: Optional[bool] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 
 class CompanyServiceResponse(BaseModel):
@@ -363,6 +415,9 @@ class CompanyServiceResponse(BaseModel):
     billing_rate_guideline: Optional[str] = None
     active_sites_count: int = 0
     is_active: bool = True
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

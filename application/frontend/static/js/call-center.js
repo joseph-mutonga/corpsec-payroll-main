@@ -275,6 +275,12 @@
         showToast(`Caller waiting in queue: ${msg.data.queue_name || 'General'} (${msg.data.caller_number})`, 'info');
       }
       refreshActiveViews();
+    } else if (msg.event === 'recording:ready') {
+      if (typeof showToast === 'function') {
+        showToast('⏺️ Call audio recording saved & ready for playback', 'success');
+      }
+      if (window.CallCenter.activeSubTab === 'recordings') loadCallRecordings();
+      if (window.CallCenter.activeSubTab === 'history') loadCallHistory();
     }
   }
 
@@ -357,6 +363,40 @@
   /* ==========================================================================
      4. Persistent Softphone Widget Controls & Draggable Engine
      ========================================================================== */
+  function ensureSoftphoneInViewport(container, targetEl) {
+    if (!container) return;
+    const padding = 12;
+    const isExpanded = targetEl && targetEl.id === 'softphone-expanded';
+    const minW = isExpanded ? 340 : 180;
+    const minH = isExpanded ? 500 : 48;
+    const rect = container.getBoundingClientRect();
+    const w = Math.max(rect.width || 0, minW);
+    const h = Math.max(rect.height || 0, minH);
+
+    // If container already has explicit left/top coordinates
+    if (container.style.left || container.style.top) {
+      let curLeft = parseFloat(container.style.left) || rect.left;
+      let curTop = parseFloat(container.style.top) || rect.top;
+
+      const maxLeft = Math.max(padding, window.innerWidth - w - padding);
+      const maxTop = Math.max(padding, window.innerHeight - h - padding);
+
+      const clampedLeft = Math.max(padding, Math.min(maxLeft, curLeft));
+      const clampedTop = Math.max(padding, Math.min(maxTop, curTop));
+
+      container.style.left = `${Math.round(clampedLeft)}px`;
+      container.style.top = `${Math.round(clampedTop)}px`;
+      container.style.bottom = 'auto';
+      container.style.right = 'auto';
+    } else {
+      // Default: bottom-right anchored. Ensure top doesn't overflow above screen
+      if (rect.top < padding) {
+        container.style.bottom = 'auto';
+        container.style.top = `${padding}px`;
+      }
+    }
+  }
+
   function initDraggableSoftphone() {
     const container = document.getElementById('softphone-widget-container');
     const minimized = document.getElementById('softphone-minimized');
@@ -372,7 +412,7 @@
     let initialLeft = 0;
     let initialTop = 0;
     let hasMoved = false;
-    const DRAG_THRESHOLD = 8;
+    const DRAG_THRESHOLD = 6;
 
     function clampPosition(left, top, elWidth, elHeight) {
       const padding = 12;
@@ -418,16 +458,10 @@
 
     // Keep widget on screen when viewport is resized
     window.addEventListener('resize', () => {
-      if (container.style.left) {
-        const rect = container.getBoundingClientRect();
-        const currentLeft = parseFloat(container.style.left) || rect.left;
-        const currentTop = parseFloat(container.style.top) || rect.top;
-        const clamped = clampPosition(currentLeft, currentTop, rect.width, rect.height);
-        setPosition(clamped.left, clamped.top);
-      }
+      ensureSoftphoneInViewport(container, document.getElementById('softphone-expanded'));
     });
 
-    let activePointerId = null;
+    let activeDragEl = null;
 
     function onPointerDown(e) {
       if (e.button !== undefined && e.button !== 0) return;
@@ -435,7 +469,7 @@
 
       isDragging = true;
       hasMoved = false;
-      activePointerId = e.pointerId;
+      activeDragEl = e.currentTarget;
       startX = e.clientX;
       startY = e.clientY;
 
@@ -446,8 +480,8 @@
       container.classList.add('is-dragging');
 
       try {
-        if (e.currentTarget && e.currentTarget.setPointerCapture && e.pointerId !== undefined) {
-          e.currentTarget.setPointerCapture(e.pointerId);
+        if (activeDragEl && activeDragEl.setPointerCapture && e.pointerId !== undefined) {
+          activeDragEl.setPointerCapture(e.pointerId);
         }
       } catch (err) {}
 
@@ -482,11 +516,11 @@
       container.classList.remove('is-dragging');
 
       try {
-        if (e && e.currentTarget && e.currentTarget.releasePointerCapture && activePointerId !== null) {
-          e.currentTarget.releasePointerCapture(activePointerId);
+        if (activeDragEl && activeDragEl.releasePointerCapture && e && e.pointerId !== undefined) {
+          activeDragEl.releasePointerCapture(e.pointerId);
         }
       } catch (err) {}
-      activePointerId = null;
+      activeDragEl = null;
 
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
@@ -501,8 +535,10 @@
         const rect = container.getBoundingClientRect();
         savePosition(rect.left, rect.top);
       } else {
-        // Direct tap/click on minimized pill: immediately open softphone!
-        window.toggleSoftphone(true, true);
+        // Direct tap on minimized pill: immediately open softphone!
+        if (minimized.contains(e.target) || e.currentTarget === minimized) {
+          window.toggleSoftphone(true, true);
+        }
       }
     }
 
@@ -526,38 +562,27 @@
       return;
     }
 
-    if (typeof forceState === 'boolean') {
-      window.CallCenter.isSoftphoneOpen = forceState;
-    } else {
-      window.CallCenter.isSoftphoneOpen = !window.CallCenter.isSoftphoneOpen;
-    }
+    const isCurrentlyExpanded = expanded.style.display === 'flex' || (!expanded.style.display && window.getComputedStyle(expanded).display === 'flex');
+    const shouldOpen = (typeof forceState === 'boolean') ? forceState : !isCurrentlyExpanded;
 
-    if (window.CallCenter.isSoftphoneOpen) {
+    window.CallCenter.isSoftphoneOpen = shouldOpen;
+
+    if (shouldOpen) {
       expanded.style.display = 'flex';
       minimized.style.display = 'none';
       try { getAudioContext(); } catch (err) {} // user gesture unlocks audio
 
-      // Ensure expanded modal stays fully within screen viewport
       requestAnimationFrame(() => {
-        if (!widget.style.left && !widget.style.top) return;
-        const rect = widget.getBoundingClientRect();
-        const padding = 12;
-        const effectiveWidth = Math.max(rect.width, 340);
-        const effectiveHeight = Math.max(rect.height, 520);
-        let left = parseFloat(widget.style.left) || rect.left;
-        let top = parseFloat(widget.style.top) || rect.top;
-        if (left + effectiveWidth > window.innerWidth - padding) {
-          left = Math.max(padding, window.innerWidth - effectiveWidth - padding);
-        }
-        if (top + effectiveHeight > window.innerHeight - padding) {
-          top = Math.max(padding, window.innerHeight - effectiveHeight - padding);
-        }
-        widget.style.left = `${Math.round(left)}px`;
-        widget.style.top = `${Math.round(top)}px`;
+        ensureSoftphoneInViewport(widget, expanded);
+        const input = document.getElementById('softphone-number-input');
+        if (input) input.focus();
       });
     } else {
       expanded.style.display = 'none';
       minimized.style.display = 'flex';
+      requestAnimationFrame(() => {
+        ensureSoftphoneInViewport(widget, minimized);
+      });
     }
   };
 
@@ -970,6 +995,7 @@
     if (window.CallCenter.activeSubTab === 'team') loadTeamPresence();
     if (window.CallCenter.activeSubTab === 'missed') loadMissedCalls();
     if (window.CallCenter.activeSubTab === 'reports') loadAnalyticsReports();
+    if (window.CallCenter.activeSubTab === 'recordings') loadCallRecordings();
   }
 
   /* ==========================================================================
@@ -1130,9 +1156,10 @@
         else if (c.status === 'RINGING') statusBadge = `<span class="cc-badge cc-badge-ringing">Ringing</span>`;
 
         const duration = formatCallDuration(c.duration_seconds);
-        const recordingPlayer = c.recording_url
+        const audioSrc = c.stream_url || c.recording_url;
+        const recordingPlayer = audioSrc
           ? `<div class="cc-audio-player">
-               <audio controls src="${c.recording_url}" preload="none"></audio>
+               <audio controls src="${audioSrc}" preload="none" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
              </div>`
           : `<span style="color:#94A3B8; font-size:11px;">None</span>`;
 
@@ -1485,6 +1512,14 @@
     }
   };
 
+  window.onAudioPlaybackError = function (el, callId) {
+    if (!el || el.dataset.retried === 'true') return;
+    el.dataset.retried = 'true';
+    console.warn(`[CallCenter] Audio playback fallback for call #${callId}`);
+    el.src = `/api/v1/call-center/recordings/${callId}/stream?fallback=true&t=${Date.now()}`;
+    try { el.load(); } catch (err) {}
+  };
+
   /* ==========================================================================
      14. Sub-View: Recordings Library
      ========================================================================== */
@@ -1497,7 +1532,10 @@
       return;
     }
 
-    tbody.innerHTML = calls.map(c => `
+    tbody.innerHTML = calls.map(c => {
+      const audioSrc = c.stream_url || c.recording_url || `/api/v1/call-center/recordings/${c.id}/stream`;
+      const dlUrl = c.download_url || `/api/v1/call-center/recordings/${c.id}/stream?download=true`;
+      return `
       <tr>
         <td>
           <div style="font-weight:700; color:#0F172A;">${c.caller_name || 'Caller'}</div>
@@ -1508,16 +1546,17 @@
         <td style="font-weight:700;">${formatCallDuration(c.duration_seconds)}</td>
         <td>
           <div class="cc-audio-player">
-            <audio controls src="${c.recording_url}" preload="metadata"></audio>
+            <audio controls src="${audioSrc}" preload="metadata" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
           </div>
         </td>
         <td>
-          <a href="${c.recording_url}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:4px 8px; text-decoration:none;">
-            ⬇ Download
+          <a href="${dlUrl}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:6px 12px; text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-weight:700;">
+            <span>⬇</span> Download
           </a>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
   }
 
   window.filterCallRecordings = function (query) {

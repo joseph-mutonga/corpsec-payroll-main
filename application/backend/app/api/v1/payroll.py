@@ -73,12 +73,60 @@ def create_payroll_period(
     return period
 
 
+def ensure_current_month_payroll_period(db: Session, admin_user: Optional[User] = None) -> PayrollPeriod:
+    """
+    Ensures that a payroll period for the current month and year always exists,
+    and has calculated records generated so payment schedules can be viewed
+    in advance even if payment has not yet been disbursed to workers.
+    """
+    import calendar
+    now = datetime.now()
+    cur_year = now.year
+    cur_month = now.month
+    period_name = now.strftime("%B %Y")
+    _, last_day = calendar.monthrange(cur_year, cur_month)
+
+    period = db.query(PayrollPeriod).filter(
+        PayrollPeriod.year == cur_year,
+        PayrollPeriod.month == cur_month
+    ).first()
+
+    if not period:
+        period = PayrollPeriod(
+            year=cur_year,
+            month=cur_month,
+            period_name=period_name,
+            start_date=date(cur_year, cur_month, 1),
+            end_date=date(cur_year, cur_month, last_day),
+            status="CALCULATED",
+            created_at=now,
+            calculated_at=now
+        )
+        db.add(period)
+        db.commit()
+        db.refresh(period)
+
+    # Check if records are calculated
+    rec_count = db.query(PayrollRecord).filter(PayrollRecord.payroll_period_id == period.id).count()
+    if rec_count == 0:
+        if not admin_user:
+            admin_user = db.query(User).filter(User.role == "ADMIN").first()
+        if admin_user:
+            try:
+                execute_payroll_calculation(period.id, db, admin_user)
+            except Exception as e:
+                pass
+
+    return period
+
+
 @router.get("/periods", response_model=List[PayrollPeriodResponse])
 def list_payroll_periods(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin_or_hr)
 ):
-    """Fetch all payroll periods."""
+    """Fetch all payroll periods, ensuring the current month period is present and calculated."""
+    ensure_current_month_payroll_period(db, admin)
     return db.query(PayrollPeriod).order_by(PayrollPeriod.year.desc(), PayrollPeriod.month.desc()).all()
 
 

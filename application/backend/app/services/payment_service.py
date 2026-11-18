@@ -1,8 +1,10 @@
 import re
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from application.backend.app.models.payroll import PayrollPeriod, PayrollRecord
 from application.backend.app.models.guard import Guard
+from application.backend.app.models.user import User
 
 
 def validate_kenyan_phone(phone_str: Optional[str]) -> Tuple[bool, str, Optional[str]]:
@@ -68,6 +70,24 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
     records = db.query(PayrollRecord).filter(
         PayrollRecord.payroll_period_id == period_id
     ).all()
+
+    # If records not yet calculated for this period, auto-calculate so payment schedules are immediately visible
+    if not records and period.status in ["CALCULATED", "CONFIRMED"]:
+        from application.backend.app.api.v1.payroll import execute_payroll_calculation
+        admin_user = db.query(User).filter(User.role == "ADMIN").first()
+        if admin_user:
+            try:
+                execute_payroll_calculation(period_id=period.id, db=db, admin=admin_user)
+                records = db.query(PayrollRecord).filter(
+                    PayrollRecord.payroll_period_id == period_id
+                ).all()
+            except Exception:
+                pass
+
+    now = datetime.now()
+    is_current_month = bool(period.year == now.year and period.month == now.month)
+    is_paid = bool(period.status in ["CLOSED", "PAID"])
+    item_status = "PAID" if is_paid else "READY (UNPAID)"
 
     bank_items: List[Dict[str, Any]] = []
     mpesa_items: List[Dict[str, Any]] = []
@@ -140,7 +160,9 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
                     "bank_account": bank_acc_clean,
                     "amount": net_pay,
                     "reference_number": f"SAL-{period.year}{period.month:02d}-{guard.employee_number}",
-                    "status": "READY"
+                    "status": item_status,
+                    "is_paid": is_paid,
+                    "payment_status": "PAID" if is_paid else "UNPAID"
                 })
             else:
                 unrouted_items.append({
@@ -176,7 +198,9 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
                     "mpesa_number": clean_phone,
                     "amount": net_pay,
                     "reference_number": f"MPS-{period.year}{period.month:02d}-{guard.employee_number}",
-                    "status": "READY"
+                    "status": item_status,
+                    "is_paid": is_paid,
+                    "payment_status": "PAID" if is_paid else "UNPAID"
                 })
             else:
                 unrouted_items.append({
@@ -213,6 +237,8 @@ def build_payment_schedules_and_reconciliation(db: Session, period_id: int) -> D
         "period_id": period.id,
         "period_name": period.period_name,
         "payroll_status": period.status,
+        "is_current_month": is_current_month,
+        "is_paid": is_paid,
         "total_records_count": len(records),
         "bank_records_count": len(bank_items),
         "mpesa_records_count": len(mpesa_items),

@@ -285,6 +285,56 @@ def sync_db_schema():
                             db_conn.commit()
                         except Exception as ce:
                             print(f"Notice adding column {col_name} to team_messages: {ce}")
+
+        if "call_logs" in existing_tables:
+            existing_cl_cols = [c["name"] for c in insp.get_columns("call_logs")]
+            cl_cols = [
+                ("recording_url", "TEXT NULL"),
+                ("voicemail_url", "TEXT NULL"),
+            ]
+            with engine.connect() as db_conn:
+                for col_name, col_def in cl_cols:
+                    if col_name not in existing_cl_cols:
+                        try:
+                            db_conn.execute(text(f"ALTER TABLE call_logs ADD COLUMN {col_name} {col_def};"))
+                            db_conn.commit()
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            db_conn.execute(text(f"ALTER TABLE call_logs MODIFY COLUMN {col_name} {col_def};"))
+                            db_conn.commit()
+                        except Exception:
+                            pass
+
+        # Sync Company History & Profile document and amendment columns
+        company_tables = [
+            "company_profile",
+            "company_founding_history",
+            "company_milestones",
+            "company_ownership_records",
+            "company_recommendations",
+            "company_services"
+        ]
+        with engine.connect() as db_conn:
+            for tbl in company_tables:
+                if tbl in existing_tables:
+                    existing_cols = [c["name"] for c in insp.get_columns(tbl)]
+                    cols_to_sync = [
+                        ("document_url", "VARCHAR(500) NULL"),
+                        ("document_name", "VARCHAR(255) NULL")
+                    ]
+                    if tbl in ["company_milestones", "company_ownership_records", "company_recommendations", "company_services"]:
+                        cols_to_sync.append(("updated_at", "DATETIME NULL"))
+
+                    for cname, ctype in cols_to_sync:
+                        if cname not in existing_cols:
+                            try:
+                                db_conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {cname} {ctype};"))
+                                db_conn.commit()
+                            except Exception as c_err:
+                                print(f"Notice adding {cname} to {tbl}: {c_err}")
+
         Base.metadata.create_all(bind=engine)
     except Exception as ge:
         print(f"Engine-level schema sync notice: {ge}")

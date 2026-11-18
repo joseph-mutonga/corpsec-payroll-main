@@ -192,6 +192,7 @@ class DialRequest(BaseModel):
 class CallActionRequest(BaseModel):
     notes: Optional[str] = None
     disposition: Optional[str] = None
+    recording_url: Optional[str] = None
 
 class TransferRequest(BaseModel):
     target_type: str  # "AGENT" or "QUEUE"
