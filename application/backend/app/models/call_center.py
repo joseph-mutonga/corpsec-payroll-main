@@ -107,6 +107,8 @@ class CallLog(Base):
     duration_seconds = Column(Integer, default=0, nullable=False)
     wait_time_seconds = Column(Integer, default=0, nullable=False)
     recording_url = Column(Text, nullable=True)
+    recording_data = Column(LargeBinary(length=16777215), nullable=True)
+    recording_content_type = Column(String(50), default="audio/mpeg", nullable=True)
     voicemail_url = Column(Text, nullable=True)
     disposition = Column(String(50), nullable=True)  # Resolved, Follow-up Required, Guard Dispatched, Spam, Transferred
     notes = Column(Text, nullable=True)

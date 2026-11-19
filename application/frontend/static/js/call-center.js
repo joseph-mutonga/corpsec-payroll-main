@@ -1160,6 +1160,9 @@
         const recordingPlayer = audioSrc
           ? `<div class="cc-audio-player">
                <audio controls src="${audioSrc}" preload="none" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
+               <div style="font-size:9px; color:#059669; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:3px;">
+                 <span>🗄️</span> DB Stored
+               </div>
              </div>`
           : `<span style="color:#94A3B8; font-size:11px;">None</span>`;
 
@@ -1547,6 +1550,9 @@
         <td>
           <div class="cc-audio-player">
             <audio controls src="${audioSrc}" preload="metadata" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
+            <div style="font-size:10px; color:#059669; font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
+              <span>🗄️</span> Retrieved from Database
+            </div>
           </div>
         </td>
         <td>

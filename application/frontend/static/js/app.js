@@ -730,6 +730,14 @@ function updateUserProfileDisplay(userData) {
   if (navAnon) {
     navAnon.style.display = isAdminUser ? 'flex' : 'none';
   }
+  const navAiInsights = document.getElementById('nav-item-ai-insights');
+  if (navAiInsights) {
+    navAiInsights.style.display = isAdminUser ? 'flex' : 'none';
+  }
+  const panelAiAssistant = document.getElementById('ai-assistant-panel');
+  if (panelAiAssistant) {
+    panelAiAssistant.style.display = isAdminUser ? 'block' : 'none';
+  }
   const dashBtnAnon = document.getElementById('dash-btn-anon-reports');
   if (dashBtnAnon) {
     dashBtnAnon.style.display = isAdminUser ? 'flex' : 'none';
@@ -15205,14 +15213,14 @@ function updateWhatsAppPinnedBar(pinnedList) {
   window.waCurrentPinned = pinnedList;
   bar.style.display = 'flex';
 
+  window.waPinnedIndex = pinnedList.length - 1;
+  const activePin = pinnedList[window.waPinnedIndex];
+  window.waActivePinnedId = activePin.id;
+
   const countEl = document.getElementById('wa-pinned-count');
   if (countEl) {
-    countEl.innerText = pinnedList.length;
+    countEl.innerText = pinnedList.length > 1 ? `${window.waPinnedIndex + 1}/${pinnedList.length}` : '1';
   }
-
-  // Pick the most recent pinned message
-  const activePin = pinnedList[pinnedList.length - 1];
-  window.waActivePinnedId = activePin.id;
 
   const snippetEl = document.getElementById('wa-pinned-snippet');
   if (snippetEl) {
@@ -15241,6 +15249,11 @@ window.handlePinnedBarClick = function () {
     window.waPinnedIndex = ((window.waPinnedIndex || 0) + 1) % window.waCurrentPinned.length;
     const nextPin = window.waCurrentPinned[window.waPinnedIndex];
     window.waActivePinnedId = nextPin.id;
+
+    const countEl = document.getElementById('wa-pinned-count');
+    if (countEl) {
+      countEl.innerText = `${window.waPinnedIndex + 1}/${window.waCurrentPinned.length}`;
+    }
 
     const snippetEl = document.getElementById('wa-pinned-snippet');
     if (snippetEl) {
@@ -15274,6 +15287,28 @@ window.toggleWhatsAppPinMessage = async function (messageId) {
     }
   }
 };
+
+function formatWhatsAppMessageText(rawText) {
+  if (!rawText) return '';
+  let safe = escapeHtml(rawText);
+
+  // 1. Convert URLs to clickable styled links
+  safe = safe.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="wa-chat-link">$1</a>');
+
+  // 2. Formatting: *bold* -> <strong>bold</strong>
+  safe = safe.replace(/\*([^*\n\r]+)\*/g, '<strong>$1</strong>');
+
+  // 3. Formatting: _italic_ -> <em>italic</em>
+  safe = safe.replace(/_([^_\n\r]+)_/g, '<em>$1</em>');
+
+  // 4. Formatting: ~strikethrough~ -> <del>strikethrough</del>
+  safe = safe.replace(/~([^~\n\r]+)~/g, '<del>$1</del>');
+
+  // 5. Formatting: `code` -> <code class="wa-chat-inline-code">code</code>
+  safe = safe.replace(/`([^`\n\r]+)`/g, '<code class="wa-chat-inline-code">$1</code>');
+
+  return safe;
+}
 
 async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
   const container = document.getElementById('wa-messages-body');
@@ -15381,7 +15416,10 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
         }
       }
 
-      const textHtml = m.message ? `<div style="margin-top:${attachmentHtml ? '4px' : '0'}; font-size:13.5px; line-height:1.45; word-wrap:break-word;">${m.message}</div>` : '';
+      const formattedBody = formatWhatsAppMessageText(m.message);
+      const textHtml = formattedBody
+        ? `<div class="wa-bubble-text" style="margin-top:${attachmentHtml ? '6px' : '0'};">${formattedBody}</div>`
+        : '';
       const pinTagHtml = m.is_pinned ? `<div class="wa-bubble-pin-tag"><span>📌</span> Pinned Message</div>` : '';
       const pinBtnHtml = `
         <button type="button" class="wa-bubble-pin-action ${m.is_pinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleWhatsAppPinMessage(${m.id})" title="${m.is_pinned ? 'Unpin message' : 'Pin message'}">
@@ -15413,7 +15451,12 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
           <div class="wa-bubble-wrap in" id="wa-msg-${m.id}">
             <div class="wa-bubble wa-bubble-in ${m.is_pinned ? 'pinned' : ''}">
               ${pinTagHtml}
-              ${waActiveContact.is_group ? `<span class="wa-sender-lbl" style="color:${senderRoleColor};">${escapeHtml(m.sender_name)}</span>` : ''}
+              ${waActiveContact.is_group ? `
+                <div class="wa-sender-lbl" style="color:${senderRoleColor};">
+                  <span>${escapeHtml(m.sender_name)}</span>
+                  <span class="wa-role-pill" style="color:${senderRoleColor}; border-color:${senderRoleColor};">${escapeHtml(m.sender_role || 'Staff')}</span>
+                </div>
+              ` : ''}
               ${attachmentHtml}
               ${textHtml}
               <div class="wa-bubble-meta">

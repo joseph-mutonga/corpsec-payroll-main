@@ -13,9 +13,11 @@
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
   <link rel="stylesheet" href="/static/css/styles.css?v=20261118_v2">
   <link rel="stylesheet" href="/static/css/call-center.css?v=20261118_v2">
+  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261119_v1">
   <script src="/static/js/app.js?v=20261118_v2"></script>
   <script src="/static/js/silent-updater.js?v=20261118_v2"></script>
   <script src="/static/js/call-center.js?v=20261118_v2"></script>
+  <script src="/static/js/ai-assistant.js?v=20261119_v1"></script>
 </head>
 
 <body>
@@ -164,6 +166,11 @@
     <ul class="nav-links">
       <div class="sidebar-section-title">MENU</div>
       <li class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</li>
+      <li class="nav-item" id="nav-item-ai-insights" onclick="switchTab('dashboard'); document.getElementById('ai-assistant-panel')?.scrollIntoView({behavior:'smooth'}); document.getElementById('ai-assistant-input')?.focus();"
+        style="display:flex; align-items:center; justify-content:space-between;">
+        <span>🤖 AI System Assistant</span>
+        <span class="badge" style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">GEMINI</span>
+      </li>
       <li class="nav-item" onclick="switchTab('reports')">📈 Chart Analytics & Reports</li>
       <li class="nav-item" id="nav-item-team-chat"
         onclick="switchTab('team-chat'); if (typeof initWhatsAppChat === 'function') initWhatsAppChat();"
@@ -353,6 +360,70 @@
             <button class="dash-btn-refresh" onclick="refreshDashboard(true)"
               title="Force re-query live data from database">
               <span id="dash-refresh-icon">🔄</span> Sync Live Data
+            </button>
+          </div>
+        </div>
+
+        <!-- System AI Assistant (Google Gemini Telemetry & Performance Analyst) -->
+        <div class="ai-assistant-panel" id="ai-assistant-panel">
+          <div class="ai-assistant-header">
+            <div class="ai-header-left">
+              <div class="ai-header-icon">🤖</div>
+              <div>
+                <div class="ai-header-title">
+                  <span>System AI Assistant</span>
+                  <span style="font-size:11px; opacity:0.8; font-weight:normal;">— Google Gemini Operational & Telemetry Analyst</span>
+                </div>
+                <div class="ai-header-subtitle">
+                  Ask natural-language questions about server health, database latency, error spikes, guard deployment, and payroll metrics.
+                </div>
+              </div>
+            </div>
+            <div class="ai-header-badges">
+              <span class="ai-badge ai-badge-model" id="ai-model-badge">
+                <span>✨</span> gemini-3.7-flash
+              </span>
+              <span class="ai-badge ai-badge-grounded">
+                <span class="ai-badge-pulse"></span> DB & Telemetry Grounded
+              </span>
+              <button type="button" class="ai-btn-sm" onclick="SystemAIAssistant.clearConversation()" title="Clear conversation history">
+                <span>🗑️</span> Clear Chat
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick-Action Starter Chips -->
+          <div class="ai-starter-chips-container">
+            <span class="ai-chips-label"><span>⚡</span> Quick Questions:</span>
+            <div id="ai-assistant-starter-chips" style="display:inline-flex; gap:8px;"></div>
+          </div>
+
+          <!-- Scrollable Message Feed -->
+          <div class="ai-messages-container" id="ai-assistant-messages">
+            <div class="ai-welcome-box" id="ai-assistant-welcome">
+              <div class="ai-welcome-icon">🛡️🤖</div>
+              <div class="ai-welcome-title">System Performance & Operations Intelligence</div>
+              <div class="ai-welcome-text">
+                I am your embedded AI System Performance Analyst. I analyze live telemetry, database metrics, and server logs in real time to give you accurate, strictly data-grounded insights without guessing. Click any starter question above or type your inquiry below.
+              </div>
+            </div>
+          </div>
+
+          <!-- Shimmer Loading Indicator -->
+          <div class="ai-loader" id="ai-assistant-loader" style="display:none; margin:0 20px 14px 20px;">
+            <div class="ai-spinner"></div>
+            <span>Analyzing real-time host telemetry, database metrics & logs with Gemini...</span>
+          </div>
+
+          <!-- Command Bar / Prompt Input -->
+          <div class="ai-assistant-input-bar">
+            <div class="ai-input-wrap">
+              <textarea id="ai-assistant-input" class="ai-textarea" rows="1"
+                placeholder="Ask anything about system health, error rates, database latency, active workforce, or financial metrics..."></textarea>
+              <div class="ai-input-hint">Press <strong>Enter</strong> to send &bull; <strong>Shift + Enter</strong> for newline &bull; Strictly read-only analysis</div>
+            </div>
+            <button type="button" class="ai-send-btn" onclick="SystemAIAssistant.sendUserPrompt()" id="ai-assistant-send-btn">
+              <span>➤</span> Send
             </button>
           </div>
         </div>
@@ -2261,7 +2332,8 @@
           .wa-bubble-wrap {
             display: flex;
             flex-direction: column;
-            max-width: 70%;
+            max-width: 78%;
+            min-width: 140px;
           }
 
           .wa-bubble-wrap.in {
@@ -2273,46 +2345,104 @@
           }
 
           .wa-bubble {
-            padding: 7px 12px;
-            border-radius: 8px;
-            font-size: 13.5px;
-            line-height: 1.45;
+            padding: 9px 14px;
+            border-radius: 10px;
+            font-size: 14.5px;
+            line-height: 1.55;
             position: relative;
             word-wrap: break-word;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+            overflow-wrap: break-word;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+            letter-spacing: 0.15px;
           }
 
           .wa-bubble-in {
             background-color: #202c33;
-            color: #e9edef;
-            border-top-left-radius: 0;
+            color: #F8FAFC;
+            border-top-left-radius: 2px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
           }
 
           .wa-bubble-out {
             background-color: #005c4b;
-            color: #e9edef;
-            border-top-right-radius: 0;
+            color: #FFFFFF;
+            border-top-right-radius: 2px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+          }
+
+          .wa-bubble-text {
+            font-size: 14.5px;
+            line-height: 1.55;
+            color: inherit;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            letter-spacing: 0.15px;
           }
 
           .wa-sender-lbl {
-            font-size: 11px;
-            font-weight: 700;
-            margin-bottom: 2px;
-            display: block;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 0.3px;
+          }
+
+          .wa-role-pill {
+            font-size: 9.5px;
+            font-weight: 800;
+            padding: 1px 6px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid currentColor;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
           }
 
           .wa-bubble-meta {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 4px;
-            margin-top: 3px;
-            font-size: 10.5px;
-            color: #8696a0;
+            gap: 5px;
+            margin-top: 5px;
+            font-size: 11px;
+            color: #94A3B8;
+            user-select: none;
           }
 
           .wa-bubble-out .wa-bubble-meta {
-            color: rgba(255, 255, 255, 0.7);
+            color: rgba(255, 255, 255, 0.85);
+          }
+
+          .wa-chat-link {
+            color: #53bdeb;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            word-break: break-all;
+            font-weight: 500;
+          }
+
+          .wa-chat-link:hover {
+            color: #8fe0ff;
+          }
+
+          .wa-bubble-out .wa-chat-link {
+            color: #A7F3D0;
+          }
+
+          .wa-bubble-out .wa-chat-link:hover {
+            color: #D1FAE5;
+          }
+
+          .wa-chat-inline-code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            color: #FCD34D;
           }
 
           .wa-blue-ticks {
@@ -2575,6 +2705,188 @@
             font-size: 16px;
             padding: 4px;
           }
+
+          /* WhatsApp Pinned Message Header Banner */
+          .wa-pinned-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #182229;
+            padding: 8px 16px;
+            border-bottom: 1px solid #222e35;
+            border-left: 4px solid #00a884;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            z-index: 10;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+          }
+
+          .wa-pinned-bar:hover {
+            background: #1f2c34;
+          }
+
+          .wa-pinned-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            flex: 1;
+          }
+
+          .wa-pinned-pin-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 168, 132, 0.16);
+            color: #00a884;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            animation: waPinPulse 2.5s infinite;
+          }
+
+          @keyframes waPinPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+          }
+
+          .wa-pinned-info {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1;
+          }
+
+          .wa-pinned-header-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+
+          .wa-pinned-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #00a884;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+
+          .wa-pinned-count-badge {
+            background-color: #00a884;
+            color: #111b21;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 1px 6px;
+            border-radius: 10px;
+            line-height: 1.3;
+          }
+
+          .wa-pinned-hint {
+            font-size: 11px;
+            color: #8696a0;
+          }
+
+          .wa-pinned-snippet {
+            font-size: 12.5px;
+            color: #d1d7db;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+          }
+
+          .wa-pinned-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            margin-left: 12px;
+          }
+
+          .wa-pinned-action-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #8696a0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+          }
+
+          .wa-pinned-action-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e9edef;
+            transform: scale(1.1);
+          }
+
+          .wa-pinned-unpin-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border-color: rgba(239, 68, 68, 0.4);
+          }
+
+          /* In-Bubble Pinned Badging */
+          .wa-bubble.pinned {
+            border-left: 4px solid #f59e0b !important;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.18);
+          }
+
+          .wa-bubble-pin-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #f59e0b;
+            background: rgba(245, 158, 11, 0.14);
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+          }
+
+          .wa-bubble-pin-action {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: inherit;
+            font-size: 12px;
+            padding: 2px 4px;
+            border-radius: 4px;
+            opacity: 0.55;
+            transition: all 0.15s ease;
+          }
+
+          .wa-bubble-pin-action:hover,
+          .wa-bubble-pin-action.active {
+            opacity: 1;
+            transform: scale(1.2);
+            color: #f59e0b;
+          }
+
+          /* Highlight pulse when scrolling to message from pinned bar */
+          .wa-bubble-highlight {
+            animation: waHighlightPulse 2s ease-out;
+          }
+
+          @keyframes waHighlightPulse {
+            0% {
+              box-shadow: 0 0 0 4px #00a884, 0 0 20px rgba(0, 168, 132, 0.6);
+              transform: scale(1.02);
+            }
+            100% {
+              box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+              transform: scale(1);
+            }
+          }
         </style>
 
         <div class="wa-container">
@@ -2637,6 +2949,29 @@
                 <button class="wa-icon-btn" onclick="initWhatsAppChat()" title="Refresh Chat">🔄</button>
                 <button class="wa-icon-btn" title="Search in chat">🔍</button>
                 <button class="wa-icon-btn" title="More options">⋮</button>
+              </div>
+            </div>
+
+            <!-- WhatsApp Pinned Messages Bar (Important Operational Announcements) -->
+            <div id="wa-pinned-bar" class="wa-pinned-bar" style="display:none;" onclick="handlePinnedBarClick()" title="Click to jump to pinned message (or cycle through pinned notices)">
+              <div class="wa-pinned-left">
+                <div class="wa-pinned-pin-icon">📌</div>
+                <div class="wa-pinned-info">
+                  <div class="wa-pinned-header-line">
+                    <span class="wa-pinned-title">Pinned Message</span>
+                    <span class="wa-pinned-count-badge" id="wa-pinned-count" title="Total pinned announcements">1</span>
+                    <span class="wa-pinned-hint">• Tap to jump</span>
+                  </div>
+                  <div class="wa-pinned-snippet" id="wa-pinned-snippet">Important operational directive...</div>
+                </div>
+              </div>
+              <div class="wa-pinned-actions" onclick="event.stopPropagation();">
+                <button type="button" class="wa-pinned-action-btn" onclick="handlePinnedBarClick()" title="Jump to message">
+                  ↗
+                </button>
+                <button type="button" class="wa-pinned-action-btn wa-pinned-unpin-btn" onclick="unpinCurrentPinnedMessage()" title="Unpin this message">
+                  ✕
+                </button>
               </div>
             </div>
 

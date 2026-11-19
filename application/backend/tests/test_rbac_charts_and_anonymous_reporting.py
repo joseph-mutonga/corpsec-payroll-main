@@ -130,7 +130,7 @@ def test_chart_analytics_guard_forbidden(client, setup_rbac_users):
     # Reports analytics endpoint
     res_rep = client.get("/api/v1/reports/analytics", headers=headers)
     assert res_rep.status_code == 403
-    assert "Guard role is not authorized" in res_rep.json().get("detail", "")
+    assert any(msg in res_rep.json().get("detail", "") for msg in ["Administrative privileges required", "Guard role is not authorized"])
 
 
 def test_chart_analytics_unauthenticated(client):
@@ -513,6 +513,63 @@ def test_team_chat_file_upload_and_send_attachment(client, setup_rbac_users):
         headers=guard_headers
     )
     assert guard_download.status_code == 403
+
+
+def test_team_chat_pin_and_unpin_important_messages(client, setup_rbac_users):
+    """
+    Verifies that important operational messages can be pinned and unpinned in the team chat
+    so members remember important directives, and that pinned messages are retrievable.
+    """
+    admin_token = setup_rbac_users[UserRole.ADMIN.value]
+    guard_token = setup_rbac_users[UserRole.GUARD.value]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    guard_headers = {"Authorization": f"Bearer {guard_token}"}
+
+    # 1. Post an important announcement in group operations
+    msg_res = client.post(
+        "/api/v1/team-chat/messages",
+        headers=admin_headers,
+        json={"message": "CRITICAL NOTICE: Mandatory roll call at site Alpha at 06:00 HRS."}
+    )
+    assert msg_res.status_code == 201
+    msg_id = msg_res.json()["id"]
+    assert msg_res.json()["is_pinned"] is False
+
+    # 2. Pin the message
+    pin_res = client.post(f"/api/v1/team-chat/messages/{msg_id}/pin", headers=admin_headers)
+    assert pin_res.status_code == 200
+    pin_data = pin_res.json()
+    assert pin_data["status"] == "success"
+    assert pin_data["is_pinned"] is True
+    assert "Message pinned successfully." in pin_data["message"]
+
+    # 3. Retrieve all pinned messages for the channel
+    pinned_list_res = client.get("/api/v1/team-chat/pinned-messages", headers=admin_headers)
+    assert pinned_list_res.status_code == 200
+    pinned_ids = [m["id"] for m in pinned_list_res.json()]
+    assert msg_id in pinned_ids
+
+    # 4. Normal message feed returns is_pinned=True for this message
+    feed_res = client.get("/api/v1/team-chat/messages", headers=admin_headers)
+    assert feed_res.status_code == 200
+    feed_msg = next((m for m in feed_res.json() if m["id"] == msg_id), None)
+    assert feed_msg is not None
+    assert feed_msg["is_pinned"] is True
+
+    # 5. Guard cannot toggle pin -> 403
+    guard_pin_res = client.post(f"/api/v1/team-chat/messages/{msg_id}/pin", headers=guard_headers)
+    assert guard_pin_res.status_code == 403
+
+    # 6. Unpin the message
+    unpin_res = client.post(f"/api/v1/team-chat/messages/{msg_id}/pin", headers=admin_headers)
+    assert unpin_res.status_code == 200
+    assert unpin_res.json()["is_pinned"] is False
+
+    # 7. Verify message is removed from pinned messages
+    pinned_after = client.get("/api/v1/team-chat/pinned-messages", headers=admin_headers)
+    pinned_after_ids = [m["id"] for m in pinned_after.json()]
+    assert msg_id not in pinned_after_ids
+
 
 
 

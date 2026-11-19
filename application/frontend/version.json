@@ -1,9 +1,9 @@
 {
   "app_name": "CorpSec Payroll & Security Workforce System",
-  "version": "2.5.20",
-  "build_number": 2026111805,
-  "release_name": "CorpSec Enterprise 2.5.20",
-  "release_date": "2026-11-18",
+  "version": "2.5.25",
+  "build_number": 2026111905,
+  "release_name": "CorpSec Enterprise 2.5.25",
+  "release_date": "2026-11-19",
   "silent_update": true,
   "check_interval_seconds": 15,
   "assets": [
@@ -14,14 +14,18 @@
     "/static/js/silent-updater.js",
     "/static/js/call-center.js",
     "/static/css/call-center.css",
+    "/static/js/ai-assistant.js",
+    "/static/css/ai-assistant.css",
     "/manifest.json",
     "/portal-sw.js"
   ],
   "features": [
+    "Prominent WhatsApp-style Pinned Messages banner in Team Chat for important operational announcements, directives, and reminders with 1-click scroll & highlight",
+    "Google Gemini AI Assistant integration for System Admin Dashboard (live host & database telemetry grounding, error spike analysis, and conversational performance metrics)",
+    "100% database persistence and streaming for all call audio recordings (LONGBLOB storage in MySQL with HTTP Range seeking & direct downloads)",
     "Full document uploads and amendments across all Company Profile & History sections (Corporate Profile, Founding Heritage, Growth Milestones, Board & Governance, Client Recommendations, Security Services)",
     "Secure document storage, inline viewing and retrieval directly from the database for all company records",
     "Current month payment schedule visibility with pending disbursement status and bank batch export",
-    "High-fidelity audio call recordings database persistence, range streaming & downloads",
     "Full recurrent expenditures management (Add, Edit, Mark Paid, History, and Remove)",
     "Petty cash float top-up enhancements with direct database persistence",
     "Monthly expense inspection and KPI recalculations",

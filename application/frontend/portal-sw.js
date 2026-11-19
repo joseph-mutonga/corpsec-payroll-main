@@ -1,4 +1,4 @@
-const CACHE_NAME = 'corpsec-auto-update-v26';
+const CACHE_NAME = 'corpsec-auto-update-v31';
 const APP_SHELL = [
   '/',
   '/portal',
@@ -12,6 +12,8 @@ const APP_SHELL = [
   '/static/js/silent-updater.js',
   '/static/js/call-center.js',
   '/static/css/call-center.css',
+  '/static/js/ai-assistant.js',
+  '/static/css/ai-assistant.css',
   '/static/images/corpsec_logo_badge.png',
   '/static/images/corpsec_pwa_192.png',
   '/static/images/corpsec_pwa_512.png',

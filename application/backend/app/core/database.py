@@ -234,6 +234,15 @@ def sync_db_schema():
                     );
                 """)
 
+                # Call logs audio recording persistence in SQLite
+                cursor.execute("PRAGMA table_info(call_logs);")
+                cl_cols_sqlite = [c[1] for c in cursor.fetchall()]
+                if cl_cols_sqlite:
+                    if "recording_data" not in cl_cols_sqlite:
+                        cursor.execute("ALTER TABLE call_logs ADD COLUMN recording_data BLOB;")
+                    if "recording_content_type" not in cl_cols_sqlite:
+                        cursor.execute("ALTER TABLE call_logs ADD COLUMN recording_content_type VARCHAR(50) DEFAULT 'audio/mpeg';")
+
                 conn.commit()
                 conn.close()
             except Exception as e:
@@ -288,9 +297,13 @@ def sync_db_schema():
 
         if "call_logs" in existing_tables:
             existing_cl_cols = [c["name"] for c in insp.get_columns("call_logs")]
+            is_mysql = "mysql" in engine.dialect.name.lower()
+            blob_type = "LONGBLOB" if is_mysql else "BLOB"
             cl_cols = [
                 ("recording_url", "TEXT NULL"),
                 ("voicemail_url", "TEXT NULL"),
+                ("recording_data", f"{blob_type} NULL"),
+                ("recording_content_type", "VARCHAR(50) DEFAULT 'audio/mpeg' NULL")
             ]
             with engine.connect() as db_conn:
                 for col_name, col_def in cl_cols:
@@ -298,14 +311,15 @@ def sync_db_schema():
                         try:
                             db_conn.execute(text(f"ALTER TABLE call_logs ADD COLUMN {col_name} {col_def};"))
                             db_conn.commit()
-                        except Exception:
-                            pass
+                        except Exception as ce:
+                            print(f"Notice adding column {col_name} to call_logs: {ce}")
                     else:
-                        try:
-                            db_conn.execute(text(f"ALTER TABLE call_logs MODIFY COLUMN {col_name} {col_def};"))
-                            db_conn.commit()
-                        except Exception:
-                            pass
+                        if is_mysql and col_name not in ["recording_data"]:
+                            try:
+                                db_conn.execute(text(f"ALTER TABLE call_logs MODIFY COLUMN {col_name} {col_def};"))
+                                db_conn.commit()
+                            except Exception:
+                                pass
 
         # Sync Company History & Profile document and amendment columns
         company_tables = [

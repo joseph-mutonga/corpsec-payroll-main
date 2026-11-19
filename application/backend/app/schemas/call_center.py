@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # Phone Numbers
@@ -35,8 +35,7 @@ class PhoneNumberResponse(PhoneNumberBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Call Queues
@@ -75,8 +74,7 @@ class QueueMemberResponse(BaseModel):
     is_paused: bool
     status: str = "OFFLINE"
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CallQueueResponse(CallQueueBase):
     id: int
@@ -86,8 +84,7 @@ class CallQueueResponse(CallQueueBase):
     members: List[QueueMemberResponse] = []
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Agent Status
@@ -107,8 +104,7 @@ class AgentStatusResponse(BaseModel):
     total_talk_time_seconds: int
     device_channel: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Call Notes
@@ -123,8 +119,7 @@ class CallNoteResponse(BaseModel):
     note: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Call Logs
@@ -150,8 +145,7 @@ class CallLogResponse(BaseModel):
     ended_at: Optional[datetime] = None
     call_notes: List[CallNoteResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Caller Contacts
@@ -179,8 +173,7 @@ class CallerContactResponse(CallerContactBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Actions & Softphone Payloads

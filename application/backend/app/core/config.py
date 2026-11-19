@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     AT_USERNAME: str = "corpsec"
     AT_API_KEY: str = ""
     DEFAULT_CALLER_ID: str = "+254 711 082 143"
+
+    # Google Gemini AI Insights (System Telemetry & Operational Analytics)
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3.7-flash"
+    GEMINI_PROJECT_NAME: Optional[str] = "projects/345414341679"
+    GEMINI_PROJECT_NUMBER: Optional[str] = "345414341679"
     
     model_config = SettingsConfigDict(
         env_file=(_root_env, _backend_env, ".env"),

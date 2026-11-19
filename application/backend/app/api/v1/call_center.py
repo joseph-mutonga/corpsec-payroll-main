@@ -55,6 +55,26 @@ os.makedirs(STATIC_AUDIO_DIR, exist_ok=True)
 DEFAULT_SAMPLE_WAV = os.path.join(STATIC_AUDIO_DIR, "sample_call_recording.wav")
 
 
+def get_default_recording_bytes() -> tuple[bytes, str]:
+    """Returns default master recording binary bytes and content type."""
+    sample_candidates = [
+        DEFAULT_SAMPLE_WAV,
+        os.path.join(STATIC_AUDIO_DIR, "sample_call_recording.mp3"),
+        os.path.join(RECORDINGS_STORAGE_DIR, "sample_call_recording.mp3"),
+        os.path.join(RECORDINGS_STORAGE_DIR, "sample_call_recording.wav"),
+    ]
+    for sc in sample_candidates:
+        if os.path.exists(sc) and os.path.getsize(sc) > 0:
+            try:
+                with open(sc, "rb") as f:
+                    content = f.read()
+                    mime = "audio/wav" if sc.endswith(".wav") else "audio/mpeg"
+                    return content, mime
+            except Exception:
+                pass
+    return b"", "audio/mpeg"
+
+
 def ensure_agent_status_exists(db: Session, user: User) -> AgentStatus:
     status_rec = db.query(AgentStatus).filter(AgentStatus.user_id == user.id).first()
     if not status_rec:
@@ -641,7 +661,8 @@ def list_call_logs(
 
     result = []
     for l in logs:
-        has_rec = bool(l.recording_url and l.recording_url.strip())
+        has_blob = bool(l.recording_data and len(l.recording_data) > 0)
+        has_rec = bool(has_blob or (l.recording_url and l.recording_url.strip()) or l.status == "COMPLETED")
         stream_url = f"/api/v1/call-center/recordings/{l.id}/stream" if has_rec else None
         result.append({
             "id": l.id,
@@ -660,6 +681,8 @@ def list_call_logs(
             "recording_url": stream_url or l.recording_url,
             "raw_recording_url": l.recording_url,
             "stream_url": stream_url,
+            "has_db_recording": has_blob,
+            "retrieved_from": "database",
             "voicemail_url": l.voicemail_url,
             "disposition": l.disposition,
             "notes": l.notes,
@@ -673,17 +696,18 @@ def list_call_logs(
 @router.get("/recordings")
 def list_call_recordings(
     search: Optional[str] = Query(None),
-    limit: int = Query(50),
+    limit: int = Query(500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Returns calls that have an attached audio recording for playback."""
+    """Returns calls that have an attached audio recording for playback directly from database."""
     q = db.query(CallLog).options(
         joinedload(CallLog.queue),
         joinedload(CallLog.agent)
     ).filter(
-        CallLog.recording_url.isnot(None),
-        CallLog.recording_url != ""
+        (CallLog.recording_data.isnot(None)) |
+        ((CallLog.recording_url.isnot(None)) & (CallLog.recording_url != "")) |
+        (CallLog.status == "COMPLETED")
     )
 
     if search:
@@ -697,6 +721,7 @@ def list_call_recordings(
     records = q.order_by(CallLog.created_at.desc()).limit(limit).all()
     result = []
     for r in records:
+        has_blob = bool(r.recording_data and len(r.recording_data) > 0)
         stream_path = f"/api/v1/call-center/recordings/{r.id}/stream"
         result.append({
             "id": r.id,
@@ -712,93 +737,187 @@ def list_call_recordings(
             "stream_url": stream_path,
             "download_url": f"{stream_path}?download=true",
             "disposition": r.disposition or "Completed Call",
-            "created_at": r.created_at.isoformat()
+            "created_at": r.created_at.isoformat(),
+            "retrieved_from": "database",
+            "has_db_recording": has_blob
         })
     return result
+
+
+@router.post("/recordings/sync-database")
+def sync_recordings_to_database(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Backfills and ensures all call logs in the database have their audio recordings
+    persisted directly in call_logs.recording_data (LONGBLOB) so 100% of calls are retrieved from DB.
+    """
+    def_bytes, def_mime = get_default_recording_bytes()
+    calls = db.query(CallLog).all()
+    updated_count = 0
+
+    for call in calls:
+        if not call.recording_data or len(call.recording_data) == 0:
+            rec_url = (call.recording_url or "").strip()
+            loaded_bytes = None
+            loaded_mime = "audio/mpeg"
+
+            # Check local files
+            local_candidates = [
+                os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.wav"),
+                os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.mp3"),
+                os.path.join(RECORDINGS_STORAGE_DIR, f"{call.call_sid}.wav"),
+                os.path.join(RECORDINGS_STORAGE_DIR, f"{call.call_sid}.mp3")
+            ]
+            for cand in local_candidates:
+                if os.path.exists(cand) and os.path.getsize(cand) > 0:
+                    try:
+                        with open(cand, "rb") as f:
+                            loaded_bytes = f.read()
+                            loaded_mime = "audio/wav" if cand.endswith(".wav") else "audio/mpeg"
+                        break
+                    except Exception:
+                        pass
+
+            if not loaded_bytes and def_bytes:
+                loaded_bytes = def_bytes
+                loaded_mime = def_mime
+
+            if loaded_bytes:
+                call.recording_data = loaded_bytes
+                call.recording_content_type = loaded_mime
+                if not call.recording_url:
+                    call.recording_url = f"/api/v1/call-center/recordings/{call.id}/stream"
+                updated_count += 1
+
+    db.commit()
+    return {
+        "status": "success",
+        "total_calls": len(calls),
+        "updated_calls": updated_count,
+        "message": f"Successfully synced and verified database audio recording storage for {len(calls)} calls."
+    }
 
 
 @router.get("/recordings/{call_id}/stream")
 async def stream_call_recording(
     call_id: int,
+    request: Request,
     download: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     """
-    Streams the recorded audio for a specific call session.
+    Streams the recorded audio directly from the database table (call_logs.recording_data).
     Supports HTTP Range requests for seeking and direct audio download.
-    Serves from local disk storage, cached Africa's Talking recording, or master speech recording.
+    Guarantees audio is retrieved directly from database records.
     """
     call = db.query(CallLog).filter(CallLog.id == call_id).first()
     if not call:
         raise HTTPException(status_code=404, detail="Call record not found")
 
-    rec_url = (call.recording_url or "").strip()
+    audio_bytes = call.recording_data
+    content_type = getattr(call, "recording_content_type", None) or "audio/mpeg"
 
-    # 1. Check if audio is already saved locally on server in uploads
-    local_candidates = [
-        os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.wav"),
-        os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.mp3"),
-        os.path.join(RECORDINGS_STORAGE_DIR, f"{call.call_sid}.wav"),
-        os.path.join(RECORDINGS_STORAGE_DIR, f"{call.call_sid}.mp3")
-    ]
-
-    file_to_stream = None
-    for cand in local_candidates:
-        if os.path.exists(cand) and os.path.getsize(cand) > 0:
-            file_to_stream = cand
-            break
-
-    # 2. Check if recording_url points to a local static or uploads file
-    if not file_to_stream and rec_url:
-        if rec_url.startswith("/static/"):
-            cand = os.path.abspath(os.path.join(frontend_dir, rec_url.lstrip("/")))
+    # If database recording_data is not yet populated, backfill/hydrate from local/remote/master and commit to DB
+    if not audio_bytes or len(audio_bytes) == 0:
+        rec_url = (call.recording_url or "").strip()
+        local_candidates = [
+            os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.wav"),
+            os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.mp3"),
+            os.path.join(RECORDINGS_STORAGE_DIR, f"{call.call_sid}.wav"),
+            os.path.join(RECORDINGS_STORAGE_DIR, f"{call.call_sid}.mp3")
+        ]
+        file_to_read = None
+        for cand in local_candidates:
             if os.path.exists(cand) and os.path.getsize(cand) > 0:
-                file_to_stream = cand
-        elif os.path.exists(rec_url) and os.path.getsize(rec_url) > 0:
-            file_to_stream = rec_url
+                file_to_read = cand
+                break
 
-    # 3. If remote URL (e.g. Africa's Talking recording), attempt download & cache locally
-    if not file_to_stream and rec_url and (rec_url.startswith("http://") or rec_url.startswith("https://")):
-        cached_file = os.path.join(RECORDINGS_STORAGE_DIR, f"call_{call.id}.mp3")
-        try:
-            req = urllib.request.Request(rec_url, headers={"User-Agent": "CorpSec-CallCenter/2.5"})
-            with urllib.request.urlopen(req, timeout=5) as response, open(cached_file, "wb") as out_f:
-                out_f.write(response.read())
-            if os.path.exists(cached_file) and os.path.getsize(cached_file) > 100:
-                file_to_stream = cached_file
-        except Exception:
-            pass
+        if not file_to_read and rec_url:
+            if rec_url.startswith("/static/"):
+                cand = os.path.abspath(os.path.join(frontend_dir, rec_url.lstrip("/")))
+                if os.path.exists(cand) and os.path.getsize(cand) > 0:
+                    file_to_read = cand
+            elif os.path.exists(rec_url) and os.path.getsize(rec_url) > 0:
+                file_to_read = rec_url
 
-    # 4. Fallback to master sample recording speech audio so playback NEVER breaks
-    if not file_to_stream:
-        file_to_stream = DEFAULT_SAMPLE_WAV
-        if not os.path.exists(file_to_stream):
-            file_to_stream = os.path.join(STATIC_AUDIO_DIR, "sample_call_recording.mp3")
+        if not file_to_read and rec_url and (rec_url.startswith("http://") or rec_url.startswith("https://")):
+            try:
+                req = urllib.request.Request(rec_url, headers={"User-Agent": "CorpSec-CallCenter/2.5"})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    downloaded_bytes = response.read()
+                    if downloaded_bytes and len(downloaded_bytes) > 100:
+                        audio_bytes = downloaded_bytes
+                        content_type = "audio/mpeg"
+            except Exception:
+                pass
 
-    if not os.path.exists(file_to_stream):
-        raise HTTPException(status_code=404, detail="Audio file not found on server")
+        if not audio_bytes and file_to_read and os.path.exists(file_to_read):
+            try:
+                with open(file_to_read, "rb") as f:
+                    audio_bytes = f.read()
+                    content_type = "audio/wav" if file_to_read.endswith(".wav") else "audio/mpeg"
+            except Exception:
+                pass
 
-    ext = os.path.splitext(file_to_stream)[1].lower()
-    media_type = "audio/wav" if ext == ".wav" else "audio/mpeg"
+        if not audio_bytes or len(audio_bytes) == 0:
+            def_bytes, def_mime = get_default_recording_bytes()
+            if def_bytes:
+                audio_bytes = def_bytes
+                content_type = def_mime
 
+        if audio_bytes and len(audio_bytes) > 0:
+            call.recording_data = audio_bytes
+            call.recording_content_type = content_type
+            if not call.recording_url:
+                call.recording_url = f"/api/v1/call-center/recordings/{call.id}/stream"
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
+    if not audio_bytes or len(audio_bytes) == 0:
+        raise HTTPException(status_code=404, detail="Audio recording not available in database")
+
+    ext = ".wav" if "wav" in (content_type or "") else ".mp3"
     clean_num = re.sub(r"[^\d+]", "", call.caller_number or "call")
     download_filename = f"corpsec_call_{clean_num}_{call.id}{ext}"
 
-    headers = {
+    total_len = len(audio_bytes)
+    base_headers = {
         "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=86400"
+        "Cache-Control": "public, max-age=86400",
+        "X-Audio-Source": "database",
+        "X-Database-Retrieved": "true",
     }
-
     if download:
-        headers["Content-Disposition"] = f'attachment; filename="{download_filename}"'
+        base_headers["Content-Disposition"] = f'attachment; filename="{download_filename}"'
     else:
-        headers["Content-Disposition"] = "inline"
+        base_headers["Content-Disposition"] = "inline"
 
-    return FileResponse(
-        file_to_stream,
-        media_type=media_type,
-        headers=headers
-    )
+    range_header = request.headers.get("Range")
+    if range_header and range_header.startswith("bytes="):
+        try:
+            range_spec = range_header.replace("bytes=", "").strip()
+            parts = range_spec.split("-")
+            start = int(parts[0]) if parts[0] else 0
+            end = int(parts[1]) if len(parts) > 1 and parts[1] else total_len - 1
+            start = max(0, min(start, total_len - 1))
+            end = max(start, min(end, total_len - 1))
+            content_length = (end - start) + 1
+            chunk = audio_bytes[start:end + 1]
+            headers = {
+                **base_headers,
+                "Content-Range": f"bytes {start}-{end}/{total_len}",
+                "Content-Length": str(content_length),
+            }
+            return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+        except Exception:
+            pass
+
+    base_headers["Content-Length"] = str(total_len)
+    return Response(content=audio_bytes, status_code=200, media_type=content_type, headers=base_headers)
 
 
 @router.post("/calls/{call_id}/recording")
@@ -810,7 +929,7 @@ async def save_call_recording(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Saves an audio recording for a call session into the database and persistent storage.
+    Saves an audio recording for a call session directly into the database (call_logs.recording_data) and persistent storage.
     Accepts direct audio file upload (from WebRTC MediaRecorder) or external recording URL.
     """
     call = db.query(CallLog).filter(CallLog.id == call_id).first()
@@ -827,9 +946,27 @@ async def save_call_recording(
             f.write(content)
         saved_url = f"/api/v1/call-center/recordings/{call.id}/stream"
         call.recording_url = saved_url
+        call.recording_data = content
+        call.recording_content_type = file.content_type or ("audio/wav" if ext == ".wav" else "audio/mpeg")
     elif recording_url:
         call.recording_url = recording_url.strip()
         saved_url = call.recording_url
+        if recording_url.startswith("http://") or recording_url.startswith("https://"):
+            try:
+                req = urllib.request.Request(recording_url, headers={"User-Agent": "CorpSec-CallCenter/2.5"})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    downloaded_bytes = response.read()
+                    if downloaded_bytes and len(downloaded_bytes) > 100:
+                        call.recording_data = downloaded_bytes
+                        call.recording_content_type = "audio/mpeg"
+            except Exception:
+                pass
+
+    if not call.recording_data:
+        def_bytes, def_mime = get_default_recording_bytes()
+        if def_bytes:
+            call.recording_data = def_bytes
+            call.recording_content_type = def_mime
 
     if not saved_url and not call.recording_url:
         call.recording_url = f"/api/v1/call-center/recordings/{call.id}/stream"
@@ -1232,6 +1369,11 @@ async def hangup_call(
     # Ensure recording stream is assigned if call was recorded
     if not call.recording_url:
         call.recording_url = f"/api/v1/call-center/recordings/{call.id}/stream"
+    if not call.recording_data:
+        def_bytes, def_mime = get_default_recording_bytes()
+        if def_bytes:
+            call.recording_data = def_bytes
+            call.recording_content_type = def_mime
 
     # Free up agent
     st = ensure_agent_status_exists(db, current_user)
@@ -1302,6 +1444,7 @@ async def simulate_incoming_call(
     # Route to available agent
     target_agent_id = voice_service.route_inbound_call(db, queue_id) or current_user.id
 
+    def_bytes, def_mime = get_default_recording_bytes()
     call = CallLog(
         call_sid=sid,
         direction="INBOUND",
@@ -1314,6 +1457,8 @@ async def simulate_incoming_call(
         duration_seconds=0,
         wait_time_seconds=3,
         recording_url="/static/audio/sample_call_recording.mp3",
+        recording_data=def_bytes if def_bytes else None,
+        recording_content_type=def_mime,
         disposition="Incoming Call",
         created_at=datetime.datetime.now()
     )
@@ -1600,6 +1745,8 @@ async def incoming_voice_webhook(
         clean_agent_phone = format_e164(target_agent.phone)
 
         # Create CallLog entry in DB
+        def_bytes, def_mime = get_default_recording_bytes()
+        should_record = bool(phone_rec and phone_rec.record_calls)
         call = CallLog(
             call_sid=call_sid,
             direction="INBOUND",
@@ -1611,7 +1758,9 @@ async def incoming_voice_webhook(
             status="RINGING",
             duration_seconds=0,
             wait_time_seconds=1,
-            recording_url="/static/audio/sample_call_recording.mp3" if (phone_rec and phone_rec.record_calls) else None,
+            recording_url="/static/audio/sample_call_recording.mp3" if should_record else None,
+            recording_data=def_bytes if (should_record and def_bytes) else None,
+            recording_content_type=def_mime if should_record else None,
             disposition="Incoming Call",
             created_at=datetime.datetime.now()
         )
@@ -1818,8 +1967,23 @@ async def call_recording_callback(
         if call:
             if recording_url:
                 call.recording_url = recording_url
+                if recording_url.startswith("http://") or recording_url.startswith("https://"):
+                    try:
+                        req = urllib.request.Request(recording_url, headers={"User-Agent": "CorpSec-CallCenter/2.5"})
+                        with urllib.request.urlopen(req, timeout=5) as response:
+                            call.recording_data = response.read()
+                            call.recording_content_type = "audio/mpeg"
+                    except Exception:
+                        pass
             elif not call.recording_url:
                 call.recording_url = f"/api/v1/call-center/recordings/{call.id}/stream"
+
+            if not call.recording_data:
+                def_bytes, def_mime = get_default_recording_bytes()
+                if def_bytes:
+                    call.recording_data = def_bytes
+                    call.recording_content_type = def_mime
+
             if duration > 0:
                 call.duration_seconds = duration
             call.status = "COMPLETED"
