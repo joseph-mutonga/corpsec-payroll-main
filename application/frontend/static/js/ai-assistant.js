@@ -84,6 +84,46 @@
       }
     },
 
+    createStreamingMessage() {
+      const messagesContainer = document.getElementById('ai-assistant-messages');
+      if (!messagesContainer) return null;
+
+      const welcomePlaceholder = document.getElementById('ai-assistant-welcome');
+      if (welcomePlaceholder) welcomePlaceholder.style.display = 'none';
+
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'ai-message ai-message-model';
+      const id = `stream-msg-${Date.now()}`;
+      msgDiv.id = id;
+
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      msgDiv.innerHTML = `
+        <div class="ai-avatar ai-avatar-model" title="Gemini System Analyst">🤖</div>
+        <div class="ai-message-bubble">
+          <div class="ai-message-header">
+            <span class="ai-message-author">Gemini Performance Analyst</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="ai-stream-meta-pill" style="font-size:10px; background:#EFF6FF; color:#2563EB; padding:2px 6px; border-radius:4px; font-weight:700; border:1px solid #BFDBFE;">Streaming...</span>
+              <span class="ai-message-time">${timeStr}</span>
+            </div>
+          </div>
+          <div class="ai-message-content markdown-body" id="${id}-body">
+            <span class="ai-typing-indicator" style="display:inline-flex; align-items:center; gap:6px; color:#64748B; font-size:12.5px;">
+              <span class="ai-spinner" style="width:14px; height:14px; border-width:2px; display:inline-block;"></span>
+              <span>Analyzing live database telemetry...</span>
+            </span>
+          </div>
+        </div>
+      `;
+      messagesContainer.appendChild(msgDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      return {
+        container: msgDiv,
+        bodyEl: document.getElementById(`${id}-body`),
+        metaEl: msgDiv.querySelector('.ai-stream-meta-pill')
+      };
+    },
+
     async sendUserPrompt() {
       const input = document.getElementById('ai-assistant-input');
       if (!input || this.isLoading) return;
@@ -105,14 +145,15 @@
         return;
       }
 
-      try {
-        const payload = {
-          prompt: promptText,
-          history: this.history,
-          include_telemetry: true
-        };
+      const payload = {
+        prompt: promptText,
+        history: this.history,
+        include_telemetry: true
+      };
 
-        const response = await fetch('/api/v1/admin/ai-insights', {
+      try {
+        // High-Speed Server-Sent Events (SSE) Streaming
+        const streamRes = await fetch('/api/v1/admin/ai-insights/stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -121,41 +162,123 @@
           body: JSON.stringify(payload)
         });
 
-        if (response.status === 401 || response.status === 403) {
+        if (streamRes.status === 401 || streamRes.status === 403) {
           throw new Error('Access denied. Strictly restricted to System Administrators.');
         }
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.detail || `Server returned error ${response.status}`);
+        if (!streamRes.ok || !streamRes.body) {
+          throw new Error(`Streaming endpoint returned HTTP ${streamRes.status}`);
         }
 
-        const data = await response.json();
-        const modelAnswer = data.answer || 'No analysis generated.';
+        this.renderLoadingIndicator(false);
+        const streamUI = this.createStreamingMessage();
+        const reader = streamRes.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let accumulatedText = '';
+        let streamDonePayload = null;
+        let buffer = '';
 
-        // Append model response
-        this.appendMessage('model', modelAnswer, {
-          modelUsed: data.model_used,
-          timestamp: data.timestamp,
-          grounding: data.grounding_metrics_summary,
-          hasApiKey: data.has_api_key
-        });
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        if (data.model_used) {
-          const badge = document.getElementById('ai-model-badge');
-          if (badge) badge.innerHTML = `<span>✨</span> ${data.model_used}`;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop(); // Retain partial trailing chunk
+
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            try {
+              const data = JSON.parse(trimmed.replace(/^data:\s*/, ''));
+              if (data.status === 'generating' && data.token) {
+                accumulatedText += data.token;
+                if (streamUI && streamUI.bodyEl) {
+                  streamUI.bodyEl.innerHTML = this.renderMarkdown(accumulatedText) + '<span class="ai-stream-pulse" style="display:inline-block; color:#2563EB; font-weight:800; margin-left:2px;">▌</span>';
+                  const messagesContainer = document.getElementById('ai-assistant-messages');
+                  if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+              } else if (data.status === 'done') {
+                streamDonePayload = data;
+              }
+            } catch (jsonErr) {
+              // Ignore partial JSON chunks
+            }
+          }
+        }
+
+        const finalAnswer = (streamDonePayload && streamDonePayload.full_answer) ? streamDonePayload.full_answer : accumulatedText;
+        if (streamUI && streamUI.bodyEl) {
+          streamUI.bodyEl.innerHTML = this.renderMarkdown(finalAnswer);
+          if (streamDonePayload && streamUI.metaEl) {
+            const dbMs = streamDonePayload.db_query_time_ms ? `${streamDonePayload.db_query_time_ms}ms` : '';
+            const aiSec = streamDonePayload.gemini_latency_ms ? `${(streamDonePayload.gemini_latency_ms / 1000).toFixed(2)}s` : '';
+            const cat = streamDonePayload.category || 'INSIGHTS';
+            const model = streamDonePayload.model_used || 'gemini-3.5-flash-lite';
+            streamUI.metaEl.innerHTML = `⚡ ${cat} &bull; DB: ${dbMs} &bull; AI: ${aiSec} &bull; ${model}`;
+            streamUI.metaEl.style.background = '#F0FDF4';
+            streamUI.metaEl.style.color = '#15803D';
+            streamUI.metaEl.style.borderColor = '#BBF7D0';
+
+            const badge = document.getElementById('ai-model-badge');
+            if (badge) badge.innerHTML = `<span>✨</span> ${model}`;
+          }
         }
 
         // Update history
         this.history.push({ role: 'user', content: promptText });
-        this.history.push({ role: 'model', content: modelAnswer });
-        if (this.history.length > 10) {
-          this.history = this.history.slice(-10);
+        this.history.push({ role: 'model', content: finalAnswer });
+        if (this.history.length > 8) {
+          this.history = this.history.slice(-8);
         }
 
-      } catch (err) {
-        console.error('[SystemAIAssistant] Query error:', err);
-        this.appendMessage('model', `> [!WARNING]\n> **AI Insights Request Failed:** ${err.message}`);
+      } catch (streamErr) {
+        console.warn('[SystemAIAssistant] Streaming attempt encountered notice, trying non-streaming fallback:', streamErr);
+        // Robust fallback to non-streaming endpoint
+        try {
+          const response = await fetch('/api/v1/admin/ai-insights', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Access denied. Strictly restricted to System Administrators.');
+          }
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || `Server returned error ${response.status}`);
+          }
+
+          const data = await response.json();
+          const modelAnswer = data.answer || 'No analysis generated.';
+
+          this.appendMessage('model', modelAnswer, {
+            modelUsed: data.model_used,
+            timestamp: data.timestamp,
+            grounding: data.grounding_metrics_summary,
+            hasApiKey: data.has_api_key
+          });
+
+          if (data.model_used) {
+            const badge = document.getElementById('ai-model-badge');
+            if (badge) badge.innerHTML = `<span>✨</span> ${data.model_used}`;
+          }
+
+          this.history.push({ role: 'user', content: promptText });
+          this.history.push({ role: 'model', content: modelAnswer });
+          if (this.history.length > 8) {
+            this.history = this.history.slice(-8);
+          }
+
+        } catch (fallbackErr) {
+          console.error('[SystemAIAssistant] Fallback error:', fallbackErr);
+          this.appendMessage('model', `> [!WARNING]\n> **AI Insights Request Notice:** ${fallbackErr.message}`);
+        }
       } finally {
         this.isLoading = false;
         this.renderLoadingIndicator(false);

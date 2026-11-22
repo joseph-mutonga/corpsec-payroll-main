@@ -1,7 +1,10 @@
 import json
 import logging
 import datetime
-from typing import Dict, Any, List, Optional
+import time
+import asyncio
+import inspect
+from typing import Dict, Any, List, Optional, AsyncGenerator
 
 from application.backend.app.core.config import settings
 from application.backend.app.schemas.ai_insights import ChatMessage
@@ -10,18 +13,17 @@ logger = logging.getLogger(__name__)
 
 GEMINI_SYSTEM_INSTRUCTION = (
     "You are the CorpSec ERP System AI Assistant embedded in the Admin Dashboard. "
-    "You have complete, direct, real-time access to the live CorpSec MySQL database, including:\n"
-    "- Complete Guards Register (names, employee numbers, phone numbers, assigned sites, shifts, supervisors, salaries, and statuses).\n"
-    "- Complete Field Supervisors Register (names, emails, phone numbers, assigned client sites, and deployed guards).\n"
-    "- Complete Client Sites Register (site names, locations, client names, assigned supervisors, stationed guards, daily rates).\n"
-    "- Shift Rosters, Client Contracts, Attendance Logs, Security Incidents, and Payroll Records.\n"
-    "Your job is to answer the administrator's questions accurately, thoroughly, and professionally. "
-    "Base your answers strictly on the provided real-time database records and telemetry. "
-    "Always quote exact names, employee numbers, phone numbers, site names, and figures whenever relevant. "
-    "If the administrator asks for lists (e.g., 'list all guards', 'who are the supervisors', 'what guards are at Westlands Mall?'), "
-    "format your response using neat Markdown tables or bulleted lists with all details retrieved from the database. "
-    "Never claim that you lack access to individual database records or that you can only see high-level metrics, because the full database records are provided right here in your grounding context. "
-    "If a specific individual or record is not in the database records, explicitly mention that it was not found in the database."
+    "You have real-time, data-grounded access to live CorpSec MySQL database telemetry and business registers:\n"
+    "- Complete Active Guards Register (employee numbers, names, phone numbers, assigned sites, shifts, supervisors, salaries).\n"
+    "- Complete Field Supervisors Register (names, emails, phone numbers, assigned sites, deployed guards).\n"
+    "- Client Sites & Contracts (site names, locations, client names, daily rates, monthly charges/MRR).\n"
+    "- Shift Rosters, Attendance Records, Incident Logs, and Statutory Payroll (NSSF, SHIF, Housing Levy, PAYE).\n"
+    "Guidelines:\n"
+    "1. Base answers STRICTLY on the real-time database grounding data provided. Never hallucinate names, figures, or records.\n"
+    "2. If requested records or details are not in the grounding data, state clearly and transparently that they were not found.\n"
+    "3. Format lists and rosters using neat, clean Markdown tables or organized bulleted sections.\n"
+    "4. Clearly distinguish actual database facts from administrative recommendations.\n"
+    "5. Include relevant reporting dates and figures from the database."
 )
 
 
@@ -183,19 +185,62 @@ class GeminiAIService:
         return "\n".join(response_lines)
 
     @classmethod
+    def _build_grounding_context(cls, prompt: str, telemetry: Dict[str, Any], category: Optional[str] = None) -> str:
+        """
+        Builds concise, category-tailored grounding context to minimize token overhead.
+        """
+        cat = category or telemetry.get("query_classification") or "COMPLEX"
+        
+        # Simple health/ping context
+        if cat == "SIMPLE":
+            host = telemetry.get("host_performance", {})
+            db_stat = telemetry.get("database_telemetry", {})
+            ops = telemetry.get("workforce_and_operations", {})
+            compact_ctx = {
+                "server_cpu_percent": host.get("cpu_percent"),
+                "server_memory_used_mb": host.get("memory_used_mb"),
+                "server_memory_percent": host.get("memory_percent"),
+                "mysql_latency_ms": db_stat.get("latency_ms"),
+                "mysql_active_threads": db_stat.get("status_vars", {}).get("Threads_connected"),
+                "active_guards_on_duty": ops.get("active_guards_on_duty_roster"),
+                "total_guards_registered": ops.get("total_guards_registered"),
+                "reporting_timestamp": telemetry.get("data_freshness", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            }
+            return (
+                "=== REAL-TIME INFRASTRUCTURE STATUS (GROUNDING DATA) ===\n"
+                f"{json.dumps(compact_ctx, indent=2)}\n"
+                "========================================================\n"
+                f"ADMINISTRATOR QUESTION: {prompt}\n"
+            )
+
+        # Full or category-filtered context
+        telemetry_json = json.dumps(telemetry, indent=2)
+        return (
+            "======================================================================\n"
+            f"REAL-TIME SYSTEM DATABASE & OPERATIONAL TELEMETRY [{cat}]\n"
+            "======================================================================\n"
+            f"{telemetry_json}\n"
+            "======================================================================\n"
+            f"ADMINISTRATOR QUESTION:\n{prompt}\n"
+        )
+
+    @classmethod
     async def analyze_system_insights(
         cls,
         prompt: str,
         telemetry: Dict[str, Any],
-        history: Optional[List[ChatMessage]] = None
+        history: Optional[List[ChatMessage]] = None,
+        category: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Sends the telemetry context and administrator prompt to Google Gemini model.
-        Returns the data-grounded response and metadata.
+        Returns the data-grounded response and metadata using non-blocking async calls.
         """
+        t0 = time.perf_counter()
         client = cls.get_client()
         model_name = getattr(settings, "GEMINI_MODEL", None) or "gemini-3.5-flash-lite"
         timestamp = datetime.datetime.now().isoformat()
+        cat = category or telemetry.get("query_classification") or "COMPLEX"
 
         # If API key is not configured, return grounded rule-based telemetry analysis
         if not client:
@@ -206,6 +251,10 @@ class GeminiAIService:
                 "model_used": "system-grounded-telemetry-engine",
                 "timestamp": timestamp,
                 "has_api_key": False,
+                "category": cat,
+                "db_query_time_ms": telemetry.get("db_query_time_ms", 0.0),
+                "gemini_latency_ms": 0.0,
+                "total_duration_ms": round((time.perf_counter() - t0) * 1000, 2),
                 "grounding_metrics_summary": {
                     "cpu_percent": telemetry.get("host_performance", {}).get("cpu_percent"),
                     "memory_percent": telemetry.get("host_performance", {}).get("memory_percent"),
@@ -216,29 +265,20 @@ class GeminiAIService:
             }
 
         # Build Grounded Context block
-        telemetry_json = json.dumps(telemetry, indent=2)
-        grounding_context = (
-            "======================================================================\n"
-            "REAL-TIME SYSTEM PERFORMANCE, TELEMETRY & DATABASE LOGS (GROUNDING DATA)\n"
-            "======================================================================\n"
-            f"{telemetry_json}\n"
-            "======================================================================\n"
-            "ADMINISTRATOR QUESTION:\n"
-            f"{prompt}\n"
-        )
+        grounding_context = cls._build_grounding_context(prompt, telemetry, cat)
 
         try:
             from google.genai import types
 
-            # Format conversation history if provided
+            # Format conversation history (limit to last 4 messages to save tokens and latency)
             contents = []
-            if history:
-                for msg in history:
-                    r = "user" if msg.role == "user" else "model"
-                    contents.append(types.Content(
-                        role=r,
-                        parts=[types.Part.from_text(text=msg.content)]
-                    ))
+            trimmed_history = (history or [])[-4:]
+            for msg in trimmed_history:
+                r = "user" if msg.role == "user" else "model"
+                contents.append(types.Content(
+                    role=r,
+                    parts=[types.Part.from_text(text=msg.content)]
+                ))
 
             # Add current grounded user query
             contents.append(types.Content(
@@ -246,21 +286,15 @@ class GeminiAIService:
                 parts=[types.Part.from_text(text=grounding_context)]
             ))
 
-            config = types.GenerateContentConfig(
-                system_instruction=GEMINI_SYSTEM_INSTRUCTION,
-                temperature=0.2,  # Low temperature for strict factual grounding
-                max_output_tokens=2048,
-            )
-
-            # High availability: prioritize high-throughput, low-latency models and cascade
+            # Candidate models cascade (prioritizing low latency)
             candidate_models = []
             if model_name:
                 candidate_models.append(model_name)
             for fallback_m in [
-                "gemini-3.8-flash",
-                "gemini-3.1-flash-lite",
+                "gemini-3.5-flash-lite",
                 "gemini-3.5-flash",
-                "gemini-2.5-flash-lite",
+                "gemini-3.1-flash-lite",
+                "gemini-3.8-flash",
             ]:
                 if fallback_m not in candidate_models:
                     candidate_models.append(fallback_m)
@@ -271,11 +305,35 @@ class GeminiAIService:
 
             for m in candidate_models:
                 try:
-                    response = client.models.generate_content(
-                        model=m,
-                        contents=contents,
-                        config=config
-                    )
+                    cfg_kwargs: Dict[str, Any] = {
+                        "system_instruction": GEMINI_SYSTEM_INSTRUCTION,
+                        "temperature": 0.2,
+                        "max_output_tokens": 2048,
+                    }
+                    # Lower thinking for fast domain questions where model supports it
+                    if cat in ["SIMPLE", "WORKFORCE"] and m in ["gemini-3.5-flash", "gemini-3.7-flash"]:
+                        cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+
+                    config = types.GenerateContentConfig(**cfg_kwargs)
+
+                    t_gemini_call = time.perf_counter()
+                    # Non-blocking async API call with awaitable check
+                    if hasattr(client, "aio") and hasattr(client.aio, "models"):
+                        gen_res = client.aio.models.generate_content(
+                            model=m,
+                            contents=contents,
+                            config=config
+                        )
+                        if inspect.isawaitable(gen_res):
+                            response = await gen_res
+                        else:
+                            response = gen_res
+                    else:
+                        response = client.models.generate_content(
+                            model=m,
+                            contents=contents,
+                            config=config
+                        )
                     successful_model = m
                     break
                 except Exception as model_err:
@@ -289,12 +347,19 @@ class GeminiAIService:
             if not generated_text:
                 generated_text = "I analyzed the system telemetry, but no content was returned by the model."
 
+            gemini_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+            db_time = telemetry.get("db_query_time_ms", 0.0)
+
             return {
                 "status": "success",
                 "answer": generated_text,
                 "model_used": successful_model,
                 "timestamp": timestamp,
                 "has_api_key": True,
+                "category": cat,
+                "db_query_time_ms": db_time,
+                "gemini_latency_ms": gemini_latency_ms,
+                "total_duration_ms": round(db_time + gemini_latency_ms, 2),
                 "grounding_metrics_summary": {
                     "cpu_percent": telemetry.get("host_performance", {}).get("cpu_percent"),
                     "memory_percent": telemetry.get("host_performance", {}).get("memory_percent"),
@@ -314,7 +379,7 @@ class GeminiAIService:
             else:
                 notice_msg = f"Gemini API returned a temporary service notification: {error_str}"
 
-            # If the API call fails across all candidates, gracefully fallback to grounded telemetry
+            # Fallback to pure database-grounded telemetry report
             fallback_answer = (
                 f"> [!WARNING]\n"
                 f"> **Gemini API Temporary Notice:** {notice_msg} "
@@ -327,9 +392,173 @@ class GeminiAIService:
                 "model_used": model_name,
                 "timestamp": timestamp,
                 "has_api_key": True,
+                "category": cat,
+                "db_query_time_ms": telemetry.get("db_query_time_ms", 0.0),
+                "gemini_latency_ms": round((time.perf_counter() - t0) * 1000, 2),
+                "total_duration_ms": round((time.perf_counter() - t0) * 1000, 2),
                 "grounding_metrics_summary": {
                     "cpu_percent": telemetry.get("host_performance", {}).get("cpu_percent"),
                     "memory_percent": telemetry.get("host_performance", {}).get("memory_percent"),
                     "db_latency_ms": telemetry.get("database_telemetry", {}).get("latency_ms"),
                 }
             }
+
+    @classmethod
+    async def stream_system_insights(
+        cls,
+        prompt: str,
+        telemetry: Dict[str, Any],
+        history: Optional[List[ChatMessage]] = None,
+        category: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Streams generated Gemini AI tokens in Server-Sent Events (SSE) format.
+        Yields chunk by chunk: data: {"token": "...", "status": "generating"}\n\n
+        And yields completion: data: {"status": "done", "full_answer": "...", ...}\n\n
+        On failure or missing API key, smoothly streams grounded telemetry fallback analysis.
+        """
+        t0 = time.perf_counter()
+        client = cls.get_client()
+        model_name = getattr(settings, "GEMINI_MODEL", None) or "gemini-3.5-flash-lite"
+        cat = category or telemetry.get("query_classification") or "COMPLEX"
+        db_time = telemetry.get("db_query_time_ms", 0.0)
+
+        # 1. Missing Key Fallback Streaming
+        if not client:
+            answer = cls.generate_grounded_fallback_analysis(prompt, telemetry)
+            words = answer.split(" ")
+            for i in range(0, len(words), 4):
+                chunk = " ".join(words[i:i+4]) + " "
+                yield f"data: {json.dumps({'token': chunk, 'status': 'generating'})}\n\n"
+                await asyncio.sleep(0.015)
+            done_payload = {
+                "status": "done",
+                "full_answer": answer,
+                "model_used": "system-grounded-telemetry-engine",
+                "category": cat,
+                "db_query_time_ms": db_time,
+                "gemini_latency_ms": 0.0,
+                "total_duration_ms": round((time.perf_counter() - t0) * 1000, 2),
+                "has_api_key": False
+            }
+            yield f"data: {json.dumps(done_payload)}\n\n"
+            return
+
+        # 2. Prepare Context & Contents
+        grounding_context = cls._build_grounding_context(prompt, telemetry, cat)
+
+        try:
+            from google.genai import types
+
+            contents = []
+            trimmed_history = (history or [])[-4:]
+            for msg in trimmed_history:
+                r = "user" if msg.role == "user" else "model"
+                contents.append(types.Content(
+                    role=r,
+                    parts=[types.Part.from_text(text=msg.content)]
+                ))
+
+            contents.append(types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=grounding_context)]
+            ))
+
+            candidate_models = []
+            if model_name:
+                candidate_models.append(model_name)
+            for fallback_m in [
+                "gemini-3.5-flash-lite",
+                "gemini-3.5-flash",
+                "gemini-3.1-flash-lite",
+                "gemini-3.8-flash",
+            ]:
+                if fallback_m not in candidate_models:
+                    candidate_models.append(fallback_m)
+
+            response_stream = None
+            successful_model = candidate_models[0]
+            last_error = None
+
+            for m in candidate_models:
+                try:
+                    cfg_kwargs: Dict[str, Any] = {
+                        "system_instruction": GEMINI_SYSTEM_INSTRUCTION,
+                        "temperature": 0.2,
+                        "max_output_tokens": 2048,
+                    }
+                    if cat in ["SIMPLE", "WORKFORCE"] and m in ["gemini-3.5-flash", "gemini-3.7-flash"]:
+                        cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+
+                    config = types.GenerateContentConfig(**cfg_kwargs)
+
+                    if hasattr(client, "aio") and hasattr(client.aio, "models"):
+                        stream_call = client.aio.models.generate_content_stream(
+                            model=m,
+                            contents=contents,
+                            config=config
+                        )
+                        if inspect.isawaitable(stream_call):
+                            response_stream = await stream_call
+                        else:
+                            response_stream = stream_call
+                        successful_model = m
+                        break
+                except Exception as stream_err:
+                    last_error = stream_err
+                    logger.warning(f"Streaming candidate model {m} failed: {stream_err}. Trying next...")
+
+            if not response_stream:
+                raise last_error or RuntimeError("All Gemini streaming candidate models failed.")
+
+            full_chunks: List[str] = []
+            async for chunk in response_stream:
+                chunk_text = chunk.text or ""
+                if chunk_text:
+                    full_chunks.append(chunk_text)
+                    yield f"data: {json.dumps({'token': chunk_text, 'status': 'generating'})}\n\n"
+
+            full_answer = "".join(full_chunks).strip()
+            if not full_answer:
+                full_answer = "Analysis completed, but no text output was generated."
+
+            gemini_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+            done_payload = {
+                "status": "done",
+                "full_answer": full_answer,
+                "model_used": successful_model,
+                "category": cat,
+                "db_query_time_ms": db_time,
+                "gemini_latency_ms": gemini_latency_ms,
+                "total_duration_ms": round(db_time + gemini_latency_ms, 2),
+                "has_api_key": True
+            }
+            yield f"data: {json.dumps(done_payload)}\n\n"
+
+        except Exception as e:
+            logger.error(f"Error during Gemini streaming: {e}", exc_info=True)
+            error_str = str(e)
+            notice_msg = "Temporary rate limit or connectivity issue encountered. Serving live database telemetry:"
+            fallback_answer = (
+                f"> [!WARNING]\n"
+                f"> **Gemini Stream Fallback:** {notice_msg}\n\n"
+                + cls.generate_grounded_fallback_analysis(prompt, telemetry, include_missing_key_note=False)
+            )
+            # Smoothly stream fallback chunks
+            words = fallback_answer.split(" ")
+            for i in range(0, len(words), 5):
+                chunk = " ".join(words[i:i+5]) + " "
+                yield f"data: {json.dumps({'token': chunk, 'status': 'generating'})}\n\n"
+                await asyncio.sleep(0.01)
+
+            done_payload = {
+                "status": "done",
+                "full_answer": fallback_answer,
+                "model_used": "system-grounded-telemetry-engine",
+                "category": cat,
+                "db_query_time_ms": db_time,
+                "gemini_latency_ms": round((time.perf_counter() - t0) * 1000, 2),
+                "total_duration_ms": round((time.perf_counter() - t0) * 1000, 2),
+                "has_api_key": True
+            }
+            yield f"data: {json.dumps(done_payload)}\n\n"

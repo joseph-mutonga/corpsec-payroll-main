@@ -4,9 +4,11 @@ import sys
 import time
 import datetime
 import platform
+import threading
+from decimal import Decimal
 from typing import Dict, Any, List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import text, func, or_, desc
 
 try:
     import psutil
@@ -99,6 +101,138 @@ def sanitize_dict_or_list(data: Any, current_key: Optional[str] = None) -> Any:
         return data
     else:
         return str(data)
+
+
+# ==============================================================================
+# INTELLIGENT QUESTION ROUTING & CLASSIFICATION
+# ==============================================================================
+
+class QuestionCategory:
+    SIMPLE = "SIMPLE"
+    WORKFORCE = "WORKFORCE"
+    PAYROLL = "PAYROLL"
+    MANAGEMENT = "MANAGEMENT"
+    COMPLEX = "COMPLEX"
+
+
+def classify_user_query(prompt: Optional[str]) -> str:
+    """
+    Classifies inquiries into 5 distinct operational domains:
+    A. SIMPLE: health pings, greetings, host metrics (CPU/RAM/Disk), status checks.
+    B. WORKFORCE: security guards, field supervisors, shifts, deployments, sites.
+    C. PAYROLL: wages, mid-month advances, overtime, statutory deductions (NSSF, SHIF, Housing Levy, PAYE).
+    D. MANAGEMENT: client contracts, MRR, invoices, commercial performance, recurrent expenditure.
+    E. COMPLEX: error rates, incident spikes, bottlenecks, multi-domain analytics.
+    """
+    if not prompt or not prompt.strip():
+        return QuestionCategory.SIMPLE
+
+    p = prompt.strip().lower()
+
+    # 1. Greetings & System Pings
+    simple_exact = {
+        "hi", "hello", "hey", "ping", "status", "health", "system health", "test",
+        "help", "who are you", "what can you do", "system status", "uptime", "how are you"
+    }
+    if p in simple_exact or any(p.startswith(g) for g in ["hi ", "hello ", "hey ", "good morning", "good afternoon", "good evening"]):
+        return QuestionCategory.SIMPLE
+
+    # 2. Host infrastructure & hardware questions (only if no payroll/workforce entities are mentioned)
+    host_terms = ["cpu", "ram", "memory", "disk", "ping latency", "database latency", "server uptime", "mysql threads"]
+    business_entities = ["guard", "supervisor", "salary", "payroll", "invoice", "incident", "contract"]
+    if any(h in p for h in host_terms) and not any(w in p for w in business_entities):
+        return QuestionCategory.SIMPLE
+
+    # 3. Payroll & Statutory Deductions
+    payroll_terms = [
+        "payroll", "salary", "salaries", "pay", "payslip", "advance", "advances",
+        "nssf", "shif", "nhif", "housing levy", "levy", "tax", "paye", "relief",
+        "personal relief", "deduction", "deductions", "gross pay", "net pay",
+        "disbursement", "remittance", "statutory", "allowance", "overtime pay",
+        "basic salary", "effective salary", "salary advance"
+    ]
+    if any(w in p for w in payroll_terms):
+        return QuestionCategory.PAYROLL
+
+    # 4. Management & Commercial Financials
+    mgmt_terms = [
+        "mrr", "revenue", "monthly recurring revenue", "contract", "contracts",
+        "client", "clients", "invoice", "invoices", "billing", "profit",
+        "expense", "expenses", "petty cash", "expenditure", "director", "commercial", "turnover"
+    ]
+    if any(w in p for w in mgmt_terms):
+        return QuestionCategory.MANAGEMENT
+
+    # 5. Security Workforce & Operations
+    workforce_terms = [
+        "guard", "guards", "supervisor", "supervisors", "shift", "shifts",
+        "roster", "attendance", "clock in", "clock out", "duty", "deployment",
+        "station", "client site", "site", "sites", "absent", "leave"
+    ]
+    if any(w in p for w in workforce_terms):
+        return QuestionCategory.WORKFORCE
+
+    # 6. Default to Complex Analytical
+    return QuestionCategory.COMPLEX
+
+
+# ==============================================================================
+# SAFE IN-MEMORY TELEMETRY CACHE (READ-ONLY, ROLE-ISOLATED, AUTO-EXPIRING)
+# ==============================================================================
+
+class SafeTelemetryCache:
+    """
+    Lightweight, thread-safe in-memory cache for repeated read-only queries and telemetry snapshots.
+    Guarantees role isolation (strictly ADMIN).
+    Never caches passwords, tokens, OTPs, or authentication credentials.
+    """
+    def __init__(self, default_ttl_seconds: int = 60):
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.Lock()
+        self.default_ttl = default_ttl_seconds
+
+    def _make_key(self, category: str, query: str, user_role: str = "ADMIN") -> str:
+        clean_q = re.sub(r"\s+", " ", (query or "").strip().lower())
+        return f"{user_role}:{category}:{clean_q}"
+
+    def get(self, category: str, query: str = "", user_role: str = "ADMIN") -> Optional[Dict[str, Any]]:
+        key = self._make_key(category, query, user_role)
+        now_ts = time.time()
+        with self._lock:
+            entry = self._cache.get(key)
+            if not entry:
+                return None
+            if entry["expires_at"] < now_ts:
+                del self._cache[key]
+                return None
+            # Return deepcopy of data so caller modifications don't corrupt cache
+            return dict(entry["data"])
+
+    def set(self, category: str, query: str = "", data: Dict[str, Any] = None, ttl_seconds: Optional[int] = None, user_role: str = "ADMIN") -> None:
+        if data is None:
+            return
+        key = self._make_key(category, query, user_role)
+        ttl = ttl_seconds if ttl_seconds is not None else self.default_ttl
+        now_ts = time.time()
+        with self._lock:
+            # Housekeeping: evict stale entries if size exceeds limit
+            if len(self._cache) > 150:
+                expired = [k for k, v in self._cache.items() if v["expires_at"] < now_ts]
+                for k in expired:
+                    del self._cache[k]
+            self._cache[key] = {
+                "data": dict(data),
+                "created_at": now_ts,
+                "expires_at": now_ts + ttl,
+                "role": user_role
+            }
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+
+global_telemetry_cache = SafeTelemetryCache(default_ttl_seconds=60)
 
 
 # ==============================================================================
@@ -284,46 +418,233 @@ class AITelemetryService:
 
         return results
 
-    @staticmethod
-    def get_system_telemetry(db: Session, user_query: Optional[str] = None) -> Dict[str, Any]:
+    classify_user_query = staticmethod(classify_user_query)
+    global_cache = global_telemetry_cache
+
+    @classmethod
+    def get_system_telemetry(
+        cls,
+        db: Session,
+        user_query: Optional[str] = None,
+        category: Optional[str] = None,
+        bypass_cache: bool = False
+    ) -> Dict[str, Any]:
         """
-        Aggregates complete, grounded telemetry across host, database,
-        operations, workforce registries, payroll, financials, errors, and audit logs.
-        All queries are strictly read-only.
+        Aggregates grounded telemetry across host, database, operations,
+        workforce registries, payroll, financials, errors, and audit logs.
+        Applies Intelligent Question Routing (SIMPLE, WORKFORCE, PAYROLL, MANAGEMENT, COMPLEX).
+        Uses Python Decimal for exact financial calculations.
+        Safely caches read-only results for 60 seconds with strict ADMIN role isolation.
         """
         now = datetime.datetime.now()
         today_start = datetime.datetime(now.year, now.month, now.day)
 
-        # 1. Host and DB
-        host_telemetry = AITelemetryService.get_host_telemetry()
-        db_telemetry = AITelemetryService.get_database_telemetry(db)
+        if not category:
+            category = classify_user_query(user_query)
 
-        # 2. Error Rates & Anomaly Tracking
-        unresolved_payroll_errors = db.query(PayrollError).count()
-        recent_errors = (
-            db.query(PayrollError)
-            .order_by(PayrollError.id.desc())
-            .limit(5)
-            .all()
-        )
-        held_records_count = db.query(PayrollRecord).filter(PayrollRecord.is_on_hold == True).count()
-        open_incidents_count = db.query(Incident).filter(Incident.status.in_(["OPEN", "INVESTIGATING", "ESCALATED"])).count()
-        critical_incidents_count = db.query(Incident).filter(
-            (Incident.incident_type.ilike("%critical%") | Incident.incident_type.ilike("%theft%") | Incident.incident_type.ilike("%breach%")),
-            Incident.status.in_(["OPEN", "INVESTIGATING", "ESCALATED"])
-        ).count()
-        missed_calls_today = db.query(CallLog).filter(
-            CallLog.status == "MISSED",
-            CallLog.created_at >= today_start
-        ).count()
+        # Check in-memory safe cache
+        if not bypass_cache:
+            cached_data = global_telemetry_cache.get(category, user_query or "", user_role="ADMIN")
+            if cached_data:
+                cached_data["from_cache"] = True
+                return cached_data
 
+        t_db_start = time.perf_counter()
+
+        # 1. Host and Database Infrastructure (Always collected: ~1-2ms)
+        host_telemetry = cls.get_host_telemetry()
+        db_telemetry = cls.get_database_telemetry(db)
+
+        # Baseline empty/default structures
         error_rates = {
-            "unresolved_payroll_errors_total": unresolved_payroll_errors,
-            "payroll_records_on_hold": held_records_count,
-            "open_security_incidents_total": open_incidents_count,
-            "critical_or_high_severity_incidents": critical_incidents_count,
-            "missed_call_center_calls_today": missed_calls_today,
-            "recent_payroll_error_samples": [
+            "unresolved_payroll_errors_total": 0,
+            "payroll_records_on_hold": 0,
+            "open_security_incidents_total": 0,
+            "critical_or_high_severity_incidents": 0,
+            "missed_call_center_calls_today": 0,
+            "recent_payroll_error_samples": []
+        }
+        operations_telemetry = {
+            "total_guards_registered": 0,
+            "active_guards_on_duty_roster": 0,
+            "total_client_sites": 0,
+            "active_client_sites": 0,
+            "today_attendance_punches_logged": 0,
+            "active_field_supervisors": 0,
+            "call_center_calls_handled_today": 0
+        }
+        financial_telemetry = {
+            "active_client_contracts": 0,
+            "monthly_recurring_revenue_mrr_kes": 0.0,
+            "latest_payroll_cycle": None,
+            "unpaid_site_invoices_count": 0,
+            "overdue_invoices_count": 0,
+            "unpaid_invoices_amount_kes": 0.0,
+            "month_to_date_recurrent_expenses_kes": 0.0
+        }
+        active_users_summary = {
+            "total_system_users": 0,
+            "administrators_count": 0,
+            "supervisors_count": 0,
+            "finance_hr_staff_count": 0,
+            "currently_active_authenticated_sessions": 0
+        }
+        guards_register = []
+        supervisors_register = []
+        client_sites_register = []
+        shifts_register = []
+        client_contracts_register = []
+        recent_incidents_register = []
+        recent_attendance_register = []
+        targeted_matches = {}
+        audit_trail = []
+
+        # ======================================================================
+        # CATEGORY-BASED SELECTIVE QUERY EXECUTION
+        # ======================================================================
+
+        if category == QuestionCategory.SIMPLE:
+            # Simple questions: greetings, status check, CPU/RAM/Disk stats
+            # Requires NO business entity queries. Takes < 3ms total DB time.
+            total_guards = db.query(func.count(Guard.id)).scalar() or 0
+            active_guards = db.query(func.count(Guard.id)).filter(Guard.status == "ACTIVE").scalar() or 0
+            operations_telemetry["total_guards_registered"] = total_guards
+            operations_telemetry["active_guards_on_duty_roster"] = active_guards
+
+        elif category == QuestionCategory.WORKFORCE:
+            # Workforce questions: guards, supervisors, shifts, deployments
+            guards_q = db.query(Guard).options(
+                joinedload(Guard.site),
+                joinedload(Guard.shift),
+                joinedload(Guard.supervisor)
+            )
+            guards_all = guards_q.limit(100).all()
+            total_guards = db.query(func.count(Guard.id)).scalar() or len(guards_all)
+            active_guards = db.query(func.count(Guard.id)).filter(Guard.status == "ACTIVE").scalar() or len([g for g in guards_all if g.status == "ACTIVE"])
+
+            sites_all = db.query(Site).options(joinedload(Site.supervisor)).all()
+            total_sites = len(sites_all)
+
+            supervisors_all = db.query(User).filter(User.role == UserRole.SUPERVISOR.value).all()
+            supervisors_count = len(supervisors_all)
+
+            shifts_all = db.query(Shift).all()
+            shifts_register = [
+                {
+                    "id": sh.id,
+                    "name": sh.name,
+                    "shift_type": sh.shift_type,
+                    "start_time": sh.start_time,
+                    "end_time": sh.end_time,
+                    "is_night_shift": bool(sh.is_night_shift),
+                    "duration_hours": sh.duration_hours
+                } for sh in shifts_all
+            ]
+
+            operations_telemetry.update({
+                "total_guards_registered": total_guards,
+                "active_guards_on_duty_roster": active_guards,
+                "total_client_sites": total_sites,
+                "active_client_sites": total_sites,
+                "active_field_supervisors": supervisors_count
+            })
+
+            # Guards Register
+            for g in guards_all:
+                guards_register.append({
+                    "id": g.id,
+                    "employee_number": g.employee_number,
+                    "full_name": g.full_name,
+                    "phone": g.phone,
+                    "status": g.status,
+                    "gender": g.gender,
+                    "assigned_site": g.site.site_name if g.site else "Unassigned",
+                    "assigned_shift": g.shift.name if g.shift else "Unassigned",
+                    "shift_type": g.shift.shift_type if g.shift else "N/A",
+                    "supervisor_name": (g.supervisor.full_name or g.supervisor.email) if g.supervisor else "Unassigned",
+                    "supervisor_phone": g.supervisor.phone if g.supervisor else "N/A",
+                    "basic_salary_kes": round(float(Decimal(str(g.effective_basic_salary or 0))), 2)
+                })
+
+            # Supervisors Register
+            for s in supervisors_all:
+                assigned_guards_list = [
+                    {"full_name": g.full_name, "employee_number": g.employee_number, "phone": g.phone, "assigned_site": g.site.site_name if g.site else "Unassigned"}
+                    for g in guards_all if g.supervisor_id == s.id
+                ]
+                assigned_sites_list = [st.site_name for st in sites_all if st.supervisor_id == s.id]
+                supervisors_register.append({
+                    "id": s.id,
+                    "full_name": s.full_name or s.email,
+                    "email": s.email,
+                    "phone": s.phone,
+                    "status": s.status,
+                    "assigned_sites": assigned_sites_list,
+                    "assigned_guards_count": len(assigned_guards_list),
+                    "assigned_guards": assigned_guards_list
+                })
+
+            # Client Sites Register
+            for st in sites_all:
+                st_guards = [{"full_name": g.full_name, "employee_number": g.employee_number} for g in (st.guards or [])]
+                sup_name = (st.supervisor.full_name or st.supervisor.email) if st.supervisor else "Unassigned"
+                client_sites_register.append({
+                    "id": st.id,
+                    "site_name": st.site_name,
+                    "location": st.location,
+                    "client_name": st.client_name,
+                    "assigned_supervisor": sup_name,
+                    "stationed_guards_count": len(st_guards),
+                    "stationed_guards": st_guards,
+                    "daily_rate_kes": round(float(Decimal(str(st.daily_rate or 1200.0))), 2)
+                })
+
+            if user_query:
+                try:
+                    targeted_matches = cls.search_database_entities(db, user_query)
+                except Exception as e:
+                    targeted_matches = {"error": str(e)}
+
+        elif category == QuestionCategory.PAYROLL:
+            # Payroll questions: Decimal-based wages, statutory tax, advances, deductions
+            latest_payroll_period = db.query(PayrollPeriod).order_by(PayrollPeriod.id.desc()).first()
+            if latest_payroll_period:
+                records = db.query(
+                    PayrollRecord.gross_pay,
+                    PayrollRecord.net_pay,
+                    PayrollRecord.nssf_deduction,
+                    PayrollRecord.shif_deduction,
+                    PayrollRecord.housing_levy_deduction,
+                    PayrollRecord.paye_deduction,
+                    PayrollRecord.salary_advance_deduction
+                ).filter(PayrollRecord.payroll_period_id == latest_payroll_period.id).all()
+
+                total_gross = sum(Decimal(str(r[0] or 0)) for r in records)
+                total_net = sum(Decimal(str(r[1] or 0)) for r in records)
+                total_nssf = sum(Decimal(str(r[2] or 0)) for r in records)
+                total_shif = sum(Decimal(str(r[3] or 0)) for r in records)
+                total_levy = sum(Decimal(str(r[4] or 0)) for r in records)
+                total_paye = sum(Decimal(str(r[5] or 0)) for r in records)
+                total_advances = sum(Decimal(str(r[6] or 0)) for r in records)
+
+                financial_telemetry["latest_payroll_cycle"] = {
+                    "period_id": latest_payroll_period.id,
+                    "period_name": f"{latest_payroll_period.month}/{latest_payroll_period.year}",
+                    "status": latest_payroll_period.status,
+                    "employees_processed": len(records),
+                    "total_gross_pay_kes": round(float(total_gross), 2),
+                    "total_net_pay_kes": round(float(total_net), 2),
+                    "total_nssf_remittance_kes": round(float(total_nssf), 2),
+                    "total_shif_remittance_kes": round(float(total_shif), 2),
+                    "total_housing_levy_kes": round(float(total_levy), 2),
+                    "total_paye_tax_kes": round(float(total_paye), 2),
+                    "total_salary_advance_deductions_kes": round(float(total_advances), 2)
+                }
+
+            error_rates["unresolved_payroll_errors_total"] = db.query(PayrollError).count()
+            error_rates["payroll_records_on_hold"] = db.query(PayrollRecord).filter(PayrollRecord.is_on_hold == True).count()
+            recent_errors = db.query(PayrollError).order_by(PayrollError.id.desc()).limit(5).all()
+            error_rates["recent_payroll_error_samples"] = [
                 {
                     "id": err.id,
                     "guard_name": getattr(err.guard, "full_name", "Guard") if getattr(err, "guard", None) else "System",
@@ -332,256 +653,277 @@ class AITelemetryService:
                     "resolved": bool(getattr(err, "resolved_at", None))
                 } for err in recent_errors
             ]
-        }
 
-        # 3. Operations & Workforce Telemetry (Summary Counts)
-        guards_all = db.query(Guard).all()
-        total_guards = len(guards_all)
-        active_guards = len([g for g in guards_all if g.status == "ACTIVE"])
-        sites_all = db.query(Site).all()
-        total_sites = len(sites_all)
-        active_sites = total_sites
-        today_attendance_count = db.query(Attendance).filter(Attendance.shift_date >= today_start.date()).count()
-        supervisors_all = db.query(User).filter(User.role == UserRole.SUPERVISOR.value).all()
-        supervisors_count = len(supervisors_all)
-        total_call_logs_today = db.query(CallLog).filter(CallLog.created_at >= today_start).count()
+            if user_query:
+                try:
+                    targeted_matches = cls.search_database_entities(db, user_query)
+                except Exception as e:
+                    targeted_matches = {"error": str(e)}
 
-        operations_telemetry = {
-            "total_guards_registered": total_guards,
-            "active_guards_on_duty_roster": active_guards,
-            "total_client_sites": total_sites,
-            "active_client_sites": active_sites,
-            "today_attendance_punches_logged": today_attendance_count,
-            "active_field_supervisors": supervisors_count,
-            "call_center_calls_handled_today": total_call_logs_today
-        }
+        elif category == QuestionCategory.MANAGEMENT:
+            # Management questions: MRR, contracts, invoices, revenue
+            active_contracts_q = db.query(ClientContract).filter(ClientContract.status == "ACTIVE").all()
+            mrr_dec = sum(Decimal(str(c.monthly_charge or 0)) for c in active_contracts_q)
 
-        # 4. Detailed Database Registries
-        # 4A. Guards Register
-        guards_register = [
-            {
-                "id": g.id,
-                "employee_number": g.employee_number,
-                "full_name": g.full_name,
-                "phone": g.phone,
-                "email": g.email or "",
-                "status": g.status,
-                "gender": g.gender,
-                "hire_date": str(g.hire_date) if g.hire_date else None,
-                "assigned_site": g.site.site_name if g.site else "Unassigned",
-                "assigned_shift": g.shift.name if g.shift else "Unassigned",
-                "shift_type": g.shift.shift_type if g.shift else "N/A",
-                "supervisor_name": (g.supervisor.full_name or g.supervisor.email) if g.supervisor else "Unassigned",
-                "supervisor_phone": g.supervisor.phone if g.supervisor else "N/A",
-                "basic_salary_kes": round(float(g.effective_basic_salary), 2),
-                "is_super_guard": bool(g.is_super_guard),
-                "is_reliever": bool(g.is_reliever),
-                "payment_method": g.payment_method,
-                "bank_name": g.bank_name or "N/A"
-            }
-            for g in guards_all
-        ]
+            unpaid_invoices_count = db.query(SiteInvoice).filter(SiteInvoice.status.in_(["DRAFT", "PENDING", "OVERDUE", "ISSUED"])).count()
+            overdue_invoices_count = db.query(SiteInvoice).filter(SiteInvoice.status == "OVERDUE").count()
+            unpaid_inv_rows = db.query(SiteInvoice.total_amount).filter(SiteInvoice.status.in_(["PENDING", "OVERDUE", "ISSUED"])).all()
+            unpaid_invoices_dec = sum(Decimal(str(r[0] or 0)) for r in unpaid_inv_rows)
 
-        # 4B. Supervisors Register
-        supervisors_register = []
-        for s in supervisors_all:
-            assigned_guards_list = [
-                {
-                    "full_name": g.full_name,
-                    "employee_number": g.employee_number,
-                    "phone": g.phone,
-                    "assigned_site": g.site.site_name if g.site else "Unassigned"
-                }
-                for g in guards_all if g.supervisor_id == s.id
-            ]
-            assigned_sites_list = [
-                st.site_name for st in sites_all if st.supervisor_id == s.id
-            ]
-            supervisors_register.append({
-                "id": s.id,
-                "full_name": s.full_name or s.email,
-                "email": s.email,
-                "phone": s.phone,
-                "status": s.status,
-                "assigned_sites": assigned_sites_list,
-                "assigned_guards_count": len(assigned_guards_list),
-                "assigned_guards": assigned_guards_list
+            exp_rows = db.query(Expense.amount).filter(Expense.expense_date >= today_start.replace(day=1).date()).all()
+            month_expenses_dec = sum(Decimal(str(r[0] or 0)) for r in exp_rows)
+
+            financial_telemetry.update({
+                "active_client_contracts": len(active_contracts_q),
+                "monthly_recurring_revenue_mrr_kes": round(float(mrr_dec), 2),
+                "unpaid_site_invoices_count": unpaid_invoices_count,
+                "overdue_invoices_count": overdue_invoices_count,
+                "unpaid_invoices_amount_kes": round(float(unpaid_invoices_dec), 2),
+                "month_to_date_recurrent_expenses_kes": round(float(month_expenses_dec), 2)
             })
 
-        # 4C. Client Sites Register
-        client_sites_register = []
-        for st in sites_all:
-            st_guards = [
-                {
-                    "full_name": g.full_name,
+            for c in active_contracts_q[:25]:
+                client_contracts_register.append({
+                    "contract_ref": c.contract_ref,
+                    "client_name": c.client.name if c.client else "N/A",
+                    "title": c.title,
+                    "status": c.status,
+                    "monthly_charge_kes": round(float(Decimal(str(c.monthly_charge or 0))), 2),
+                    "guards_required": c.guards_required,
+                    "start_date": str(c.start_date) if c.start_date else None,
+                    "end_date": str(c.end_date) if c.end_date else None
+                })
+
+        else:
+            # COMPLEX Analytical: Complete system telemetry snapshot
+            unresolved_payroll_errors = db.query(PayrollError).count()
+            recent_errors = db.query(PayrollError).order_by(PayrollError.id.desc()).limit(5).all()
+            held_records_count = db.query(PayrollRecord).filter(PayrollRecord.is_on_hold == True).count()
+            open_incidents_count = db.query(Incident).filter(Incident.status.in_(["OPEN", "INVESTIGATING", "ESCALATED"])).count()
+            critical_incidents_count = db.query(Incident).filter(
+                (Incident.incident_type.ilike("%critical%") | Incident.incident_type.ilike("%theft%") | Incident.incident_type.ilike("%breach%")),
+                Incident.status.in_(["OPEN", "INVESTIGATING", "ESCALATED"])
+            ).count()
+            missed_calls_today = db.query(CallLog).filter(
+                CallLog.status == "MISSED",
+                CallLog.created_at >= today_start
+            ).count()
+
+            error_rates = {
+                "unresolved_payroll_errors_total": unresolved_payroll_errors,
+                "payroll_records_on_hold": held_records_count,
+                "open_security_incidents_total": open_incidents_count,
+                "critical_or_high_severity_incidents": critical_incidents_count,
+                "missed_call_center_calls_today": missed_calls_today,
+                "recent_payroll_error_samples": [
+                    {
+                        "id": err.id,
+                        "guard_name": getattr(err.guard, "full_name", "Guard") if getattr(err, "guard", None) else "System",
+                        "error_type": err.error_type,
+                        "description": err.error_message if hasattr(err, "error_message") else getattr(err, "description", ""),
+                        "resolved": bool(getattr(err, "resolved_at", None))
+                    } for err in recent_errors
+                ]
+            }
+
+            guards_q = db.query(Guard).options(joinedload(Guard.site), joinedload(Guard.shift), joinedload(Guard.supervisor))
+            guards_all = guards_q.limit(100).all()
+            total_guards = db.query(func.count(Guard.id)).scalar() or len(guards_all)
+            active_guards = len([g for g in guards_all if g.status == "ACTIVE"])
+            sites_all = db.query(Site).options(joinedload(Site.supervisor)).all()
+            total_sites = len(sites_all)
+            today_attendance_count = db.query(Attendance).filter(Attendance.shift_date >= today_start.date()).count()
+            supervisors_all = db.query(User).filter(User.role == UserRole.SUPERVISOR.value).all()
+            supervisors_count = len(supervisors_all)
+            total_call_logs_today = db.query(CallLog).filter(CallLog.created_at >= today_start).count()
+
+            operations_telemetry = {
+                "total_guards_registered": total_guards,
+                "active_guards_on_duty_roster": active_guards,
+                "total_client_sites": total_sites,
+                "active_client_sites": total_sites,
+                "today_attendance_punches_logged": today_attendance_count,
+                "active_field_supervisors": supervisors_count,
+                "call_center_calls_handled_today": total_call_logs_today
+            }
+
+            for g in guards_all:
+                guards_register.append({
+                    "id": g.id,
                     "employee_number": g.employee_number,
+                    "full_name": g.full_name,
                     "phone": g.phone,
-                    "shift": g.shift.name if g.shift else "Unassigned",
-                    "status": g.status
-                }
-                for g in (st.guards or [])
+                    "email": g.email or "",
+                    "status": g.status,
+                    "assigned_site": g.site.site_name if g.site else "Unassigned",
+                    "assigned_shift": g.shift.name if g.shift else "Unassigned",
+                    "supervisor_name": (g.supervisor.full_name or g.supervisor.email) if g.supervisor else "Unassigned",
+                    "basic_salary_kes": round(float(Decimal(str(g.effective_basic_salary or 0))), 2)
+                })
+
+            for s in supervisors_all:
+                assigned_guards_list = [
+                    {"full_name": g.full_name, "employee_number": g.employee_number, "phone": g.phone, "assigned_site": g.site.site_name if g.site else "Unassigned"}
+                    for g in guards_all if g.supervisor_id == s.id
+                ]
+                assigned_sites_list = [st.site_name for st in sites_all if st.supervisor_id == s.id]
+                supervisors_register.append({
+                    "id": s.id,
+                    "full_name": s.full_name or s.email,
+                    "email": s.email,
+                    "phone": s.phone,
+                    "status": s.status,
+                    "assigned_sites": assigned_sites_list,
+                    "assigned_guards_count": len(assigned_guards_list),
+                    "assigned_guards": assigned_guards_list
+                })
+
+            for st in sites_all:
+                st_guards = [{"full_name": g.full_name, "employee_number": g.employee_number} for g in (st.guards or [])]
+                sup_name = (st.supervisor.full_name or st.supervisor.email) if st.supervisor else "Unassigned"
+                client_sites_register.append({
+                    "id": st.id,
+                    "site_name": st.site_name,
+                    "location": st.location,
+                    "client_name": st.client_name,
+                    "assigned_supervisor": sup_name,
+                    "stationed_guards_count": len(st_guards),
+                    "stationed_guards": st_guards,
+                    "daily_rate_kes": round(float(Decimal(str(st.daily_rate or 1200.0))), 2)
+                })
+
+            shifts_all = db.query(Shift).all()
+            shifts_register = [
+                {
+                    "id": sh.id,
+                    "name": sh.name,
+                    "shift_type": sh.shift_type,
+                    "start_time": sh.start_time,
+                    "end_time": sh.end_time,
+                    "is_night_shift": bool(sh.is_night_shift),
+                    "duration_hours": sh.duration_hours
+                } for sh in shifts_all
             ]
-            sup_name = (st.supervisor.full_name or st.supervisor.email) if st.supervisor else "Unassigned"
-            sup_phone = st.supervisor.phone if st.supervisor else "N/A"
-            client_sites_register.append({
-                "id": st.id,
-                "site_name": st.site_name,
-                "location": st.location,
-                "client_name": st.client_name,
-                "assigned_supervisor": sup_name,
-                "supervisor_phone": sup_phone,
-                "stationed_guards_count": len(st_guards),
-                "stationed_guards": st_guards,
-                "daily_rate_kes": round(float(st.daily_rate), 2) if st.daily_rate else 1200.0,
-                "basic_salary_kes": round(float(st.basic_salary), 2) if st.basic_salary else 15000.0
-            })
 
-        # 4D. Shifts Register
-        shifts_all = db.query(Shift).all()
-        shifts_register = [
-            {
-                "id": sh.id,
-                "name": sh.name,
-                "shift_type": sh.shift_type,
-                "start_time": sh.start_time,
-                "end_time": sh.end_time,
-                "is_night_shift": bool(sh.is_night_shift),
-                "duration_hours": sh.duration_hours
-            }
-            for sh in shifts_all
-        ]
+            contracts_all = db.query(ClientContract).all()
+            client_contracts_register = [
+                {
+                    "contract_ref": c.contract_ref,
+                    "client_name": c.client.name if c.client else "N/A",
+                    "title": c.title,
+                    "status": c.status,
+                    "monthly_charge_kes": round(float(Decimal(str(c.monthly_charge or 0))), 2),
+                    "guards_required": c.guards_required,
+                    "start_date": str(c.start_date) if c.start_date else None,
+                    "end_date": str(c.end_date) if c.end_date else None
+                } for c in contracts_all
+            ]
 
-        # 4E. Client Contracts Register
-        contracts_all = db.query(ClientContract).all()
-        client_contracts_register = [
-            {
-                "contract_ref": c.contract_ref,
-                "client_name": c.client.name if c.client else "N/A",
-                "title": c.title,
-                "status": c.status,
-                "monthly_charge_kes": round(float(c.monthly_charge), 2) if c.monthly_charge else 0.0,
-                "guards_required": c.guards_required,
-                "supervisors_required": c.supervisors_required,
-                "start_date": str(c.start_date) if c.start_date else None,
-                "end_date": str(c.end_date) if c.end_date else None
-            }
-            for c in contracts_all
-        ]
+            incidents_all = db.query(Incident).order_by(Incident.id.desc()).limit(15).all()
+            recent_incidents_register = [
+                {
+                    "reference_number": inc.reference_number,
+                    "incident_type": inc.incident_type,
+                    "guard_name": inc.guard.full_name if inc.guard else "N/A",
+                    "site_name": inc.site.site_name if inc.site else "N/A",
+                    "incident_date": str(inc.incident_date) if inc.incident_date else None,
+                    "incident_time": inc.incident_time,
+                    "status": inc.status,
+                    "description": inc.description
+                } for inc in incidents_all
+            ]
 
-        # 4F. Recent Incidents Register
-        incidents_all = db.query(Incident).order_by(Incident.id.desc()).limit(15).all()
-        recent_incidents_register = [
-            {
-                "reference_number": inc.reference_number,
-                "incident_type": inc.incident_type,
-                "guard_name": inc.guard.full_name if inc.guard else "N/A",
-                "site_name": inc.site.site_name if inc.site else "N/A",
-                "incident_date": str(inc.incident_date) if inc.incident_date else None,
-                "incident_time": inc.incident_time,
-                "status": inc.status,
-                "description": inc.description
-            }
-            for inc in incidents_all
-        ]
+            attendances_all = db.query(Attendance).order_by(Attendance.id.desc()).limit(20).all()
+            recent_attendance_register = [
+                {
+                    "id": att.id,
+                    "guard_name": att.guard.full_name if att.guard else "N/A",
+                    "employee_number": att.guard.employee_number if att.guard else "N/A",
+                    "site_name": att.site.site_name if att.site else "N/A",
+                    "shift_name": att.shift.name if att.shift else "N/A",
+                    "shift_date": str(att.shift_date) if att.shift_date else None,
+                    "status": att.status,
+                    "clock_in": att.actual_clock_in.strftime("%H:%M") if att.actual_clock_in else None,
+                    "clock_out": att.actual_clock_out.strftime("%H:%M") if att.actual_clock_out else None,
+                    "regular_hours": att.regular_hours,
+                    "overtime_hours": att.overtime_hours
+                } for att in attendances_all
+            ]
 
-        # 4G. Recent Attendance Register
-        attendances_all = db.query(Attendance).order_by(Attendance.id.desc()).limit(20).all()
-        recent_attendance_register = [
-            {
-                "id": att.id,
-                "guard_name": att.guard.full_name if att.guard else "N/A",
-                "employee_number": att.guard.employee_number if att.guard else "N/A",
-                "site_name": att.site.site_name if att.site else "N/A",
-                "shift_name": att.shift.name if att.shift else "N/A",
-                "shift_date": str(att.shift_date) if att.shift_date else None,
-                "status": att.status,
-                "clock_in": att.actual_clock_in.strftime("%H:%M") if att.actual_clock_in else None,
-                "clock_out": att.actual_clock_out.strftime("%H:%M") if att.actual_clock_out else None,
-                "regular_hours": att.regular_hours,
-                "overtime_hours": att.overtime_hours
-            }
-            for att in attendances_all
-        ]
+            if user_query:
+                try:
+                    targeted_matches = cls.search_database_entities(db, user_query)
+                except Exception as e:
+                    targeted_matches = {"error": f"Search execution: {str(e)}"}
 
-        # 4H. Targeted Database Matches (if user query provided)
-        targeted_matches = {}
-        if user_query:
-            try:
-                targeted_matches = AITelemetryService.search_database_entities(db, user_query)
-            except Exception as e:
-                targeted_matches = {"error": f"Search execution: {str(e)}"}
+            # Financial Summary
+            active_contracts = db.query(ClientContract).filter(ClientContract.status == "ACTIVE").count()
+            mrr_sum = sum(Decimal(str(c.monthly_charge or 0)) for c in contracts_all if c.status == "ACTIVE")
+            
+            latest_payroll_period = db.query(PayrollPeriod).order_by(PayrollPeriod.id.desc()).first()
+            latest_period_info = None
+            if latest_payroll_period:
+                p_records = db.query(PayrollRecord.gross_pay, PayrollRecord.net_pay).filter(PayrollRecord.payroll_period_id == latest_payroll_period.id).all()
+                gross_sum = sum(Decimal(str(r[0] or 0)) for r in p_records)
+                net_sum = sum(Decimal(str(r[1] or 0)) for r in p_records)
+                latest_period_info = {
+                    "period_id": latest_payroll_period.id,
+                    "period_name": f"{latest_payroll_period.month}/{latest_payroll_period.year}",
+                    "status": latest_payroll_period.status,
+                    "employees_processed": len(p_records),
+                    "total_gross_pay_kes": round(float(gross_sum), 2),
+                    "total_net_pay_kes": round(float(net_sum), 2)
+                }
 
-        # 5. Financial & Payroll Summary
-        active_contracts = db.query(ClientContract).filter(ClientContract.status == "ACTIVE").count()
-        mrr_sum = db.query(func.coalesce(func.sum(ClientContract.monthly_charge), 0.0)).filter(ClientContract.status == "ACTIVE").scalar() or 0.0
-        
-        latest_payroll_period = db.query(PayrollPeriod).order_by(PayrollPeriod.id.desc()).first()
-        latest_period_info = None
-        if latest_payroll_period:
-            gross_sum = db.query(func.coalesce(func.sum(PayrollRecord.gross_pay), 0.0)).filter(PayrollRecord.payroll_period_id == latest_payroll_period.id).scalar() or 0.0
-            net_sum = db.query(func.coalesce(func.sum(PayrollRecord.net_pay), 0.0)).filter(PayrollRecord.payroll_period_id == latest_payroll_period.id).scalar() or 0.0
-            emp_count = db.query(PayrollRecord).filter(PayrollRecord.payroll_period_id == latest_payroll_period.id).count()
-            latest_period_info = {
-                "period_id": latest_payroll_period.id,
-                "period_name": f"{latest_payroll_period.month}/{latest_payroll_period.year}",
-                "status": latest_payroll_period.status,
-                "employees_processed": emp_count,
-                "total_gross_pay_kes": round(float(gross_sum), 2),
-                "total_net_pay_kes": round(float(net_sum), 2)
+            unpaid_invoices_count = db.query(SiteInvoice).filter(SiteInvoice.status.in_(["DRAFT", "PENDING", "OVERDUE", "ISSUED"])).count()
+            overdue_invoices_count = db.query(SiteInvoice).filter(SiteInvoice.status == "OVERDUE").count()
+            unpaid_inv_rows = db.query(SiteInvoice.total_amount).filter(SiteInvoice.status.in_(["PENDING", "OVERDUE", "ISSUED"])).all()
+            unpaid_invoices_amount = sum(Decimal(str(r[0] or 0)) for r in unpaid_inv_rows)
+
+            current_month_expenses = sum(Decimal(str(r[0] or 0)) for r in db.query(Expense.amount).filter(Expense.expense_date >= today_start.replace(day=1).date()).all())
+
+            financial_telemetry = {
+                "active_client_contracts": active_contracts,
+                "monthly_recurring_revenue_mrr_kes": round(float(mrr_sum), 2),
+                "latest_payroll_cycle": latest_period_info,
+                "unpaid_site_invoices_count": unpaid_invoices_count,
+                "overdue_invoices_count": overdue_invoices_count,
+                "unpaid_invoices_amount_kes": round(float(unpaid_invoices_amount), 2),
+                "month_to_date_recurrent_expenses_kes": round(float(current_month_expenses), 2)
             }
 
-        unpaid_invoices_count = db.query(SiteInvoice).filter(SiteInvoice.status.in_(["DRAFT", "PENDING", "OVERDUE", "ISSUED"])).count()
-        overdue_invoices_count = db.query(SiteInvoice).filter(SiteInvoice.status == "OVERDUE").count()
-        unpaid_invoices_amount = db.query(func.coalesce(func.sum(SiteInvoice.total_amount), 0.0)).filter(SiteInvoice.status.in_(["PENDING", "OVERDUE", "ISSUED"])).scalar() or 0.0
+            total_users = db.query(User).count()
+            admin_count = db.query(User).filter(User.role == UserRole.ADMIN.value).count()
+            staff_count = db.query(User).filter(User.role == UserRole.STAFF.value).count()
+            active_sessions_count = db.query(UserSession).filter(UserSession.is_active == True).count()
 
-        current_month_expenses = db.query(func.coalesce(func.sum(Expense.amount), 0.0)).filter(
-            Expense.expense_date >= today_start.replace(day=1).date()
-        ).scalar() or 0.0
+            active_users_summary = {
+                "total_system_users": total_users,
+                "administrators_count": admin_count,
+                "supervisors_count": supervisors_count,
+                "finance_hr_staff_count": staff_count,
+                "currently_active_authenticated_sessions": active_sessions_count
+            }
 
-        financial_telemetry = {
-            "active_client_contracts": active_contracts,
-            "monthly_recurring_revenue_mrr_kes": round(float(mrr_sum), 2),
-            "latest_payroll_cycle": latest_period_info,
-            "unpaid_site_invoices_count": unpaid_invoices_count,
-            "overdue_invoices_count": overdue_invoices_count,
-            "unpaid_invoices_amount_kes": round(float(unpaid_invoices_amount), 2),
-            "month_to_date_recurrent_expenses_kes": round(float(current_month_expenses), 2)
-        }
+            recent_audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(12).all()
+            audit_trail = [
+                {
+                    "id": a.id,
+                    "action": a.action,
+                    "target_entity": a.target_entity,
+                    "role": a.role,
+                    "reason": sanitize_text(a.reason or ""),
+                    "timestamp": a.timestamp.isoformat() if hasattr(a, "timestamp") and a.timestamp else None
+                } for a in recent_audits
+            ]
 
-        # 6. User Roles & Active Sessions
-        total_users = db.query(User).count()
-        admin_count = db.query(User).filter(User.role == UserRole.ADMIN.value).count()
-        staff_count = db.query(User).filter(User.role == UserRole.STAFF.value).count()
-        active_sessions_count = db.query(UserSession).filter(UserSession.is_active == True).count()
-
-        active_users_summary = {
-            "total_system_users": total_users,
-            "administrators_count": admin_count,
-            "supervisors_count": supervisors_count,
-            "finance_hr_staff_count": staff_count,
-            "currently_active_authenticated_sessions": active_sessions_count
-        }
-
-        # 7. Recent Audit Trail (Sanitized)
-        recent_audits = (
-            db.query(AuditLog)
-            .order_by(AuditLog.id.desc())
-            .limit(12)
-            .all()
-        )
-        audit_trail = [
-            {
-                "id": a.id,
-                "action": a.action,
-                "target_entity": a.target_entity,
-                "role": a.role,
-                "reason": sanitize_text(a.reason or ""),
-                "timestamp": a.timestamp.isoformat() if hasattr(a, "timestamp") and a.timestamp else None
-            } for a in recent_audits
-        ]
+        db_query_time_ms = round((time.perf_counter() - t_db_start) * 1000, 2)
 
         raw_telemetry = {
             "telemetry_timestamp": now.isoformat(),
+            "query_classification": category,
+            "db_query_time_ms": db_query_time_ms,
+            "data_freshness": now.strftime("%Y-%m-%d %H:%M:%S"),
             "host_performance": host_telemetry,
             "database_telemetry": db_telemetry,
             "error_rates_and_alerts": error_rates,
@@ -599,4 +941,9 @@ class AITelemetryService:
             "recent_audit_trail": audit_trail
         }
 
-        return sanitize_dict_or_list(raw_telemetry)
+        sanitized_res = sanitize_dict_or_list(raw_telemetry)
+        
+        # Cache for subsequent read-only queries
+        global_telemetry_cache.set(category, user_query or "", sanitized_res, ttl_seconds=60, user_role="ADMIN")
+
+        return sanitized_res

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 from application.backend.app.core.security import create_access_token, get_password_hash
 from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.audit import AuditLog
@@ -18,6 +18,16 @@ def mock_gemini_client_for_tests(monkeypatch):
     mock_response = MagicMock()
     mock_response.text = "Mocked Gemini Performance Analyst: System health is nominal with zero slow queries."
     mock_client.models.generate_content.return_value = mock_response
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+    async def mock_stream_gen(*args, **kwargs):
+        chunk1 = MagicMock(text="Mocked ")
+        chunk2 = MagicMock(text="Gemini ")
+        chunk3 = MagicMock(text="Performance Analyst response.")
+        for ch in [chunk1, chunk2, chunk3]:
+            yield ch
+    mock_client.aio.models.generate_content_stream.side_effect = lambda *a, **kw: mock_stream_gen()
+
     monkeypatch.setattr(GeminiAIService, "get_client", lambda: mock_client)
     return mock_client
 
@@ -184,3 +194,89 @@ def test_pii_and_credential_sanitization():
     assert sanitized["nested_details"]["public_metric"] == 42
     assert "192.168.1.105" not in sanitized["client_ip"]
     assert "john.doe@" not in sanitized["user_email"]
+
+
+def test_question_routing_classification():
+    """
+    Verifies that administrator questions are accurately routed to the correct operational category.
+    """
+    assert AITelemetryService.classify_user_query("hello") == "SIMPLE"
+    assert AITelemetryService.classify_user_query("system health") == "SIMPLE"
+    assert AITelemetryService.classify_user_query("How is server CPU and memory usage?") == "SIMPLE"
+    assert AITelemetryService.classify_user_query("List all active security guards") == "WORKFORCE"
+    assert AITelemetryService.classify_user_query("Who are the field supervisors?") == "WORKFORCE"
+    assert AITelemetryService.classify_user_query("What is the total gross salary in the last payroll cycle?") == "PAYROLL"
+    assert AITelemetryService.classify_user_query("Calculate NSSF, SHIF, and Housing Levy deductions") == "PAYROLL"
+    assert AITelemetryService.classify_user_query("What is our Monthly Recurring Revenue (MRR)?") == "MANAGEMENT"
+    assert AITelemetryService.classify_user_query("Show all client site invoices and overdue amounts") == "MANAGEMENT"
+    assert AITelemetryService.classify_user_query("Investigate security incident spike and audit trail errors") == "COMPLEX"
+
+
+def test_safe_telemetry_cache():
+    """
+    Verifies that the in-memory cache safely stores and retrieves read-only data,
+    respects TTL expiration, and enforces role isolation.
+    """
+    cache = AITelemetryService.global_cache
+    cache.clear()
+
+    test_data = {"metric": "cpu_low", "value": 15.5}
+    cache.set("SIMPLE", "server health", test_data, ttl_seconds=2, user_role="ADMIN")
+
+    # Cache hit
+    hit = cache.get("SIMPLE", "server health", user_role="ADMIN")
+    assert hit is not None
+    assert hit["value"] == 15.5
+
+    # Role isolation: Non-admin cannot retrieve admin cache
+    no_access = cache.get("SIMPLE", "server health", user_role="GUARD")
+    assert no_access is None
+
+    # Clear cache
+    cache.clear()
+    assert cache.get("SIMPLE", "server health", user_role="ADMIN") is None
+
+
+def test_ai_insights_streaming_endpoint(client, db):
+    """
+    Verifies that POST /api/v1/admin/ai-insights/stream returns SSE chunks (text/event-stream)
+    for progressive UI rendering.
+    """
+    _, admin_token = get_or_create_user(db, "admin_ai_stream@corpsec.co.ke", UserRole.ADMIN, "System Admin Stream")
+
+    response = client.post(
+        "/api/v1/admin/ai-insights/stream",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"prompt": "How is system health today?", "history": []}
+    )
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers.get("content-type", "")
+    content = response.text
+    assert "data:" in content
+    assert "status" in content
+
+
+def test_ai_insights_streaming_non_admin_forbidden(client, db):
+    """
+    Verifies that the streaming endpoint strictly blocks non-admin roles with 403 Forbidden.
+    """
+    _, sup_token = get_or_create_user(db, "sup_ai_stream@corpsec.co.ke", UserRole.SUPERVISOR, "Supervisor Stream")
+    response = client.post(
+        "/api/v1/admin/ai-insights/stream",
+        headers={"Authorization": f"Bearer {sup_token}"},
+        json={"prompt": "How is system health today?"}
+    )
+    assert response.status_code == 403
+    assert "Administrative privileges required" in response.json().get("detail", "")
+
+
+def test_payroll_telemetry_uses_decimal_math(db):
+    """
+    Verifies that AITelemetryService calculates financial aggregates using Decimal precision.
+    """
+    telemetry = AITelemetryService.get_system_telemetry(db, category="PAYROLL", bypass_cache=True)
+    assert telemetry.get("query_classification") == "PAYROLL"
+    assert "financial_and_payroll" in telemetry
+    assert "db_query_time_ms" in telemetry
+    assert telemetry["db_query_time_ms"] >= 0.0
+

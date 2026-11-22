@@ -888,7 +888,35 @@ async function initApp() {
   }
 }
 
+function normalizeTabId(id) {
+  if (!id) return 'dashboard';
+  let clean = String(id).trim().toLowerCase().replace(/^#/, '');
+  clean = clean.replace(/_/g, '-').replace(/%20/g, '-').replace(/\s+/g, '-');
+  const aliasMap = {
+    'teamchat': 'team-chat',
+    'team-chart': 'team-chat',
+    'team_chart': 'team-chat',
+    'teamchart': 'team-chat',
+    'chat': 'team-chat',
+    'callcenter': 'call-center',
+    'call-centre': 'call-center',
+    'call_centre': 'call-center',
+    'aiassistant': 'ai-assistant',
+    'ai': 'ai-assistant',
+    'ai-insights': 'ai-assistant',
+    'ai_insights': 'ai-assistant',
+    'salaryadvances': 'salary-advances',
+    'salary_advances': 'salary-advances',
+    'companyhistory': 'company-history',
+    'company_history': 'company-history',
+    'downloadapp': 'download-app',
+    'download_app': 'download-app'
+  };
+  return aliasMap[clean] || clean;
+}
+
 function switchTab(tabId, updateHistory = true) {
+  tabId = normalizeTabId(tabId);
   const user = getLoggedInUser();
   if (user && user.role === 'SUPERVISOR' && (tabId === 'payroll' || tabId === 'payments' || tabId === 'salary-advances' || tabId === 'statutory' || tabId === 'staff' || tabId === 'audit' || tabId === 'documents' || tabId === 'invoices' || tabId === 'clients' || tabId === 'assets' || tabId === 'company-history' || tabId === 'expenses')) {
     showToast('Access Denied: Expenses, petty cash, payroll, and finances are restricted to Admin & HR.', 'danger');
@@ -1020,24 +1048,33 @@ function switchTab(tabId, updateHistory = true) {
   }
 }
 
-// Browser Back & Forward Navigation Handler
+// Browser Back & Forward & Hash Navigation Handlers
+function restoreTabFromHash() {
+  if (window.location.hash) {
+    const cleanTab = normalizeTabId(window.location.hash);
+    if (cleanTab && cleanTab !== window.currentActiveTab) {
+      if (document.getElementById(`panel-${cleanTab}`)) {
+        switchTab(cleanTab, false);
+      }
+    }
+  }
+}
+
 window.addEventListener('popstate', (event) => {
-  const targetTab = (event.state && event.state.tabId) || (window.location.hash ? window.location.hash.replace('#', '') : 'dashboard');
+  const rawTab = (event.state && event.state.tabId) || (window.location.hash ? window.location.hash.replace('#', '') : 'dashboard');
+  const targetTab = normalizeTabId(rawTab);
   if (targetTab && targetTab !== window.currentActiveTab) {
     switchTab(targetTab, false);
   }
 });
 
+window.addEventListener('hashchange', restoreTabFromHash);
+
 // Restore active tab from URL hash on load
-if (window.location.hash) {
-  const initialHashTab = window.location.hash.replace('#', '');
-  if (initialHashTab) {
-    window.addEventListener('DOMContentLoaded', () => {
-      if (document.getElementById(`panel-${initialHashTab}`)) {
-        switchTab(initialHashTab, false);
-      }
-    });
-  }
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', restoreTabFromHash);
+} else {
+  restoreTabFromHash();
 }
 
 async function apiFetch(endpoint, options = {}) {
