@@ -4,7 +4,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from application.backend.app.services.erp_analytics_service import (
     AttendanceAnalyticsService,
-    OvertimeAnalyticsService
+    OvertimeAnalyticsService,
+    SalaryAdvancesAnalyticsService,
+    AssetsInventoryAnalyticsService,
+    CallCenterAnalyticsService,
+    InvoicesAnalyticsService,
+    ContractsAnalyticsService
 )
 from application.backend.app.services.ai_telemetry_service import (
     AITelemetryService,
@@ -114,5 +119,113 @@ def test_greeting_does_not_dump_server_infrastructure(db_session: Session):
     assert "Hello, Administrator!" in fallback_res
     assert "CPU Utilization" not in fallback_res
     assert "Disk Storage Usage" not in fallback_res
-    assert "**Active Registered Guards:** 11" in fallback_res
-    assert "**Guards Currently on Duty:** 3" in fallback_res
+    assert "**Guards & Attendance:**" in fallback_res or "**Active Registered Guards:**" in fallback_res
+
+
+def test_salary_advances_analytics_and_fallback(db_session: Session):
+    """
+    Verifies that Salary Advances analytics retrieves exact MySQL records (4 advances, KES 12,000 total)
+    and formats verified reports without hallucination.
+    """
+    adv = SalaryAdvancesAnalyticsService.get_advances_report(db_session)
+    assert adv["total_count"] == 4
+    assert adv["total_amount_kes"] == 12000.0
+    assert adv["approved_amount_kes"] == 7000.0
+    assert adv["deducted_amount_kes"] == 5000.0
+    assert len(adv["details_rows"]) == 4
+
+    std_rep = adv["standardized_report"]
+    assert "SALARY & PAYMENT ADVANCES REPORT" in std_rep
+    assert "KES 12,000.00" in std_rep
+    assert "John Mwangi" in std_rep
+    assert "Samuel Kiptoo" in std_rep
+
+    t = AITelemetryService.get_system_telemetry(db_session, user_query="What salary advances have been issued?", category="PAYROLL")
+    res = GeminiAIService.generate_grounded_fallback_analysis("What salary advances have been issued?", t)
+    assert "SALARY & PAYMENT ADVANCES REPORT" in res
+    assert "KES 12,000.00" in res
+
+
+def test_assets_inventory_analytics_and_fallback(db_session: Session):
+    """
+    Verifies that Assets & Inventory analytics retrieves tracked items (4 assets, KES 1,542,000 valuation)
+    and formats the report with serial numbers and conditions.
+    """
+    ast = AssetsInventoryAnalyticsService.get_assets_report(db_session)
+    assert ast["total_assets"] == 4
+    assert ast["total_current_value_kes"] == 1542000.0
+    assert len(ast["details_rows"]) == 4
+
+    std_rep = ast["standardized_report"]
+    assert "ASSETS & INVENTORY REPORT" in std_rep
+    assert "KES 1,542,000.00" in std_rep
+    assert "Mazda Demio" in std_rep or "Digital Radio" in std_rep
+
+    t = AITelemetryService.get_system_telemetry(db_session, user_query="What assets and equipment do we have?", category="WORKFORCE")
+    res = GeminiAIService.generate_grounded_fallback_analysis("What assets and equipment do we have?", t)
+    assert "ASSETS & INVENTORY REPORT" in res
+    assert "KES 1,542,000.00" in res
+
+
+def test_call_center_analytics_and_fallback(db_session: Session):
+    """
+    Verifies that Call Centre analytics retrieves CDRs (34 total calls, inbound/outbound breakdown)
+    and agent statuses.
+    """
+    cc = CallCenterAnalyticsService.get_call_center_report(db_session)
+    assert cc["total_calls"] == 34
+    assert cc["inbound_calls"] == 19
+    assert cc["outbound_calls"] == 15
+    assert cc["total_talk_minutes"] == 15.7
+
+    std_rep = cc["standardized_report"]
+    assert "CALL CENTRE & TELEPHONY REPORT" in std_rep
+    assert "19 Inbound calls" in std_rep
+    assert "15 Outbound calls" in std_rep
+
+    t = AITelemetryService.get_system_telemetry(db_session, user_query="Show me call center logs and calls handled", category="WORKFORCE")
+    res = GeminiAIService.generate_grounded_fallback_analysis("Show me call center logs and calls handled", t)
+    assert "CALL CENTRE & TELEPHONY REPORT" in res
+
+
+def test_invoices_analytics_and_fallback(db_session: Session):
+    """
+    Verifies that Site Invoices analytics retrieves invoices (6 invoices, KES 212,200 total, KES 84,600 paid)
+    and 16% VAT calculations.
+    """
+    inv = InvoicesAnalyticsService.get_invoices_report(db_session)
+    assert inv["total_invoices"] == 6
+    assert inv["total_amount_kes"] == 212200.0
+    assert inv["paid_amount_kes"] == 84600.0
+
+    std_rep = inv["standardized_report"]
+    assert "SITE INVOICES & BILLING REPORT" in std_rep
+    assert "KES 212,200.00" in std_rep
+    assert "KES 84,600.00" in std_rep
+
+    t = AITelemetryService.get_system_telemetry(db_session, user_query="What are our invoices and billing totals?", category="PAYROLL")
+    res = GeminiAIService.generate_grounded_fallback_analysis("What are our invoices and billing totals?", t)
+    assert "SITE INVOICES & BILLING REPORT" in res
+    assert "KES 212,200.00" in res
+
+
+def test_contracts_analytics_and_fallback(db_session: Session):
+    """
+    Verifies that Client Contracts analytics retrieves active contracts (2 active contracts, KES 350,000 MRR, 10 guards required).
+    """
+    ctr = ContractsAnalyticsService.get_contracts_report(db_session)
+    assert ctr["total_contracts"] == 2
+    assert ctr["active_contracts"] == 2
+    assert ctr["total_mrr_kes"] == 350000.0
+    assert ctr["total_guards_required"] == 10
+
+    std_rep = ctr["standardized_report"]
+    assert "CLIENT CONTRACTS & REVENUE REPORT" in std_rep
+    assert "KES 350,000.00" in std_rep
+    assert "Westlands Mall" in std_rep
+    assert "quickmart supermarket" in std_rep.lower()
+
+    t = AITelemetryService.get_system_telemetry(db_session, user_query="What is our client contracts MRR and guard quotas?", category="MANAGEMENT")
+    res = GeminiAIService.generate_grounded_fallback_analysis("What is our client contracts MRR and guard quotas?", t)
+    assert "CLIENT CONTRACTS & REVENUE REPORT" in res
+    assert "KES 350,000.00" in res

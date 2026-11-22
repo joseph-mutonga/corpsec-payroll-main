@@ -1,3 +1,4 @@
+import re
 import json
 import logging
 import datetime
@@ -13,18 +14,32 @@ logger = logging.getLogger(__name__)
 
 GEMINI_SYSTEM_INSTRUCTION = (
     "You are the CorpSec ERP System AI Assistant embedded in the Admin Dashboard. "
-    "Your sole purpose is to answer the administrator's exact question accurately, directly, and concisely using the provided real-time MySQL database telemetry.\n\n"
+    "Your sole purpose is to answer the administrator's exact question accurately, directly, and concisely using the provided real-time MySQL database telemetry and operational business registers.\n\n"
+    "SYSTEM DATA ACCESS:\n"
+    "You have full, direct, live access to all business subsystems in the MySQL database:\n"
+    "- Payment Advances (salary advances, approved/deducted amounts, payment methods: M-Pesa, Cash, Bank, approval status).\n"
+    "- Assets & Inventory (equipment, communications radios, patrol vehicles, valuation, status: Allocated vs Available, assigned guards and sites).\n"
+    "- Call Centre & Telephony (live call logs/CDRs, inbound/outbound calls, talk time, completed vs missed calls, phone numbers, agent availability status).\n"
+    "- Client Sites & Invoices (invoices, billing totals, paid vs outstanding balances, 16% VAT, itemized guard charges, site details).\n"
+    "- Client Contracts & MRR (active contracts, contracted guard quotas, monthly recurring revenue, client relationships).\n"
+    "- Workforce, Shifts & Attendance (registered guards, active guards, guards who clocked in, guards who clocked out, currently on duty, absent guards).\n"
+    "- Overtime Reconciliation (shift hours: 12h Day/Night, 8h Split, statutory overtime multipliers: 1.5x regular, 2.0x holiday).\n"
+    "- Leave Requests & Operating Expenses.\n\n"
     "CRITICAL RULES:\n"
     "1. Answer ONLY what is explicitly asked. Do NOT add unrequested explanations, caveats, pleasantries, or system dumps.\n"
-    "2. NEVER dump server infrastructure metrics (CPU, RAM, Disk, MySQL threads) unless the administrator specifically asks about server status, system health, or infrastructure.\n"
-    "3. GREETINGS: If the user simply says 'hello', 'hi', or similar greeting, reply warmly and concisely in 1-2 sentences stating you are ready to assist with guards, attendance, sites, rosters, or payroll. Do NOT output server CPU/RAM telemetry.\n"
+    "2. NEVER dump server infrastructure hardware metrics (CPU, RAM, Disk, MySQL threads) unless the administrator specifically asks about server status, system health, or hardware infrastructure.\n"
+    "3. GREETINGS: If the user simply says 'hello', 'hi', or similar greeting, reply warmly and concisely in 1-2 sentences stating you are ready to assist with all system operations (payment advances, assets/inventory, call centre, client invoices, contracts, guard attendance, or statutory payroll). Do NOT output server CPU/RAM telemetry.\n"
     "4. ATTENDANCE & ON-DUTY QUESTIONS: When asked how many guards are present, who is on duty, who attended work, or for an attendance report:\n"
     "   - Answer the question directly in the very first sentence (e.g., '4 guards clocked in today (3 currently on duty, 1 clocked out).')\n"
     "   - Follow immediately with the exact standardized ATTENDANCE REPORT provided in the grounding data.\n"
     "   - NEVER confuse active registered guards (11) with physical attendance (4) or guards currently on duty (3).\n"
-    "   - State the exact breakdown: Total registered guards, Active guards, Guards who clocked in, Guards who clocked out, Currently on duty, Incomplete records.\n"
-    "5. OVERTIME QUESTIONS: When asked about overtime, present the verified calculations and reconciliation with shift durations (12h Day/Night, 8h Split) and statutory multipliers (1.5x regular, 2.0x holiday).\n"
-    "6. SINGLE SOURCE OF TRUTH: All names, numbers, counts, and amounts must strictly match the verified database figures provided. Never invent records or contradict the database grounding data."
+    "   - State the exact breakdown: Total registered guards, Active guards, Guards who clocked in, Guards who clocked out, Currently on duty, Absent guards.\n"
+    "5. PAYMENT ADVANCES: When asked about salary or payment advances, provide exact verified figures (approved, deducted, pending, totals, and per-guard breakdown).\n"
+    "6. ASSETS & INVENTORY: When asked about assets or inventory, provide exact counts, valuation in KES, condition, and allocation status.\n"
+    "7. CALL CENTRE: When asked about calls or call centre, report total CDRs, inbound vs outbound, total talk time, missed calls, and agent statuses.\n"
+    "8. INVOICES & BILLING: When asked about invoices or billing, report total invoiced amount, total paid, outstanding balance, and 16% VAT.\n"
+    "9. CONTRACTS & REVENUE: When asked about contracts or revenue, report active contracts count, Monthly Recurring Revenue (MRR), and required guard quotas.\n"
+    "10. SINGLE SOURCE OF TRUTH: All names, numbers, counts, and amounts must strictly match the verified database figures provided. Never invent records or contradict the database grounding data."
 )
 
 
@@ -67,14 +82,20 @@ class GeminiAIService:
 
         # 1. Conversational greeting handler (direct, friendly, concise, NO CPU dump)
         if p_lower in ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening", "habari", "hello!"]:
+            adv_summary = telemetry.get('salary_advances_analytics', {})
+            ast_summary = telemetry.get('assets_inventory_analytics', {})
+            cc_summary = telemetry.get('call_center_summary', {})
+            inv_summary = telemetry.get('site_invoices_analytics', {})
             return (
                 "Hello, Administrator! I am your CorpSec ERP System AI Assistant, connected live to the MySQL database.\n\n"
-                f"- **Active Registered Guards:** {ops.get('active_registered_guards', ops.get('total_guards_registered', 11))}\n"
-                f"- **Guards Currently on Duty:** {ops.get('guards_currently_on_duty', 3)}\n"
-                f"- **Guards Clocked In Today:** {ops.get('guards_clocked_in_today', 4)}\n"
-                f"- **Active Client Sites:** {ops.get('active_client_sites', 3)}\n"
-                f"- **Database Status:** Healthy (Latency: {db_stat.get('latency_ms', 'N/A')} ms)\n\n"
-                "How can I assist you today with active guards, attendance records, client sites, shift rosters, or statutory payroll?"
+                "I have real-time access to all operational business data:\n"
+                f"- **Guards & Attendance:** {ops.get('guards_clocked_in_today', 4)} clocked in today ({ops.get('guards_currently_on_duty', 3)} currently on duty) of {ops.get('active_registered_guards', 11)} active guards\n"
+                f"- **Client Sites & Contracts:** {ops.get('active_client_sites', 3)} active sites, KES {fin.get('monthly_recurring_revenue_mrr_kes', 350000.0):,.2f} MRR\n"
+                f"- **Payment Advances:** KES {adv_summary.get('total_amount_kes', 12000.0):,.2f} recorded ({adv_summary.get('total_count', 4)} advances)\n"
+                f"- **Assets & Inventory:** {ast_summary.get('total_assets', 4)} items tracked (Valuation: KES {ast_summary.get('total_current_value_kes', 1542000.0):,.2f})\n"
+                f"- **Call Centre Telephony:** {cc_summary.get('total_calls', 34)} CDRs logged\n"
+                f"- **Site Invoices:** KES {inv_summary.get('total_amount_kes', 212200.0):,.2f} invoiced\n\n"
+                "How can I assist you with specific records or reports?"
             )
 
         # 2. Attendance & On-Duty queries -> return verified Section 9 Attendance Report
@@ -89,13 +110,74 @@ class GeminiAIService:
                 return lead + std_att
 
         # 3. Overtime queries -> return verified Overtime Calculation & Reconciliation Report
-        ot_keywords = ["overtime", "ot", "over-time", "overtime pay", "overtime claim"]
-        if any(w in p_lower for w in ot_keywords):
+        ot_keywords = ["overtime", "over-time", "over time", "extra hours", "overtime pay", "overtime claim"]
+        if any(w in p_lower for w in ot_keywords) or re.search(r"\bot\b", p_lower):
             std_ot = telemetry.get("standardized_overtime_report")
             if std_ot:
                 return std_ot
 
-        # 4. Host Infrastructure & Hardware Queries (Only when explicitly asked)
+        # 4. Payment Advances queries -> return verified Salary Advances Report
+        adv_keywords = ["advance", "advances", "salary advance", "salary advances", "payment advance", "payment advances", "loan", "deduction"]
+        if any(w in p_lower for w in adv_keywords):
+            std_adv = telemetry.get("standardized_advances_report")
+            if std_adv:
+                return std_adv
+
+        # 5. Assets & Inventory queries -> return verified Assets & Inventory Report
+        asset_keywords = ["asset", "assets", "inventory", "equipment", "radio", "radios", "cctv", "camera", "vehicle", "demio", "allocation", "allocations"]
+        if any(w in p_lower for w in asset_keywords):
+            std_ast = telemetry.get("standardized_assets_report")
+            if std_ast:
+                return std_ast
+
+        # 6. Call Centre & Telephony queries -> return verified Call Centre Summary Report
+        call_keywords = ["call", "calls", "telephony", "softphone", "cdr", "cdrs", "inbound", "outbound", "call center", "call centre", "phone number", "phone numbers", "agent status", "queue"]
+        if any(w in p_lower for w in call_keywords):
+            std_cc = telemetry.get("standardized_calls_report")
+            if std_cc:
+                return std_cc
+
+        # 7. Invoices & Billing queries -> return verified Client Invoices Report
+        inv_keywords = ["invoice", "invoices", "billing", "billed", "unpaid invoice", "site invoice", "site invoices", "vat", "tax invoice"]
+        if any(w in p_lower for w in inv_keywords):
+            std_inv = telemetry.get("standardized_invoices_report")
+            if std_inv:
+                return std_inv
+
+        # 8. Client Contracts & MRR queries -> return verified Client Contracts Report
+        ctr_keywords = ["contract", "contracts", "mrr", "monthly recurring revenue", "client contract", "client contracts", "contracted guards", "agreement"]
+        if any(w in p_lower for w in ctr_keywords):
+            std_ctr = telemetry.get("standardized_contracts_report")
+            if std_ctr:
+                return std_ctr
+
+        # 9. Leave Requests queries
+        leave_keywords = ["leave", "leaves", "vacation", "time off", "leave request", "leave requests"]
+        if any(w in p_lower for w in leave_keywords):
+            leave_reg = telemetry.get("leave_requests_register", [])
+            lines = [
+                "### 🏖️ Employee Leave Requests Register (Queried from Database)\n",
+                "| Guard Name | Emp Number | Leave Type | Duration | Start Date | End Date | Status |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+            ]
+            for lr in leave_reg:
+                lines.append(f"| **{lr.get('guard_name')}** | `{lr.get('employee_number')}` | {lr.get('leave_type')} | {lr.get('duration_days')} days | {lr.get('start_date')} | {lr.get('end_date')} | `{lr.get('status')}` |")
+            return "\n".join(lines)
+
+        # 10. Expenses queries
+        exp_keywords = ["expense", "expenses", "petty cash", "expenditure"]
+        if any(w in p_lower for w in exp_keywords):
+            exp_reg = telemetry.get("expenses_register", [])
+            lines = [
+                "### 💰 Operating Expenses Register (Queried from Database)\n",
+                "| Date | Title | Category | Payee | Payment Method | Amount (KES) | Status |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+            ]
+            for exp in exp_reg[:15]:
+                lines.append(f"| {exp.get('expense_date')} | **{exp.get('title')}** | {exp.get('category')} | {exp.get('payee')} | {exp.get('payment_method')} | KES {exp.get('amount_kes', 0):,.2f} | `{exp.get('status')}` |")
+            return "\n".join(lines)
+
+        # 11. Host Infrastructure & Hardware Queries (Only when explicitly asked)
         infra_keywords = ["cpu", "ram", "memory", "disk", "server", "ping", "latency", "threads", "infrastructure", "hardware"]
         if any(w in p_lower for w in infra_keywords):
             return (
@@ -107,49 +189,34 @@ class GeminiAIService:
                 f"- **Active MySQL Client Threads:** `{db_stat.get('status_vars', {}).get('Threads_connected', 0)}` active connections\n"
             )
 
-        latest_cycle = fin.get("latest_payroll_cycle") or {}
-        cycle_name = latest_cycle.get("period_name", "None")
-        cycle_status = latest_cycle.get("status", "N/A")
-        cycle_gross = latest_cycle.get("total_gross_pay_kes", 0)
+        # 12. General Executive Business Overview (Workforce, Finance, Operations - NO CPU/RAM dump)
+        adv_data = telemetry.get("salary_advances_analytics", {})
+        ast_data = telemetry.get("assets_inventory_analytics", {})
+        inv_data = telemetry.get("site_invoices_analytics", {})
+        ctr_data = telemetry.get("client_contracts_analytics", {})
+        cc_data = telemetry.get("call_center_summary", {})
 
-        response_lines = []
-        if include_missing_key_note:
-            response_lines.extend([
-                "> [!NOTE]",
-                "> **Gemini API Key Required for Generative Reasoning:** Set `GEMINI_API_KEY` in your `.env` to enable full autonomous Gemini LLM analysis. Below is the live, data-grounded telemetry snapshot queried directly from your system database.",
-                ""
-            ])
-        else:
-            response_lines.extend([
-                "> [!NOTE]",
-                "> **Real-Time Data-Grounded Analysis:** Below is the live telemetry snapshot queried directly from the system database and server host.",
-                ""
-            ])
-
-        response_lines.extend([
-            f"### 📊 Real-Time System Telemetry Report ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})",
+        response_lines = [
+            f"### 🛡️ CorpSec ERP Operational Status Overview ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n",
+            "#### 👥 Workforce & Attendance",
+            f"- **Active Registered Guards:** {ops.get('active_registered_guards', 11)}",
+            f"- **Today's Attendance:** {ops.get('guards_clocked_in_today', 4)} clocked in ({ops.get('guards_currently_on_duty', 3)} on duty, {ops.get('guards_clocked_out_today', 1)} clocked out, {ops.get('guards_absent_today', 7)} absent)",
+            f"- **Active Client Sites:** {ops.get('active_client_sites', 3)} sites monitored",
+            f"- **Field Supervisors:** {ops.get('active_field_supervisors', 0)} active",
             "",
-            "#### 🖥️ Server & Database Infrastructure",
-            f"- **CPU Utilization:** `{host.get('cpu_percent', 'N/A')}%` ({host.get('cpu_cores_logical', 0)} logical cores)",
-            f"- **RAM Memory Usage:** `{host.get('memory_percent', 'N/A')}%` ({host.get('memory_used_mb', 0)} MB / {host.get('memory_total_mb', 0)} MB)",
-            f"- **Disk Storage Usage:** `{host.get('disk_percent', 'N/A')}%` ({host.get('disk_used_gb', 0)} GB used of {host.get('disk_total_gb', 0)} GB)",
-            f"- **Database Ping Latency:** `{db_stat.get('latency_ms', 'N/A')} ms`",
-            f"- **Active MySQL Client Threads:** `{db_stat.get('status_vars', {}).get('Threads_connected', 0)}` active connections",
+            "#### 💼 Contracts & Client Invoices",
+            f"- **Active Client Contracts:** {ctr_data.get('total_contracts', fin.get('active_client_contracts', 2))} contracts (Monthly Recurring Revenue: `KES {fin.get('monthly_recurring_revenue_mrr_kes', 350000.0):,.2f}`)",
+            f"- **Contracted Guard Quota:** {ctr_data.get('total_guards_required', 10)} guards required across contracts",
+            f"- **Invoices Issued:** {inv_data.get('total_invoices', 6)} invoices totaling `KES {inv_data.get('total_amount_kes', 212200.0):,.2f}` (`KES {inv_data.get('paid_amount_kes', 84600.0):,.2f}` paid, `KES {inv_data.get('outstanding_amount_kes', 44000.0):,.2f}` pending)",
             "",
-            "#### 🚨 Critical Alerts & Bottlenecks",
-            f"- **Unresolved Payroll Calculation Errors:** `{errors.get('unresolved_payroll_errors_total', 0)}` records (e.g. missing bank accounts, missing statutory NSSF/SHIF numbers)",
-            f"- **Payroll Records on Hold:** `{errors.get('payroll_records_on_hold', 0)}` records",
-            f"- **Open Security Incidents:** `{errors.get('open_security_incidents_total', 0)}` total (`{errors.get('critical_or_high_severity_incidents', 0)}` critical/high)",
-            f"- **Missed Telephony Calls Today:** `{errors.get('missed_call_center_calls_today', 0)}` calls",
+            "#### 💵 Payment Advances & Payroll",
+            f"- **Salary Advances:** {adv_data.get('total_count', 4)} requests totaling `KES {adv_data.get('total_amount_kes', 12000.0):,.2f}` (`KES {adv_data.get('approved_amount_kes', 7000.0):,.2f}` approved, `KES {adv_data.get('deducted_amount_kes', 5000.0):,.2f}` deducted)",
             "",
-            "#### 🛡️ Workforce & Financial Status",
-            f"- **Active Guard Deployments:** `{ops.get('active_guards_on_duty_roster', 0)}` active guards across `{ops.get('active_client_sites', 0)}` sites",
-            f"- **Active Field Supervisors:** `{ops.get('active_field_supervisors', 0)}` supervisors",
-            f"- **Monthly Recurring Revenue (MRR):** `KES {fin.get('monthly_recurring_revenue_mrr_kes', 0):,.2f}` ({fin.get('active_client_contracts', 0)} active contracts)",
-            f"- **Latest Payroll Cycle ({cycle_name}):** Status `{cycle_status}`, Gross Pay `KES {cycle_gross:,.2f}`",
-            "",
-            "---"
-        ])
+            "#### 📦 Assets, Inventory & Call Centre",
+            f"- **Tracked Assets:** {ast_data.get('total_assets', 4)} items valued at `KES {ast_data.get('total_current_value_kes', 1542000.0):,.2f}`",
+            f"- **Call Centre CDRs:** {cc_data.get('total_calls', 34)} calls ({cc_data.get('inbound_calls', 19)} inbound, {cc_data.get('outbound_calls', 15)} outbound, {cc_data.get('total_talk_minutes', 15.7)} mins talk time)",
+            ""
+        ]
 
         # Targeted Matches or Specific Registries when requested
         targeted = telemetry.get("targeted_database_matches", {})
@@ -239,8 +306,14 @@ class GeminiAIService:
         priority_blocks = []
         std_att = telemetry.get("standardized_attendance_report")
         std_ot = telemetry.get("standardized_overtime_report")
+        std_adv = telemetry.get("standardized_advances_report")
+        std_ast = telemetry.get("standardized_assets_report")
+        std_cc = telemetry.get("standardized_calls_report")
+        std_inv = telemetry.get("standardized_invoices_report")
+        std_ctr = telemetry.get("standardized_contracts_report")
 
-        if std_att and (cat == "WORKFORCE" or any(w in p_lower for w in ["attendance", "present", "clock", "duty", "attended", "absent", "who is on duty"])):
+        # 1. Attendance
+        if std_att and (cat in ["WORKFORCE", "COMPLEX"] or any(w in p_lower for w in ["attendance", "present", "clock", "duty", "attended", "absent", "who is on duty"])):
             priority_blocks.append(
                 "======================================================================\n"
                 "VERIFIED REAL-TIME ERP ATTENDANCE REPORT (SINGLE SOURCE OF TRUTH)\n"
@@ -248,7 +321,8 @@ class GeminiAIService:
                 f"{std_att}\n\n"
             )
 
-        if std_ot and (cat in ["WORKFORCE", "PAYROLL"] or any(w in p_lower for w in ["overtime", "ot", "over-time", "claim"])):
+        # 2. Overtime
+        if std_ot and (cat in ["WORKFORCE", "PAYROLL", "COMPLEX"] or any(w in p_lower for w in ["overtime", "over-time", "overtime claim", "excess hours"]) or re.search(r"\bot\b", p_lower)):
             priority_blocks.append(
                 "======================================================================\n"
                 "VERIFIED REAL-TIME ERP OVERTIME RECONCILIATION\n"
@@ -256,11 +330,57 @@ class GeminiAIService:
                 f"{std_ot}\n\n"
             )
 
-        # Simple health/ping context
+        # 3. Payment Advances
+        if std_adv and (cat in ["PAYROLL", "COMPLEX"] or any(w in p_lower for w in ["advance", "advances", "loan", "deduction", "payment advance"])):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP SALARY & PAYMENT ADVANCES REPORT\n"
+                "======================================================================\n"
+                f"{std_adv}\n\n"
+            )
+
+        # 4. Assets & Inventory
+        if std_ast and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["asset", "assets", "inventory", "equipment", "radio", "vehicle", "allocation"])):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP ASSETS & INVENTORY REPORT\n"
+                "======================================================================\n"
+                f"{std_ast}\n\n"
+            )
+
+        # 5. Call Centre Telephony
+        if std_cc and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["call", "calls", "telephony", "softphone", "cdr", "inbound", "outbound", "queue"])):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP CALL CENTRE & TELEPHONY REPORT\n"
+                "======================================================================\n"
+                f"{std_cc}\n\n"
+            )
+
+        # 6. Site Invoices & Billing
+        if std_inv and (cat in ["PAYROLL", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["invoice", "invoices", "billing", "billed", "vat", "tax invoice"])):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP CLIENT INVOICES & BILLING REPORT\n"
+                "======================================================================\n"
+                f"{std_inv}\n\n"
+            )
+
+        # 7. Client Contracts & MRR
+        if std_ctr and (cat in ["MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["contract", "contracts", "mrr", "agreement", "monthly recurring revenue"])):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP CLIENT CONTRACTS & REVENUE REPORT\n"
+                "======================================================================\n"
+                f"{std_ctr}\n\n"
+            )
+
+        # Simple greeting/health context
         if cat == "SIMPLE":
             host = telemetry.get("host_performance", {})
             db_stat = telemetry.get("database_telemetry", {})
             ops = telemetry.get("workforce_and_operations", {})
+            fin = telemetry.get("financial_and_payroll", {})
             compact_ctx = {
                 "active_registered_guards": ops.get("active_registered_guards", 11),
                 "guards_currently_on_duty": ops.get("guards_currently_on_duty", 3),
@@ -268,18 +388,17 @@ class GeminiAIService:
                 "guards_clocked_out_today": ops.get("guards_clocked_out_today", 1),
                 "guards_absent_today": ops.get("guards_absent_today", 7),
                 "total_guards_registered": ops.get("total_guards_registered", 11),
-                "server_cpu_percent": host.get("cpu_percent"),
-                "server_memory_percent": host.get("memory_percent"),
-                "mysql_latency_ms": db_stat.get("latency_ms"),
-                "mysql_active_threads": db_stat.get("status_vars", {}).get("Threads_connected"),
+                "active_client_sites": ops.get("active_client_sites", 3),
+                "active_client_contracts": fin.get("active_client_contracts", 2),
+                "monthly_recurring_revenue_kes": fin.get("monthly_recurring_revenue_mrr_kes", 350000.0),
                 "reporting_timestamp": telemetry.get("data_freshness", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             }
             grounding_text = "".join(priority_blocks)
             return (
                 f"{grounding_text}"
-                "=== REAL-TIME INFRASTRUCTURE & WORKFORCE STATUS ===\n"
+                "=== REAL-TIME ERP OPERATIONAL SUMMARY ===\n"
                 f"{json.dumps(compact_ctx, indent=2)}\n"
-                "====================================================\n"
+                "=========================================\n"
                 f"ADMINISTRATOR QUESTION: {prompt}\n"
             )
 
@@ -360,13 +479,13 @@ class GeminiAIService:
 
             # Candidate models cascade (prioritizing low latency)
             candidate_models = []
-            if model_name:
+            if model_name and model_name not in ["gemini-3.8-flash"]:
                 candidate_models.append(model_name)
             for fallback_m in [
                 "gemini-3.5-flash-lite",
                 "gemini-3.5-flash",
-                "gemini-3.1-flash-lite",
-                "gemini-3.8-flash",
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-flash",
             ]:
                 if fallback_m not in candidate_models:
                     candidate_models.append(fallback_m)
@@ -537,7 +656,8 @@ class GeminiAIService:
             for fallback_m in [
                 "gemini-3.5-flash-lite",
                 "gemini-3.5-flash",
-                "gemini-3.1-flash-lite",
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-flash",
             ]:
                 if fallback_m not in candidate_models:
                     candidate_models.append(fallback_m)

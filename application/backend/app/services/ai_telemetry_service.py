@@ -27,10 +27,18 @@ from application.backend.app.models.payroll import PayrollPeriod, PayrollRecord,
 from application.backend.app.models.invoice import SiteInvoice
 from application.backend.app.models.expense import Expense, PettyCashTransaction
 from application.backend.app.models.client_contract import ClientContract, Client
-from application.backend.app.models.call_center import CallLog
+from application.backend.app.models.call_center import CallLog, PhoneNumber, CallQueue, AgentStatus
+from application.backend.app.models.salary_advance import SalaryAdvance
+from application.backend.app.models.asset import Asset, AssetCategory, AssetAllocation
+from application.backend.app.models.leave import LeaveRequest
 from application.backend.app.services.erp_analytics_service import (
     AttendanceAnalyticsService,
-    OvertimeAnalyticsService
+    OvertimeAnalyticsService,
+    SalaryAdvancesAnalyticsService,
+    AssetsInventoryAnalyticsService,
+    CallCenterAnalyticsService,
+    InvoicesAnalyticsService,
+    ContractsAnalyticsService
 )
 
 
@@ -343,7 +351,13 @@ class AITelemetryService:
             "matched_guards": [],
             "matched_supervisors": [],
             "matched_sites": [],
-            "matched_incidents": []
+            "matched_incidents": [],
+            "matched_salary_advances": [],
+            "matched_assets": [],
+            "matched_invoices": [],
+            "matched_contracts": [],
+            "matched_calls": [],
+            "matched_leave_requests": []
         }
 
         # 1. Guards search
@@ -420,6 +434,104 @@ class AITelemetryService:
                     "date": str(inc.incident_date),
                     "status": inc.status,
                     "description": inc.description
+                })
+
+        # 5. Salary Advances search
+        advances = db.query(SalaryAdvance).options(joinedload(SalaryAdvance.guard), joinedload(SalaryAdvance.staff)).all()
+        for sa in advances:
+            b_name = sa.guard.full_name if sa.guard else (sa.staff.full_name if sa.staff else "")
+            emp_no = sa.guard.employee_number if sa.guard else ""
+            sa_str = f"{sa.advance_reference} {b_name} {emp_no} {sa.payment_method} {sa.reference_number or ''} {sa.status} {sa.reason or ''}".lower()
+            if any(t in sa_str for t in tokens):
+                results["matched_salary_advances"].append({
+                    "advance_reference": sa.advance_reference,
+                    "beneficiary": b_name,
+                    "employee_number": emp_no,
+                    "amount_kes": float(sa.amount),
+                    "disbursement_date": str(sa.disbursement_date) if sa.disbursement_date else None,
+                    "payment_method": sa.payment_method,
+                    "reference_number": sa.reference_number or "N/A",
+                    "status": sa.status,
+                    "reason": sa.reason or "Emergency personal advance"
+                })
+
+        # 6. Assets & Inventory search
+        assets = db.query(Asset).options(joinedload(Asset.category), joinedload(Asset.assigned_employee), joinedload(Asset.assigned_site)).all()
+        for ast in assets:
+            cat_name = ast.category.name if ast.category else ""
+            g_name = ast.assigned_employee.full_name if ast.assigned_employee else ""
+            st_name = ast.assigned_site.site_name if ast.assigned_site else ""
+            ast_str = f"{ast.asset_tag} {ast.name} {cat_name} {ast.make_model or ''} {ast.serial_number or ''} {ast.status} {ast.condition} {g_name} {st_name}".lower()
+            if any(t in ast_str for t in tokens):
+                results["matched_assets"].append({
+                    "asset_tag": ast.asset_tag,
+                    "name": ast.name,
+                    "category": cat_name,
+                    "current_value_kes": float(ast.current_value),
+                    "condition": ast.condition,
+                    "status": ast.status,
+                    "assigned_to": g_name or st_name or "Unassigned",
+                    "location": ast.location_branch or "Head Office"
+                })
+
+        # 7. Invoices search
+        invoices = db.query(SiteInvoice).all()
+        for inv in invoices:
+            inv_str = f"{inv.invoice_number} {inv.client_name} {inv.site_name} {inv.billing_period} {inv.status}".lower()
+            if any(t in inv_str for t in tokens):
+                results["matched_invoices"].append({
+                    "invoice_number": inv.invoice_number,
+                    "client_name": inv.client_name,
+                    "site_name": inv.site_name,
+                    "billing_period": inv.billing_period,
+                    "total_amount_kes": float(inv.total_amount),
+                    "due_date": str(inv.due_date) if inv.due_date else None,
+                    "status": inv.status
+                })
+
+        # 8. Client Contracts search
+        contracts = db.query(ClientContract).options(joinedload(ClientContract.client)).all()
+        for c in contracts:
+            c_name = c.client.name if c.client else ""
+            ctr_str = f"{c.contract_ref} {c_name} {c.title} {c.contract_type} {c.status}".lower()
+            if any(t in ctr_str for t in tokens):
+                results["matched_contracts"].append({
+                    "contract_ref": c.contract_ref,
+                    "client_name": c_name,
+                    "title": c.title,
+                    "monthly_charge_kes": float(c.monthly_charge or 0),
+                    "guards_required": c.guards_required,
+                    "status": c.status
+                })
+
+        # 9. Call Logs search
+        call_logs = db.query(CallLog).order_by(CallLog.id.desc()).limit(30).all()
+        for cl in call_logs:
+            cl_str = f"{cl.call_sid} {cl.caller_number} {cl.caller_name or ''} {cl.recipient_number} {cl.status} {cl.disposition or ''}".lower()
+            if any(t in cl_str for t in tokens):
+                results["matched_calls"].append({
+                    "call_sid": cl.call_sid,
+                    "direction": cl.direction,
+                    "caller": cl.caller_number,
+                    "recipient": cl.recipient_number,
+                    "duration_seconds": cl.duration_seconds,
+                    "status": cl.status,
+                    "disposition": cl.disposition or "RESOLVED"
+                })
+
+        # 10. Leave Requests search
+        leave_reqs = db.query(LeaveRequest).options(joinedload(LeaveRequest.guard)).all()
+        for lr in leave_reqs:
+            g_name = lr.guard.full_name if lr.guard else ""
+            lr_str = f"{g_name} {lr.leave_type} {lr.status} {lr.reason}".lower()
+            if any(t in lr_str for t in tokens):
+                results["matched_leave_requests"].append({
+                    "guard_name": g_name,
+                    "leave_type": lr.leave_type,
+                    "duration_days": lr.duration_days,
+                    "start_date": str(lr.start_date) if lr.start_date else None,
+                    "end_date": str(lr.end_date) if lr.end_date else None,
+                    "status": lr.status
                 })
 
         return results
@@ -506,10 +618,15 @@ class AITelemetryService:
         audit_trail = []
 
         # ======================================================================
-        # DETERMINISTIC GROUNDING: ATTENDANCE & OVERTIME SINGLE SOURCE OF TRUTH
+        # DETERMINISTIC GROUNDING: COMPLETE ERP SINGLE SOURCE OF TRUTH
         # ======================================================================
         att_report = AttendanceAnalyticsService.get_attendance_report(db)
         ot_report = OvertimeAnalyticsService.get_overtime_analysis(db)
+        adv_report = SalaryAdvancesAnalyticsService.get_advances_report(db)
+        ast_report = AssetsInventoryAnalyticsService.get_assets_report(db)
+        cc_report = CallCenterAnalyticsService.get_call_center_report(db)
+        inv_report = InvoicesAnalyticsService.get_invoices_report(db)
+        ctr_report = ContractsAnalyticsService.get_contracts_report(db)
 
         # ======================================================================
         # CATEGORY-BASED SELECTIVE QUERY EXECUTION
@@ -949,6 +1066,37 @@ class AITelemetryService:
                 } for a in recent_audits
             ]
 
+        # Leave requests register
+        leave_all = db.query(LeaveRequest).options(joinedload(LeaveRequest.guard)).order_by(LeaveRequest.id.desc()).limit(20).all()
+        leave_requests_register = [
+            {
+                "id": lr.id,
+                "guard_name": lr.guard.full_name if lr.guard else "N/A",
+                "employee_number": lr.guard.employee_number if lr.guard else "N/A",
+                "leave_type": lr.leave_type,
+                "start_date": str(lr.start_date) if lr.start_date else None,
+                "end_date": str(lr.end_date) if lr.end_date else None,
+                "duration_days": lr.duration_days,
+                "status": lr.status,
+                "reason": lr.reason
+            } for lr in leave_all
+        ]
+
+        # Expenses register
+        expenses_all = db.query(Expense).order_by(Expense.id.desc()).limit(25).all()
+        expenses_register = [
+            {
+                "id": exp.id,
+                "expense_date": str(exp.expense_date) if exp.expense_date else None,
+                "title": exp.title,
+                "category": exp.category,
+                "amount_kes": float(exp.amount),
+                "payee": exp.payee,
+                "payment_method": exp.payment_method,
+                "status": exp.status
+            } for exp in expenses_all
+        ]
+
         db_query_time_ms = round((time.perf_counter() - t_db_start) * 1000, 2)
 
         raw_telemetry = {
@@ -962,14 +1110,30 @@ class AITelemetryService:
             "workforce_and_operations": operations_telemetry,
             "attendance_analytics": att_report,
             "overtime_analytics": ot_report,
+            "salary_advances_analytics": adv_report,
+            "assets_inventory_analytics": ast_report,
+            "call_center_summary": cc_report,
+            "site_invoices_analytics": inv_report,
+            "client_contracts_analytics": ctr_report,
             "standardized_attendance_report": att_report.get("standardized_report", ""),
             "standardized_overtime_report": ot_report.get("standardized_report", ""),
+            "standardized_advances_report": adv_report.get("standardized_report", ""),
+            "standardized_assets_report": ast_report.get("standardized_report", ""),
+            "standardized_calls_report": cc_report.get("standardized_report", ""),
+            "standardized_invoices_report": inv_report.get("standardized_report", ""),
+            "standardized_contracts_report": ctr_report.get("standardized_report", ""),
             "attendance_details_table": att_report.get("details_rows", []),
+            "salary_advances_register": adv_report.get("details_rows", []),
+            "assets_inventory_register": ast_report.get("details_rows", []),
+            "call_center_logs_register": cc_report.get("recent_calls", []),
+            "site_invoices_register": inv_report.get("details_rows", []),
+            "client_contracts_register": ctr_report.get("details_rows", []),
+            "leave_requests_register": leave_requests_register,
+            "expenses_register": expenses_register,
             "guards_register": guards_register,
             "supervisors_register": supervisors_register,
             "client_sites_register": client_sites_register,
             "shifts_register": shifts_register,
-            "client_contracts_register": client_contracts_register,
             "recent_incidents_register": recent_incidents_register,
             "recent_attendance_register": recent_attendance_register,
             "targeted_database_matches": targeted_matches,
