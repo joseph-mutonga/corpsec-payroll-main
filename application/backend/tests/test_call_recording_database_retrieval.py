@@ -178,3 +178,24 @@ def test_sync_recordings_to_database(client, db):
     db.refresh(call)
     assert call.recording_data is not None
     assert len(call.recording_data) > 0
+
+
+def test_admin_with_email_sub_can_stream_and_listen(client, db):
+    """
+    Verifies that an administrator authenticated with email-based token
+    can list and stream/listen to call recordings retrieved directly from database.
+    """
+    admin, _ = get_or_create_admin(db)
+    token = create_access_token(data={"sub": admin.email, "role": "ADMIN"})
+    call = create_sample_call_with_recording(db)
+
+    # 1. List recordings with this token
+    resp = client.get("/api/v1/call-center/recordings", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    recordings = resp.json()
+    assert any(r["id"] == call.id for r in recordings)
+
+    # 2. Stream audio (listen / playback)
+    stream_resp = client.get(f"/api/v1/call-center/recordings/{call.id}/stream", headers={"Authorization": f"Bearer {token}"})
+    assert stream_resp.status_code == 200
+    assert stream_resp.headers.get("x-database-retrieved") == "true"

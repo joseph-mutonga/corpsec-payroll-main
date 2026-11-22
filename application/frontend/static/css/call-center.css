@@ -553,15 +553,30 @@
 }
 
 /* ==========================================================================
-   Persistent Floating Softphone Dialer Widget (Draggable Anywhere on Screen)
+   Unattached Floating Softphone Dialer Widget (Independent / Detached)
    ========================================================================== */
 #softphone-widget-container {
+  display: none;
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 9999;
+  z-index: 9998;
   font-family: inherit;
   touch-action: none;
+}
+
+.softphone-unattached-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.18);
+  color: #93C5FD;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-radius: 9999px;
+  padding: 2px 7px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
 #softphone-widget-container.is-dragging {
@@ -578,7 +593,7 @@
 
 /* Minimized Softphone Floating Button */
 .softphone-minimized-btn {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 10px;
   padding: 12px 20px;

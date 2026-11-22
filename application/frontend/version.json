@@ -1,8 +1,8 @@
 {
   "app_name": "CorpSec Payroll & Security Workforce System",
-  "version": "2.5.25",
-  "build_number": 2026111905,
-  "release_name": "CorpSec Enterprise 2.5.25",
+  "version": "2.5.29",
+  "build_number": 2026111909,
+  "release_name": "CorpSec Enterprise 2.5.29",
   "release_date": "2026-11-19",
   "silent_update": true,
   "check_interval_seconds": 15,
@@ -20,6 +20,10 @@
     "/portal-sw.js"
   ],
   "features": [
+    "Dedicated Google Gemini AI Assistant & Operational Telemetry Charts page with live CPU, RAM, MySQL latency, and bottleneck gauges",
+    "Dashboard KPI cards restored to top of overview page with 1-line sleek AI quick-launcher banner",
+    "Persistent floating AI Assistant & Charts launcher widget on all pages with 1-click navigation",
+    "Softphone dialer completely unattached with zero idle floating pill clutter on dashboard",
     "Prominent WhatsApp-style Pinned Messages banner in Team Chat for important operational announcements, directives, and reminders with 1-click scroll & highlight",
     "Google Gemini AI Assistant integration for System Admin Dashboard (live host & database telemetry grounding, error spike analysis, and conversational performance metrics)",
     "100% database persistence and streaming for all call audio recordings (LONGBLOB storage in MySQL with HTTP Range seeking & direct downloads)",

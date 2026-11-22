@@ -888,6 +888,7 @@ function switchTab(tabId, updateHistory = true) {
   }
   const titles = {
     'dashboard': 'Dashboard Overview',
+    'ai-assistant': 'Google Gemini AI Assistant & Operational Telemetry Charts',
     'incidents': 'Incident Reports & Safety Logs',
     'leave': 'Guard Leave Requests & Absence Approvals',
     'guards': 'Guard Directory',
@@ -948,6 +949,11 @@ function switchTab(tabId, updateHistory = true) {
 
   if (tabId === 'dashboard') {
     loadDashboardData();
+  }
+  if (tabId === 'ai-assistant') {
+    if (window.SystemAIAssistant && typeof window.SystemAIAssistant.loadTelemetryCharts === 'function') {
+      window.SystemAIAssistant.loadTelemetryCharts();
+    }
   }
   if (tabId === 'expenses') {
     loadExpenses();

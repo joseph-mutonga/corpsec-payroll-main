@@ -11,13 +11,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261118_v2">
-  <link rel="stylesheet" href="/static/css/call-center.css?v=20261118_v2">
-  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261119_v1">
-  <script src="/static/js/app.js?v=20261118_v2"></script>
-  <script src="/static/js/silent-updater.js?v=20261118_v2"></script>
-  <script src="/static/js/call-center.js?v=20261118_v2"></script>
-  <script src="/static/js/ai-assistant.js?v=20261119_v1"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261119_v3">
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261119_v3">
+  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261119_v3">
+  <script src="/static/js/app.js?v=20261119_v3"></script>
+  <script src="/static/js/silent-updater.js?v=20261119_v3"></script>
+  <script src="/static/js/call-center.js?v=20261119_v3"></script>
+  <script src="/static/js/ai-assistant.js?v=20261119_v3"></script>
 </head>
 
 <body>
@@ -166,9 +166,9 @@
     <ul class="nav-links">
       <div class="sidebar-section-title">MENU</div>
       <li class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</li>
-      <li class="nav-item" id="nav-item-ai-insights" onclick="switchTab('dashboard'); document.getElementById('ai-assistant-panel')?.scrollIntoView({behavior:'smooth'}); document.getElementById('ai-assistant-input')?.focus();"
+      <li class="nav-item" id="nav-item-ai-assistant" onclick="switchTab('ai-assistant')"
         style="display:flex; align-items:center; justify-content:space-between;">
-        <span>🤖 AI System Assistant</span>
+        <span>🤖 AI Assistant & Charts</span>
         <span class="badge" style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">GEMINI</span>
       </li>
       <li class="nav-item" onclick="switchTab('reports')">📈 Chart Analytics & Reports</li>
@@ -181,6 +181,14 @@
         <span>📞 Call Center</span>
         <span id="call-center-nav-badge" class="badge"
           style="background:#22C55E; color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">LIVE</span>
+      </li>
+      <li class="nav-item" id="nav-item-call-recordings"
+        onclick="switchTab('call-center'); switchCallCenterSubTab('recordings');"
+        style="display:flex; align-items:center; justify-content:space-between;"
+        title="Listen to call audio recordings in the system">
+        <span>⏺️ Audio Recordings</span>
+        <span id="call-recordings-nav-badge" class="badge"
+          style="background:#EFF6FF; color:#2563EB; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">DB</span>
       </li>
       <li class="nav-item" onclick="switchTab('documents')">📑 Company Documents</li>
       <li class="nav-item" onclick="switchTab('staff')">👥 Staff & HR</li>
@@ -357,6 +365,11 @@
               Live DB Synced
             </span>
             <span class="dash-badge dash-badge-shift" id="dash-live-shift-badge">☀️ Day Shift (06:00 - 18:00)</span>
+            <button class="dash-btn-refresh" onclick="switchTab('call-center'); switchCallCenterSubTab('recordings');"
+              style="background:#EFF6FF; border-color:#BFDBFE; color:#1D4ED8; font-weight:700;"
+              title="Listen to call audio recordings retrieved from database">
+              <span>🎧</span> Call Recordings (DB)
+            </button>
             <button class="dash-btn-refresh" onclick="refreshDashboard(true)"
               title="Force re-query live data from database">
               <span id="dash-refresh-icon">🔄</span> Sync Live Data
@@ -364,68 +377,25 @@
           </div>
         </div>
 
-        <!-- System AI Assistant (Google Gemini Telemetry & Performance Analyst) -->
-        <div class="ai-assistant-panel" id="ai-assistant-panel">
-          <div class="ai-assistant-header">
-            <div class="ai-header-left">
-              <div class="ai-header-icon">🤖</div>
-              <div>
-                <div class="ai-header-title">
-                  <span>System AI Assistant</span>
-                  <span style="font-size:11px; opacity:0.8; font-weight:normal;">— Google Gemini Operational & Telemetry Analyst</span>
-                </div>
-                <div class="ai-header-subtitle">
-                  Ask natural-language questions about server health, database latency, error spikes, guard deployment, and payroll metrics.
-                </div>
+        <!-- Compact AI Quick-Access Banner (Opens Dedicated AI Assistant & Telemetry Charts Page) -->
+        <div class="dash-ai-quick-banner" onclick="switchTab('ai-assistant')"
+          title="Open Google Gemini AI Assistant & Live Performance Charts in Dedicated Page">
+          <div class="dash-ai-banner-left">
+            <div class="dash-ai-banner-icon">🤖</div>
+            <div class="dash-ai-banner-text">
+              <div class="dash-ai-banner-title">
+                Google Gemini AI Assistant & System Operational Charts
+                <span class="dash-ai-banner-badge">✨ GEMINI ACTIVE</span>
+                <span class="dash-ai-banner-badge-grounded">🟢 Live Telemetry</span>
               </div>
-            </div>
-            <div class="ai-header-badges">
-              <span class="ai-badge ai-badge-model" id="ai-model-badge">
-                <span>✨</span> gemini-3.7-flash
-              </span>
-              <span class="ai-badge ai-badge-grounded">
-                <span class="ai-badge-pulse"></span> DB & Telemetry Grounded
-              </span>
-              <button type="button" class="ai-btn-sm" onclick="SystemAIAssistant.clearConversation()" title="Clear conversation history">
-                <span>🗑️</span> Clear Chat
-              </button>
-            </div>
-          </div>
-
-          <!-- Quick-Action Starter Chips -->
-          <div class="ai-starter-chips-container">
-            <span class="ai-chips-label"><span>⚡</span> Quick Questions:</span>
-            <div id="ai-assistant-starter-chips" style="display:inline-flex; gap:8px;"></div>
-          </div>
-
-          <!-- Scrollable Message Feed -->
-          <div class="ai-messages-container" id="ai-assistant-messages">
-            <div class="ai-welcome-box" id="ai-assistant-welcome">
-              <div class="ai-welcome-icon">🛡️🤖</div>
-              <div class="ai-welcome-title">System Performance & Operations Intelligence</div>
-              <div class="ai-welcome-text">
-                I am your embedded AI System Performance Analyst. I analyze live telemetry, database metrics, and server logs in real time to give you accurate, strictly data-grounded insights without guessing. Click any starter question above or type your inquiry below.
+              <div class="dash-ai-banner-sub">
+                Ask natural-language questions about server health, database latency, active workforce, and payroll errors.
               </div>
             </div>
           </div>
-
-          <!-- Shimmer Loading Indicator -->
-          <div class="ai-loader" id="ai-assistant-loader" style="display:none; margin:0 20px 14px 20px;">
-            <div class="ai-spinner"></div>
-            <span>Analyzing real-time host telemetry, database metrics & logs with Gemini...</span>
-          </div>
-
-          <!-- Command Bar / Prompt Input -->
-          <div class="ai-assistant-input-bar">
-            <div class="ai-input-wrap">
-              <textarea id="ai-assistant-input" class="ai-textarea" rows="1"
-                placeholder="Ask anything about system health, error rates, database latency, active workforce, or financial metrics..."></textarea>
-              <div class="ai-input-hint">Press <strong>Enter</strong> to send &bull; <strong>Shift + Enter</strong> for newline &bull; Strictly read-only analysis</div>
-            </div>
-            <button type="button" class="ai-send-btn" onclick="SystemAIAssistant.sendUserPrompt()" id="ai-assistant-send-btn">
-              <span>➤</span> Send
-            </button>
-          </div>
+          <button type="button" class="dash-ai-banner-btn" onclick="event.stopPropagation(); switchTab('ai-assistant');">
+            Open AI Charts Page <span>↗</span>
+          </button>
         </div>
 
         <!-- 2. Core Enterprise KPI Cards (8 Pastel Floating Cards) -->
@@ -834,6 +804,169 @@
               </div>
             </div>
 
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Panel: Dedicated Google Gemini AI Assistant & Operational Performance Charts Page -->
+      <section id="panel-ai-assistant" style="display:none;">
+        <!-- 1. Executive AI Header & Hero Controls -->
+        <div class="ai-page-hero">
+          <div class="ai-hero-left">
+            <div class="ai-hero-icon-bubble">🤖</div>
+            <div>
+              <div class="ai-hero-title">
+                <span>Google Gemini AI Assistant & Operational Telemetry Charts</span>
+                <span class="badge" style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:11px; font-weight:800; padding:3px 9px; border-radius:12px;">✨ GEMINI ACTIVE</span>
+              </div>
+              <div class="ai-hero-subtitle">
+                Autonomous system intelligence, live server CPU/RAM telemetry, MySQL database latency diagnostics, and workforce analytics.
+              </div>
+            </div>
+          </div>
+          <div class="ai-hero-actions">
+            <span class="ai-badge ai-badge-model" id="ai-model-badge">
+              <span>✨</span> gemini-3.5-flash-lite
+            </span>
+            <span class="ai-badge ai-badge-grounded">
+              <span class="ai-badge-pulse"></span> DB & Telemetry Grounded
+            </span>
+            <button class="btn btn-secondary" onclick="SystemAIAssistant.loadTelemetryCharts(true)" title="Force re-query live host & MySQL telemetry">
+              <span id="ai-telemetry-refresh-icon">🔄</span> Refresh Telemetry
+            </button>
+            <button type="button" class="ai-btn-sm" onclick="SystemAIAssistant.clearConversation()" title="Clear conversation history">
+              <span>🗑️</span> Clear Chat
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Real-Time Operational Performance & Telemetry Charts Grid -->
+        <div class="ai-charts-grid">
+          <!-- Chart Card 1: Host CPU Utilization -->
+          <div class="ai-chart-card">
+            <div class="ai-chart-header">
+              <div class="ai-chart-label">Host CPU Utilization</div>
+              <div class="ai-chart-icon-box cpu">🖥️</div>
+            </div>
+            <div class="ai-chart-main-val">
+              <span id="ai-chart-cpu-val">0.0%</span>
+              <span class="ai-chart-tag ok" id="ai-chart-cpu-tag">Healthy</span>
+            </div>
+            <div class="ai-chart-progress-track">
+              <div id="ai-chart-cpu-bar" class="ai-chart-progress-fill cpu" style="width: 0%;"></div>
+            </div>
+            <div class="ai-chart-footer">
+              <span id="ai-chart-cpu-cores">8 Logical Cores</span> &bull; 
+              <span id="ai-chart-cpu-os">Windows Host</span>
+            </div>
+          </div>
+
+          <!-- Chart Card 2: System Memory (RAM) Usage -->
+          <div class="ai-chart-card">
+            <div class="ai-chart-header">
+              <div class="ai-chart-label">System Memory (RAM)</div>
+              <div class="ai-chart-icon-box ram">🧠</div>
+            </div>
+            <div class="ai-chart-main-val">
+              <span id="ai-chart-ram-val">0.0%</span>
+              <span class="ai-chart-tag ok" id="ai-chart-ram-tag">Optimal</span>
+            </div>
+            <div class="ai-chart-progress-track">
+              <div id="ai-chart-ram-bar" class="ai-chart-progress-fill ram" style="width: 0%;"></div>
+            </div>
+            <div class="ai-chart-footer">
+              <span id="ai-chart-ram-usage">0 MB / 0 MB</span> &bull; 
+              <span id="ai-chart-ram-avail">0 MB Available</span>
+            </div>
+          </div>
+
+          <!-- Chart Card 3: MySQL Database Health -->
+          <div class="ai-chart-card">
+            <div class="ai-chart-header">
+              <div class="ai-chart-label">MySQL Database Latency</div>
+              <div class="ai-chart-icon-box db">🗄️</div>
+            </div>
+            <div class="ai-chart-main-val">
+              <span id="ai-chart-db-val">0.0 ms</span>
+              <span class="ai-chart-tag ok" id="ai-chart-db-tag">Fast</span>
+            </div>
+            <div class="ai-chart-progress-track">
+              <div id="ai-chart-db-bar" class="ai-chart-progress-fill db" style="width: 15%;"></div>
+            </div>
+            <div class="ai-chart-footer">
+              <span id="ai-chart-db-threads">0 Connected Threads</span> &bull; 
+              <span>MySQL 8.0 Community</span>
+            </div>
+          </div>
+
+          <!-- Chart Card 4: Critical Bottlenecks & Alerts -->
+          <div class="ai-chart-card">
+            <div class="ai-chart-header">
+              <div class="ai-chart-label">Critical Alerts & Bottlenecks</div>
+              <div class="ai-chart-icon-box alerts">🚨</div>
+            </div>
+            <div class="ai-chart-main-val">
+              <span id="ai-chart-alerts-val">0 Alerts</span>
+              <span class="ai-chart-tag warn" id="ai-chart-alerts-tag">Monitoring</span>
+            </div>
+            <div class="ai-chart-details-list">
+              <div class="ai-alert-row"><span>Unresolved Payroll Errors:</span> <strong id="ai-chart-payroll-errors">0</strong></div>
+              <div class="ai-alert-row"><span>Open Security Incidents:</span> <strong id="ai-chart-incidents">0</strong></div>
+              <div class="ai-alert-row"><span>Missed Calls Today:</span> <strong id="ai-chart-missed-calls">0</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Conversational AI Assistant Console -->
+        <div class="ai-assistant-panel" id="ai-assistant-panel">
+          <div class="ai-assistant-header">
+            <div class="ai-header-left">
+              <div class="ai-header-icon">💬</div>
+              <div>
+                <div class="ai-header-title">
+                  <span>Gemini Conversational Intelligence Console</span>
+                  <span style="font-size:11px; opacity:0.8; font-weight:normal;">— Real-time System Q&A</span>
+                </div>
+                <div class="ai-header-subtitle">
+                  Ask natural-language questions about server health, database latency, error spikes, guard deployment, and payroll metrics.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick-Action Starter Chips -->
+          <div class="ai-starter-chips-container">
+            <span class="ai-chips-label"><span>⚡</span> Quick Questions:</span>
+            <div id="ai-assistant-starter-chips" style="display:inline-flex; gap:8px;"></div>
+          </div>
+
+          <!-- Scrollable Message Feed -->
+          <div class="ai-messages-container" id="ai-assistant-messages">
+            <div class="ai-welcome-box" id="ai-assistant-welcome">
+              <div class="ai-welcome-icon">🛡️🤖</div>
+              <div class="ai-welcome-title">System Performance & Operations Intelligence</div>
+              <div class="ai-welcome-text">
+                I am your embedded AI System Performance Analyst powered by Google Gemini. I analyze live telemetry, database metrics, and server logs in real time to give you accurate, strictly data-grounded insights without guessing. Click any starter question above or type your inquiry below.
+              </div>
+            </div>
+          </div>
+
+          <!-- Shimmer Loading Indicator -->
+          <div class="ai-loader" id="ai-assistant-loader" style="display:none; margin:0 20px 14px 20px;">
+            <div class="ai-spinner"></div>
+            <span>Analyzing real-time host telemetry, database metrics & logs with Gemini...</span>
+          </div>
+
+          <!-- Command Bar / Prompt Input -->
+          <div class="ai-assistant-input-bar">
+            <div class="ai-input-wrap">
+              <textarea id="ai-assistant-input" class="ai-textarea" rows="2"
+                placeholder="Ask anything about system health, error rates, database latency, active workforce, or financial metrics..."></textarea>
+              <div class="ai-input-hint">Press <strong>Enter</strong> to send &bull; <strong>Shift + Enter</strong> for newline &bull; Strictly read-only analysis</div>
+            </div>
+            <button type="button" class="ai-send-btn" onclick="SystemAIAssistant.sendUserPrompt()" id="ai-assistant-send-btn">
+              <span>➤</span> Send
+            </button>
           </div>
         </div>
       </section>
@@ -9256,22 +9389,6 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
           <div class="form-group">
             <label style="font-size:12px; font-weight:700;">Physical Address *</label>
-            <input type="text" id="client-edit-address" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label style="font-size:12px; font-weight:700;">County / City *</label>
-            <input type="text" id="client-edit-city" class="form-control" required>
-          </div>
-        </div>
-
-        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; margin-bottom:12px;">
-          <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:8px;">
-            Primary Contact Person</div>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-            <div class="form-group">
-              <label style="font-size:11px; font-weight:700;">Contact Name *</label>
-              <input type="text" id="client-edit-contact-name" class="form-control" required>
-            </div>
             <div class="form-group">
               <label style="font-size:11px; font-weight:700;">Designation / Title</label>
               <input type="text" id="client-edit-contact-title" class="form-control">
@@ -11353,28 +11470,44 @@
   </script>
 
   <!-- ==========================================================================
-       PERSISTENT FLOATING SOFTPHONE DIALER WIDGET
-       Accessible from all screens without losing navigation place or active call
+       PERSISTENT FLOATING AI ASSISTANT WIDGET (Google Gemini Telemetry & Operations)
+       Accessible from all screens; click to jump & query Gemini AI System Analyst
        ========================================================================== -->
-  <div id="softphone-widget-container">
-    <!-- Minimized Floating Pill Button -->
+  <div id="ai-floating-widget-container" class="ai-floating-widget-container">
+    <div id="ai-floating-widget" class="ai-floating-widget-btn" onclick="activateAIAssistantWidget()"
+      title="Ask Gemini AI Assistant & View Performance Charts (Click to open, Drag to move)">
+      <span class="ai-drag-grip" title="Drag to move">⋮⋮</span>
+      <span class="ai-floating-icon">🤖</span>
+      <span class="ai-floating-label">AI Assistant & Charts</span>
+      <span class="ai-floating-gemini-pill">✨ GEMINI</span>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       UNATTACHED FLOATING SOFTPHONE DIALER (Independent / Detached)
+       Accessible via Header '📞 Softphone', Call Center '📱 Open Softphone', or incoming trunk calls.
+       Stays unattached with NO persistent idle pill on Dashboard.
+       ========================================================================== -->
+  <div id="softphone-widget-container" style="display:none !important;">
+    <!-- Active Call Compact Floating Pill (Only visible when an active call or ringing is minimized) -->
     <div id="softphone-minimized" class="softphone-minimized-btn" onclick="toggleSoftphone(true)"
-      title="Open Softphone (Drag to move anywhere)">
+      title="Active Telecom Call (Click to open softphone dialer)" style="display:none !important;">
       <span class="softphone-drag-grip" title="Drag to move">⋮⋮</span>
       <span style="font-size:18px;">📞</span>
-      <span id="minimized-call-status" style="font-size:12px; font-weight:700;">Softphone Ready</span>
+      <span id="minimized-call-status" style="font-size:12px; font-weight:700;">In Call</span>
     </div>
 
-    <!-- Expanded Softphone Card -->
+    <!-- Expanded Unattached Softphone Card -->
     <div id="softphone-expanded" class="softphone-expanded-card" style="display:none;">
       <!-- Softphone Header -->
       <div class="softphone-top-header">
         <div class="softphone-top-title">
           <span>📞</span>
           <span>CorpSec Softphone</span>
+          <span class="softphone-unattached-badge">Unattached</span>
         </div>
         <div class="softphone-header-controls">
-          <button class="softphone-icon-btn" onclick="toggleSoftphone(false)" title="Minimize Softphone">🗕</button>
+          <button class="softphone-icon-btn" onclick="toggleSoftphone(false)" title="Close Softphone">✕</button>
         </div>
       </div>
 
@@ -11703,6 +11836,83 @@
           onclick="document.getElementById('modal-add-virtual-number').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="submitAddVirtualNumber()" style="background:#22C55E;">Save
           Number</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4b. Call Recording Audio Player Modal -->
+  <div id="modal-audio-player" class="modal-overlay" style="display:none; z-index:10001;"
+    onclick="if(event.target===this) closeAudioPlayerModal()">
+    <div class="modal-box"
+      style="max-width:520px; padding:28px; border-radius:20px; background:#FFFFFF; box-shadow:0 25px 60px -15px rgba(15,23,42,0.4);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div
+            style="width:42px; height:42px; border-radius:12px; background:linear-gradient(135deg, #2563EB, #1D4ED8); display:flex; align-items:center; justify-content:center; color:#FFF; font-size:22px; box-shadow:0 4px 12px rgba(37,99,235,0.3);">
+            🎧
+          </div>
+          <div>
+            <h4 style="margin:0; font-size:18px; font-weight:800; color:#0F172A;">Call Audio Recording</h4>
+            <div
+              style="font-size:11px; color:#059669; font-weight:700; display:flex; align-items:center; gap:4px; margin-top:2px;">
+              <span>🗄️</span> 100% Retained & Streamed from Database
+            </div>
+          </div>
+        </div>
+        <button onclick="closeAudioPlayerModal()"
+          style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <!-- Caller & Call Session Metadata Card -->
+      <div
+        style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:14px 18px; margin-bottom:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div id="modal-audio-caller-name" style="font-size:16px; font-weight:800; color:#0F172A;">Caller Name</div>
+            <div id="modal-audio-caller-number"
+              style="font-size:13px; font-family:monospace; color:#2563EB; font-weight:700; margin-top:2px;">+254 700 000
+              000</div>
+          </div>
+          <span id="modal-audio-call-id"
+            style="font-size:11px; background:#EFF6FF; color:#1D4ED8; padding:3px 10px; border-radius:9999px; font-weight:800; border:1px solid #BFDBFE;">#0</span>
+        </div>
+      </div>
+
+      <!-- High-Quality Audio Player -->
+      <div style="margin-bottom:18px;">
+        <audio id="modal-audio-element" controls
+          style="width:100%; height:44px; border-radius:12px; outline:none;"></audio>
+      </div>
+
+      <!-- Playback Speed Controls -->
+      <div
+        style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px 14px; background:#F1F5F9; border-radius:12px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#475569;">Playback Speed:</div>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="0.75"
+            onclick="setAudioPlaybackRate(0.75)" style="font-size:11px; padding:4px 9px; font-weight:700;">0.75x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate active" data-rate="1.0"
+            onclick="setAudioPlaybackRate(1.0)"
+            style="font-size:11px; padding:4px 9px; font-weight:700; background:#2563EB; color:#FFF;">1.0x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="1.25"
+            onclick="setAudioPlaybackRate(1.25)" style="font-size:11px; padding:4px 9px; font-weight:700;">1.25x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="1.5"
+            onclick="setAudioPlaybackRate(1.5)" style="font-size:11px; padding:4px 9px; font-weight:700;">1.5x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="2.0"
+            onclick="setAudioPlaybackRate(2.0)" style="font-size:11px; padding:4px 9px; font-weight:700;">2.0x</button>
+        </div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <a id="modal-audio-download-btn" href="#" download class="btn btn-secondary"
+          style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:12px; text-decoration:none;">
+          <span>⬇</span> Download Audio (.wav)
+        </a>
+        <button type="button" class="btn btn-primary" onclick="closeAudioPlayerModal()"
+          style="font-size:12px; padding:8px 18px; font-weight:700;">
+          Close
+        </button>
       </div>
     </div>
   </div>

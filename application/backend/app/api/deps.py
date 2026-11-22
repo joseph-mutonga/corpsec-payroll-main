@@ -40,7 +40,14 @@ def get_current_user(
     if user_id is None:
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = None
+    if str(user_id).isdigit():
+        user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        user = db.query(User).filter(User.email == str(user_id)).first()
+    if not user and payload.get("email"):
+        user = db.query(User).filter(User.email == str(payload.get("email"))).first()
+
     if user is None:
         raise credentials_exception
 
@@ -54,7 +61,8 @@ def get_current_user(
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.ADMIN.value:
+    role_val = (current_user.role or "").upper()
+    if role_val != UserRole.ADMIN.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrative privileges required"
@@ -63,7 +71,8 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_guard(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.GUARD.value:
+    role_val = (current_user.role or "").upper()
+    if role_val != UserRole.GUARD.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Guard role required. Administrators must use the Admin Web App."
@@ -72,7 +81,8 @@ def require_guard(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_supervisor(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in [UserRole.SUPERVISOR.value, UserRole.ADMIN.value]:
+    role_val = (current_user.role or "").upper()
+    if role_val not in [UserRole.SUPERVISOR.value, UserRole.ADMIN.value]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Supervisor or Admin role required."
@@ -81,7 +91,8 @@ def require_supervisor(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_admin_or_supervisor(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in [UserRole.ADMIN.value, UserRole.HR.value, UserRole.SUPERVISOR.value]:
+    role_val = (current_user.role or "").upper()
+    if role_val not in [UserRole.ADMIN.value, UserRole.HR.value, UserRole.SUPERVISOR.value]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin, HR or Supervisor privileges required."
@@ -90,7 +101,8 @@ def require_admin_or_supervisor(current_user: User = Depends(get_current_user)) 
 
 
 def require_admin_or_hr(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in [UserRole.ADMIN.value, UserRole.HR.value]:
+    role_val = (current_user.role or "").upper()
+    if role_val not in [UserRole.ADMIN.value, UserRole.HR.value]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrative privileges required (Admin or HR)."

@@ -406,6 +406,13 @@
     if (container.dataset.dragInitialized === 'true') return;
     container.dataset.dragInitialized = 'true';
 
+    // The unattached softphone dialer starts closed unless an active call is ongoing
+    const isCallActive = !!(window.CallCenter && (window.CallCenter.currentCall || window.CallCenter.callTimerInterval));
+    if (!isCallActive) {
+      container.style.display = 'none';
+      minimized.style.display = 'none';
+    }
+
     let isDragging = false;
     let startX = 0;
     let startY = 0;
@@ -416,8 +423,8 @@
 
     function clampPosition(left, top, elWidth, elHeight) {
       const padding = 12;
-      const width = elWidth || container.offsetWidth || 180;
-      const height = elHeight || container.offsetHeight || 48;
+      const width = elWidth || (container.offsetWidth > 0 ? container.offsetWidth : 340);
+      const height = elHeight || (container.offsetHeight > 0 ? container.offsetHeight : 480);
       const maxLeft = Math.max(padding, window.innerWidth - width - padding);
       const maxTop = Math.max(padding, window.innerHeight - height - padding);
 
@@ -446,7 +453,7 @@
           const pos = JSON.parse(saved);
           if (typeof pos.left === 'number' && typeof pos.top === 'number') {
             const rect = container.getBoundingClientRect();
-            const clamped = clampPosition(pos.left, pos.top, rect.width || 180, rect.height || 48);
+            const clamped = clampPosition(pos.left, pos.top, rect.width || 340, rect.height || 480);
             setPosition(clamped.left, clamped.top);
           }
         }
@@ -535,7 +542,7 @@
         const rect = container.getBoundingClientRect();
         savePosition(rect.left, rect.top);
       } else {
-        // Direct tap on minimized pill: immediately open softphone!
+        // Direct tap on minimized pill: immediately open unattached softphone!
         if (minimized.contains(e.target) || e.currentTarget === minimized) {
           window.toggleSoftphone(true, true);
         }
@@ -568,6 +575,7 @@
     window.CallCenter.isSoftphoneOpen = shouldOpen;
 
     if (shouldOpen) {
+      widget.style.display = 'block';
       expanded.style.display = 'flex';
       minimized.style.display = 'none';
       try { getAudioContext(); } catch (err) {} // user gesture unlocks audio
@@ -578,11 +586,24 @@
         if (input) input.focus();
       });
     } else {
-      expanded.style.display = 'none';
-      minimized.style.display = 'flex';
-      requestAnimationFrame(() => {
-        ensureSoftphoneInViewport(widget, minimized);
-      });
+      // Unattached softphone closing logic:
+      const isCallActive = !!(window.CallCenter && (window.CallCenter.currentCall || window.CallCenter.callTimerInterval));
+      const isRinging = minimized.classList.contains('ringing');
+
+      if (isCallActive || isRinging) {
+        // While an active telecom call is in progress or ringing, minimize to the active call pill
+        expanded.style.display = 'none';
+        minimized.style.display = 'flex';
+        widget.style.display = 'block';
+        requestAnimationFrame(() => {
+          ensureSoftphoneInViewport(widget, minimized);
+        });
+      } else {
+        // No active call: completely close the unattached softphone! No idle pill left on dashboard!
+        expanded.style.display = 'none';
+        minimized.style.display = 'none';
+        widget.style.display = 'none';
+      }
     }
   };
 
@@ -753,6 +774,13 @@
     const minBtn = document.getElementById('softphone-minimized');
     if (minBtn) minBtn.classList.remove('ringing');
 
+    const widget = document.getElementById('softphone-widget-container');
+    const expanded = document.getElementById('softphone-expanded');
+    if (widget && expanded && (expanded.style.display === 'none' || !window.CallCenter.isSoftphoneOpen)) {
+      widget.style.display = 'none';
+      if (minBtn) minBtn.style.display = 'none';
+    }
+
     if (!window.CallCenter.currentCall) return;
 
     try {
@@ -812,6 +840,7 @@
 
   function hideActiveCallScreen() {
     clearInterval(window.CallCenter.callTimerInterval);
+    window.CallCenter.callTimerInterval = null;
     window.CallCenter.callDurationSeconds = 0;
     stopHoldMusic();
     stopRingingAudio();
@@ -826,6 +855,14 @@
     if (minBtn) {
       minBtn.classList.remove('on-call', 'ringing');
       document.getElementById('minimized-call-status').innerText = 'Softphone Ready';
+    }
+
+    // Hide unattached softphone if it is not currently expanded
+    const expanded = document.getElementById('softphone-expanded');
+    const widget = document.getElementById('softphone-widget-container');
+    if (expanded && (expanded.style.display === 'none' || !window.CallCenter.isSoftphoneOpen) && widget) {
+      widget.style.display = 'none';
+      if (minBtn) minBtn.style.display = 'none';
     }
   }
 
@@ -1158,11 +1195,16 @@
         const duration = formatCallDuration(c.duration_seconds);
         const audioSrc = c.stream_url || c.recording_url;
         const recordingPlayer = audioSrc
-          ? `<div class="cc-audio-player">
-               <audio controls src="${audioSrc}" preload="none" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
-               <div style="font-size:9px; color:#059669; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:3px;">
-                 <span>🗄️</span> DB Stored
+          ? `<div style="display:flex; align-items:center; gap:6px;">
+               <div class="cc-audio-player">
+                 <audio controls src="${audioSrc}" preload="none" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
+                 <div style="font-size:9px; color:#059669; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:3px;">
+                   <span>🗄️</span> DB Stored
+                 </div>
                </div>
+               <button class="btn btn-primary" onclick="openAudioPlayerModal(${c.id}, '${escapeQuote(c.caller_name)}', '${escapeQuote(c.caller_number)}', '${audioSrc}', '${audioSrc}?download=true')" style="font-size:10px; padding:4px 8px; font-weight:700; background:#2563EB; display:inline-flex; align-items:center; gap:3px;" title="Listen in high-clarity player">
+                 <span>🎧</span> Listen
+               </button>
              </div>`
           : `<span style="color:#94A3B8; font-size:11px;">None</span>`;
 
@@ -1556,9 +1598,14 @@
           </div>
         </td>
         <td>
-          <a href="${dlUrl}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:6px 12px; text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-weight:700;">
-            <span>⬇</span> Download
-          </a>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button class="btn btn-primary" onclick="openAudioPlayerModal(${c.id}, '${escapeQuote(c.caller_name)}', '${escapeQuote(c.caller_number)}', '${audioSrc}', '${dlUrl}')" style="font-size:11px; padding:6px 10px; display:inline-flex; align-items:center; gap:4px; font-weight:700; background:#2563EB;">
+              <span>🎧</span> Listen
+            </button>
+            <a href="${dlUrl}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:6px 10px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight:700;">
+              <span>⬇</span> Download
+            </a>
+          </div>
         </td>
       </tr>
     `;
@@ -1793,6 +1840,66 @@
   function escapeQuote(str) {
     return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
   }
+
+  /* ==========================================================================
+     18b. Audio Player Modal (Direct Database Audio Playback for Admins)
+     ========================================================================== */
+  window.openAudioPlayerModal = function (callId, callerName, callerNumber, audioSrc, dlUrl) {
+    const modal = document.getElementById('modal-audio-player');
+    if (!modal) return;
+
+    const callerNameEl = document.getElementById('modal-audio-caller-name');
+    const callerNumEl = document.getElementById('modal-audio-caller-number');
+    const callIdEl = document.getElementById('modal-audio-call-id');
+
+    if (callerNameEl) callerNameEl.innerText = callerName || 'Client Call';
+    if (callerNumEl) callerNumEl.innerText = callerNumber || '';
+    if (callIdEl) callIdEl.innerText = `#${callId}`;
+
+    const streamUrl = audioSrc || `/api/v1/call-center/recordings/${callId}/stream`;
+    const audioEl = document.getElementById('modal-audio-element');
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.src = streamUrl;
+      audioEl.playbackRate = 1.0;
+      audioEl.load();
+      audioEl.play().catch(e => console.log('Autoplay deferred until interaction:', e));
+    }
+
+    const dlBtn = document.getElementById('modal-audio-download-btn');
+    if (dlBtn) {
+      dlBtn.href = dlUrl || `/api/v1/call-center/recordings/${callId}/stream?download=true`;
+      dlBtn.download = `call_recording_${callId}.wav`;
+    }
+
+    // Reset rate buttons
+    document.querySelectorAll('.btn-playback-rate').forEach(b => {
+      const isDefault = b.dataset.rate === '1.0';
+      b.style.background = isDefault ? '#2563EB' : '#F1F5F9';
+      b.style.color = isDefault ? '#FFFFFF' : '#475569';
+    });
+
+    modal.style.display = 'flex';
+  };
+
+  window.closeAudioPlayerModal = function () {
+    const modal = document.getElementById('modal-audio-player');
+    const audioEl = document.getElementById('modal-audio-element');
+    if (audioEl) audioEl.pause();
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.setAudioPlaybackRate = function (rate) {
+    const audioEl = document.getElementById('modal-audio-element');
+    if (audioEl) {
+      audioEl.playbackRate = rate;
+      document.querySelectorAll('.btn-playback-rate').forEach(b => {
+        const isMatch = parseFloat(b.dataset.rate) === rate;
+        b.style.background = isMatch ? '#2563EB' : '#F1F5F9';
+        b.style.color = isMatch ? '#FFFFFF' : '#475569';
+      });
+    }
+  };
 
   /* ==========================================================================
      19. Initialization Function

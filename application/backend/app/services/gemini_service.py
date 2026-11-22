@@ -117,7 +117,7 @@ class GeminiAIService:
         Returns the data-grounded response and metadata.
         """
         client = cls.get_client()
-        model_name = getattr(settings, "GEMINI_MODEL", None) or "gemini-3.8-flash"
+        model_name = getattr(settings, "GEMINI_MODEL", None) or "gemini-3.5-flash-lite"
         timestamp = datetime.datetime.now().isoformat()
 
         # If API key is not configured, return grounded rule-based telemetry analysis
@@ -175,14 +175,22 @@ class GeminiAIService:
                 max_output_tokens=2048,
             )
 
-            # High availability: try primary model with failover candidates
-            candidate_models = [model_name]
-            for fallback_m in ["gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.5-flash"]:
+            # High availability: prioritize high-throughput, low-latency models and cascade
+            candidate_models = []
+            if model_name:
+                candidate_models.append(model_name)
+            for fallback_m in [
+                "gemini-3.5-flash-lite",
+                "gemini-3.1-flash-lite",
+                "gemini-3.5-flash",
+                "gemini-3.7-flash",
+                "gemini-3.8-flash"
+            ]:
                 if fallback_m not in candidate_models:
                     candidate_models.append(fallback_m)
 
             response = None
-            successful_model = model_name
+            successful_model = candidate_models[0]
             last_error = None
 
             for m in candidate_models:
@@ -222,11 +230,19 @@ class GeminiAIService:
 
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}", exc_info=True)
-            # If the API call fails (e.g. quota, network), gracefully fallback to grounded telemetry
+            error_str = str(e)
+            if "503" in error_str or "high demand" in error_str.lower():
+                notice_msg = "Google Gemini is currently experiencing high global traffic spikes."
+            elif "429" in error_str or "quota" in error_str.lower():
+                notice_msg = "Gemini free-tier request rate limit was reached on heavy models."
+            else:
+                notice_msg = f"Gemini API returned a temporary service notification: {error_str}"
+
+            # If the API call fails across all candidates, gracefully fallback to grounded telemetry
             fallback_answer = (
                 f"> [!WARNING]\n"
-                f"> **Gemini API Temporary Notice:** Unable to complete generative query (`{str(e)}`). "
-                f"Displaying real-time system telemetry gathered from database.\n\n"
+                f"> **Gemini API Temporary Notice:** {notice_msg} "
+                f"Displaying real-time system telemetry gathered directly from the database and server host:\n\n"
                 + cls.generate_grounded_fallback_analysis(prompt, telemetry, include_missing_key_note=False)
             )
             return {

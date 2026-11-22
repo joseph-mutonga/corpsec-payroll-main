@@ -17,6 +17,10 @@
       console.log('[SystemAIAssistant] Initializing AI Assistant...');
       this.attachEventListeners();
       this.renderQuickStarterChips();
+      if (typeof initDraggableAIWidget === 'function') {
+        initDraggableAIWidget();
+      }
+      this.loadTelemetryCharts();
     },
 
     attachEventListeners() {
@@ -196,6 +200,160 @@
       }
     },
 
+    async loadTelemetryCharts(forceRefresh = false) {
+      const refreshIcon = document.getElementById('ai-telemetry-refresh-icon');
+      if (refreshIcon) {
+        refreshIcon.style.display = 'inline-block';
+        refreshIcon.style.animation = 'spin 0.8s linear infinite';
+      }
+
+      const token = window.authToken || localStorage.getItem('corpsec_token') || localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token) {
+        if (refreshIcon) refreshIcon.style.animation = 'none';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/v1/admin/ai-insights/telemetry', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) {
+          console.warn('[SystemAIAssistant] Failed to load telemetry:', response.status);
+          return;
+        }
+
+        const data = await response.json();
+        const host = data.host_telemetry || {};
+        const db = data.database_telemetry || {};
+        const errors = data.error_rates || {};
+
+        // 1. Host CPU
+        const cpuPercent = Number(host.cpu_percent) || 0;
+        const cpuValEl = document.getElementById('ai-chart-cpu-val');
+        const cpuBarEl = document.getElementById('ai-chart-cpu-bar');
+        const cpuTagEl = document.getElementById('ai-chart-cpu-tag');
+        const cpuCoresEl = document.getElementById('ai-chart-cpu-cores');
+        const cpuOsEl = document.getElementById('ai-chart-cpu-os');
+
+        if (cpuValEl) cpuValEl.innerText = `${cpuPercent.toFixed(1)}%`;
+        if (cpuBarEl) cpuBarEl.style.width = `${Math.min(100, Math.max(0, cpuPercent))}%`;
+        if (cpuTagEl) {
+          if (cpuPercent > 85) {
+            cpuTagEl.className = 'ai-chart-tag danger';
+            cpuTagEl.innerText = 'High Load';
+          } else if (cpuPercent > 65) {
+            cpuTagEl.className = 'ai-chart-tag warn';
+            cpuTagEl.innerText = 'Elevated';
+          } else {
+            cpuTagEl.className = 'ai-chart-tag ok';
+            cpuTagEl.innerText = 'Healthy';
+          }
+        }
+        if (cpuCoresEl) cpuCoresEl.innerText = `${host.cpu_cores_logical || 0} Logical Cores (${host.cpu_cores_physical || 0} Physical)`;
+        if (cpuOsEl) cpuOsEl.innerText = `${host.os || 'Host'} ${host.os_release || ''}`;
+
+        // 2. RAM Memory
+        const memPercent = Number(host.memory_percent) || 0;
+        const ramValEl = document.getElementById('ai-chart-ram-val');
+        const ramBarEl = document.getElementById('ai-chart-ram-bar');
+        const ramTagEl = document.getElementById('ai-chart-ram-tag');
+        const ramUsageEl = document.getElementById('ai-chart-ram-usage');
+        const ramAvailEl = document.getElementById('ai-chart-ram-avail');
+
+        if (ramValEl) ramValEl.innerText = `${memPercent.toFixed(1)}%`;
+        if (ramBarEl) ramBarEl.style.width = `${Math.min(100, Math.max(0, memPercent))}%`;
+        if (ramTagEl) {
+          if (memPercent > 90) {
+            ramTagEl.className = 'ai-chart-tag danger';
+            ramTagEl.innerText = 'Critical';
+          } else if (memPercent > 75) {
+            ramTagEl.className = 'ai-chart-tag warn';
+            ramTagEl.innerText = 'High';
+          } else {
+            ramTagEl.className = 'ai-chart-tag ok';
+            ramTagEl.innerText = 'Optimal';
+          }
+        }
+        if (ramUsageEl) {
+          const usedGb = ((host.memory_used_mb || 0) / 1024).toFixed(2);
+          const totalGb = ((host.memory_total_mb || 0) / 1024).toFixed(2);
+          ramUsageEl.innerText = `${usedGb} GB / ${totalGb} GB`;
+        }
+        if (ramAvailEl) {
+          const availGb = ((host.memory_available_mb || 0) / 1024).toFixed(2);
+          ramAvailEl.innerText = `${availGb} GB Available`;
+        }
+
+        // 3. MySQL Database Health & Latency
+        const latencyMs = Number(db.latency_ms) || 0;
+        const dbValEl = document.getElementById('ai-chart-db-val');
+        const dbBarEl = document.getElementById('ai-chart-db-bar');
+        const dbTagEl = document.getElementById('ai-chart-db-tag');
+        const dbThreadsEl = document.getElementById('ai-chart-db-threads');
+
+        if (dbValEl) dbValEl.innerText = `${latencyMs.toFixed(1)} ms`;
+        if (dbBarEl) {
+          const barWidth = Math.min(100, Math.max(8, (latencyMs / 120) * 100));
+          dbBarEl.style.width = `${barWidth}%`;
+        }
+        if (dbTagEl) {
+          if (latencyMs > 150) {
+            dbTagEl.className = 'ai-chart-tag danger';
+            dbTagEl.innerText = 'Slow';
+          } else if (latencyMs > 60) {
+            dbTagEl.className = 'ai-chart-tag warn';
+            dbTagEl.innerText = 'Moderate';
+          } else {
+            dbTagEl.className = 'ai-chart-tag ok';
+            dbTagEl.innerText = 'Fast';
+          }
+        }
+        if (dbThreadsEl) {
+          const threads = (db.status_vars && db.status_vars.Threads_connected) || 0;
+          dbThreadsEl.innerText = `${threads} Connected Client Threads`;
+        }
+
+        // 4. Critical Bottlenecks & Operational Alerts
+        const pErrors = Number(errors.unresolved_payroll_errors_total) || 0;
+        const incidents = Number(errors.open_security_incidents_total) || 0;
+        const missedCalls = Number(errors.missed_call_center_calls_today) || 0;
+        const totalAlerts = pErrors + incidents + missedCalls;
+
+        const alertsValEl = document.getElementById('ai-chart-alerts-val');
+        const alertsTagEl = document.getElementById('ai-chart-alerts-tag');
+        const pErrorsEl = document.getElementById('ai-chart-payroll-errors');
+        const incEl = document.getElementById('ai-chart-incidents');
+        const missedEl = document.getElementById('ai-chart-missed-calls');
+
+        if (alertsValEl) alertsValEl.innerText = `${totalAlerts} Total Alerts`;
+        if (alertsTagEl) {
+          if (totalAlerts > 10) {
+            alertsTagEl.className = 'ai-chart-tag danger';
+            alertsTagEl.innerText = 'Attention';
+          } else if (totalAlerts > 0) {
+            alertsTagEl.className = 'ai-chart-tag warn';
+            alertsTagEl.innerText = 'Active Issues';
+          } else {
+            alertsTagEl.className = 'ai-chart-tag ok';
+            alertsTagEl.innerText = 'Clear';
+          }
+        }
+        if (pErrorsEl) pErrorsEl.innerText = `${pErrors} Errors`;
+        if (incEl) incEl.innerText = `${incidents} Total (${errors.critical_or_high_severity_incidents || 0} Critical)`;
+        if (missedEl) missedEl.innerText = `${missedCalls} Today`;
+
+        if (forceRefresh && typeof showToast === 'function') {
+          showToast('Live system telemetry & performance metrics updated', 'info');
+        }
+      } catch (err) {
+        console.error('[SystemAIAssistant] Error loading telemetry charts:', err);
+      } finally {
+        if (refreshIcon) refreshIcon.style.animation = 'none';
+      }
+    },
+
     clearConversation() {
       this.history = [];
       const messagesContainer = document.getElementById('ai-assistant-messages');
@@ -287,11 +445,195 @@
     }
   };
 
+  // ==============================================================================
+  // Draggable Floating AI Widget (Launcher for Google Gemini AI Assistant)
+  // ==============================================================================
+  function initDraggableAIWidget() {
+    const container = document.getElementById('ai-floating-widget-container');
+    const widgetBtn = document.getElementById('ai-floating-widget');
+    if (!container || !widgetBtn) return;
+    if (container.dataset.dragInitialized === 'true') return;
+    container.dataset.dragInitialized = 'true';
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+    let hasMoved = false;
+    const DRAG_THRESHOLD = 6;
+
+    function clampPosition(left, top, elWidth, elHeight) {
+      const padding = 12;
+      const width = elWidth || container.offsetWidth || 210;
+      const height = elHeight || container.offsetHeight || 48;
+      const maxLeft = Math.max(padding, window.innerWidth - width - padding);
+      const maxTop = Math.max(padding, window.innerHeight - height - padding);
+
+      const clampedLeft = Math.max(padding, Math.min(maxLeft, left));
+      const clampedTop = Math.max(padding, Math.min(maxTop, top));
+      return { left: clampedLeft, top: clampedTop };
+    }
+
+    function setPosition(left, top) {
+      container.style.bottom = 'auto';
+      container.style.right = 'auto';
+      container.style.left = `${Math.round(left)}px`;
+      container.style.top = `${Math.round(top)}px`;
+    }
+
+    function savePosition(left, top) {
+      try {
+        localStorage.setItem('corpsec_ai_widget_pos', JSON.stringify({ left: Math.round(left), top: Math.round(top) }));
+      } catch (e) {}
+    }
+
+    function restoreSavedPosition() {
+      try {
+        let saved = localStorage.getItem('corpsec_ai_widget_pos');
+        // If AI position not set yet, check if there was a saved softphone pos from the screenshot
+        if (!saved) {
+          saved = localStorage.getItem('corpsec_softphone_pos');
+        }
+        if (saved) {
+          const pos = JSON.parse(saved);
+          if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+            const rect = container.getBoundingClientRect();
+            const clamped = clampPosition(pos.left, pos.top, rect.width || 210, rect.height || 48);
+            setPosition(clamped.left, clamped.top);
+          }
+        }
+      } catch (e) {}
+    }
+
+    restoreSavedPosition();
+
+    window.addEventListener('resize', () => {
+      const rect = container.getBoundingClientRect();
+      const clamped = clampPosition(rect.left, rect.top, rect.width, rect.height);
+      setPosition(clamped.left, clamped.top);
+    });
+
+    let activeDragEl = null;
+
+    function onPointerDown(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (e.target.closest('button')) return;
+
+      isDragging = true;
+      hasMoved = false;
+      activeDragEl = e.currentTarget;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = container.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      container.classList.add('is-dragging');
+
+      try {
+        if (activeDragEl && activeDragEl.setPointerCapture && e.pointerId !== undefined) {
+          activeDragEl.setPointerCapture(e.pointerId);
+        }
+      } catch (err) {}
+
+      document.addEventListener('pointermove', onPointerMove, { passive: false });
+      document.addEventListener('pointerup', onPointerUp);
+      document.addEventListener('pointercancel', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!hasMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        hasMoved = true;
+      }
+
+      if (hasMoved) {
+        if (e.cancelable) e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const rawLeft = initialLeft + dx;
+        const rawTop = initialTop + dy;
+        const clamped = clampPosition(rawLeft, rawTop, rect.width, rect.height);
+        setPosition(clamped.left, clamped.top);
+      }
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('is-dragging');
+
+      try {
+        if (activeDragEl && activeDragEl.releasePointerCapture && e && e.pointerId !== undefined) {
+          activeDragEl.releasePointerCapture(e.pointerId);
+        }
+      } catch (err) {}
+      activeDragEl = null;
+
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('pointercancel', onPointerUp);
+
+      if (hasMoved) {
+        window.__aiWidgetJustDragged = true;
+        setTimeout(() => {
+          window.__aiWidgetJustDragged = false;
+        }, 180);
+
+        const rect = container.getBoundingClientRect();
+        savePosition(rect.left, rect.top);
+      } else {
+        window.activateAIAssistantWidget();
+      }
+    }
+
+    widgetBtn.addEventListener('pointerdown', onPointerDown);
+  }
+
+  window.initDraggableAIWidget = initDraggableAIWidget;
+
+  window.activateAIAssistantWidget = function () {
+    if (window.__aiWidgetJustDragged) return;
+
+    // Switch to dedicated AI Assistant & Telemetry Charts page
+    if (typeof switchTab === 'function') {
+      switchTab('ai-assistant');
+    }
+
+    setTimeout(() => {
+      const panel = document.getElementById('ai-assistant-panel');
+      const input = document.getElementById('ai-assistant-input');
+
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        panel.classList.remove('ai-panel-highlight');
+        void panel.offsetWidth; // trigger reflow
+        panel.classList.add('ai-panel-highlight');
+        setTimeout(() => panel.classList.remove('ai-panel-highlight'), 2600);
+      }
+
+      if (input) {
+        input.focus();
+        input.classList.add('ai-input-focus-pulse');
+        setTimeout(() => input.classList.remove('ai-input-focus-pulse'), 2000);
+      }
+    }, 120);
+  };
+
   // Initialize on DOM ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => window.SystemAIAssistant.init());
+    document.addEventListener('DOMContentLoaded', () => {
+      window.SystemAIAssistant.init();
+      initDraggableAIWidget();
+    });
   } else {
     window.SystemAIAssistant.init();
+    initDraggableAIWidget();
   }
 
 })();

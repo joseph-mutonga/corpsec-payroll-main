@@ -490,3 +490,415 @@
   margin-top: 4px;
   padding-left: 2px;
 }
+
+/* ==============================================================================
+   Persistent Floating Gemini AI Assistant Launcher Widget (Draggable Anywhere)
+   ============================================================================== */
+.ai-floating-widget-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  font-family: inherit;
+  touch-action: none;
+}
+
+.ai-floating-widget-container.is-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.ai-floating-widget-container.is-dragging .ai-floating-widget-btn {
+  transition: none !important;
+  cursor: grabbing !important;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.55), 0 0 25px rgba(99, 102, 241, 0.45) !important;
+}
+
+/* Floating AI Pill */
+.ai-floating-widget-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+  color: #FFFFFF;
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.4), 0 0 16px rgba(99, 102, 241, 0.25);
+  cursor: grab;
+  border: 2px solid rgba(99, 102, 241, 0.6);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.ai-floating-widget-btn:active {
+  cursor: grabbing;
+}
+
+.ai-floating-widget-btn:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.5), 0 0 24px rgba(99, 102, 241, 0.4);
+  border-color: #818CF8;
+}
+
+.ai-drag-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+  font-size: 13px;
+  cursor: grab;
+  letter-spacing: -2px;
+  margin-right: -2px;
+  opacity: 0.7;
+  user-select: none;
+}
+
+.ai-floating-widget-btn:hover .ai-drag-grip {
+  opacity: 1;
+  color: #E2E8F0;
+}
+
+.ai-floating-icon {
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
+  animation: ai-icon-pulse 3s infinite ease-in-out;
+}
+
+@keyframes ai-icon-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.4)); }
+  50% { transform: scale(1.08); filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.8)); }
+}
+
+.ai-floating-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+}
+
+.ai-floating-gemini-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Glowing animation when AI Assistant is activated by clicking widget */
+.ai-panel-highlight {
+  outline: 3px solid #6366F1 !important;
+  box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.25), 0 20px 45px rgba(99, 102, 241, 0.2) !important;
+  transition: all 0.3s ease !important;
+}
+
+.ai-input-focus-pulse {
+  outline: 3px solid #7C3AED !important;
+  box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+/* ==============================================================================
+   Compact Dashboard AI Banner (1-line sleek launcher on Executive Dashboard)
+   ============================================================================== */
+.dash-ai-quick-banner {
+  background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 14px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.12);
+  transition: all 0.2s ease;
+}
+
+.dash-ai-quick-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 26px -2px rgba(99, 102, 241, 0.25);
+  border-color: #818CF8;
+}
+
+.dash-ai-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dash-ai-banner-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4);
+  flex-shrink: 0;
+}
+
+.dash-ai-banner-title {
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dash-ai-banner-badge {
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.5px;
+}
+
+.dash-ai-banner-badge-grounded {
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ADE80;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.dash-ai-banner-sub {
+  color: #94A3B8;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.dash-ai-banner-btn {
+  background: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.dash-ai-banner-btn:hover {
+  background: linear-gradient(135deg, #4338CA 0%, #4F46E5 100%);
+  transform: translateX(2px);
+}
+
+/* ==============================================================================
+   Dedicated AI Assistant & Telemetry Charts Page Styling
+   ============================================================================== */
+.ai-page-hero {
+  background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.15);
+}
+
+.ai-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ai-hero-icon-bubble {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.45);
+  flex-shrink: 0;
+}
+
+.ai-hero-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-hero-subtitle {
+  font-size: 12px;
+  color: #94A3B8;
+  margin-top: 4px;
+  max-width: 650px;
+}
+
+.ai-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* AI Telemetry & Health Charts Grid */
+.ai-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.ai-chart-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+
+.ai-chart-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+}
+
+.ai-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ai-chart-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ai-chart-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.ai-chart-icon-box.cpu { background: #EEF2FF; color: #4F46E5; }
+.ai-chart-icon-box.ram { background: #FAF5FF; color: #9333EA; }
+.ai-chart-icon-box.db { background: #ECFDF5; color: #059669; }
+.ai-chart-icon-box.alerts { background: #FEF2F2; color: #DC2626; }
+
+.ai-chart-main-val {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ai-chart-main-val span:first-child {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+}
+
+.ai-chart-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.ai-chart-tag.ok {
+  background: #DCFCE7;
+  color: #15803D;
+}
+
+.ai-chart-tag.warn {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.ai-chart-tag.danger {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+.ai-chart-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #F1F5F9;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.ai-chart-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease;
+}
+
+.ai-chart-progress-fill.cpu { background: linear-gradient(90deg, #4F46E5, #818CF8); }
+.ai-chart-progress-fill.ram { background: linear-gradient(90deg, #9333EA, #C084FC); }
+.ai-chart-progress-fill.db { background: linear-gradient(90deg, #059669, #34D399); }
+
+.ai-chart-footer {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.ai-chart-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.ai-alert-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #475569;
+}
+
+.ai-alert-row strong {
+  font-weight: 700;
+  color: #0F172A;
+}
