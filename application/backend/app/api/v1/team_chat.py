@@ -12,6 +12,8 @@ from sqlalchemy import or_, and_, desc, func
 
 from application.backend.app.api.deps import get_db, authorize_chart_analytics
 from application.backend.app.models.user import User, UserRole
+from application.backend.app.models.site import Site
+from application.backend.app.models.guard import Guard
 from application.backend.app.models.team_message import TeamMessage, TeamChatRead
 from application.backend.app.schemas.team_message import (
     TeamMessageCreate,
@@ -96,11 +98,15 @@ def getChatContacts(
         {
             "id": "group_operations",
             "is_group": True,
+            "category": "channels",
             "name": "🏢 Operations Team Group",
+            "display_name": "Operations Team",
             "email": "operations-group@corpsec.co.ke",
             "subtitle": "Group • All Supervisors, HR & Staff (Guards Excluded)",
             "role": "GROUP",
             "avatar": "👥",
+            "avatar_initials": "OP",
+            "avatar_bg": "#0F766E",
             "last_message": format_chat_last_message(last_group_msg, "Tap to open team group discussion..."),
             "last_time": last_group_msg.created_at.isoformat() if last_group_msg else None,
             "user_id": None,
@@ -108,7 +114,7 @@ def getChatContacts(
         }
     ]
 
-    # 2. Individual contacts listed by email, strictly excluding Guards
+    # 2. Individual contacts listed by email/name with assigned sites and workforce data
     users = (
         db.query(User)
         .filter(
@@ -150,8 +156,8 @@ def getChatContacts(
             "admin": "System Admin",
             "System Admin": "System Admin",
             "HR": "HR Manager",
-            "SUPERVISOR": "Supervisor",
-            "Supervisor": "Supervisor",
+            "SUPERVISOR": "Field Supervisor",
+            "Supervisor": "Field Supervisor",
             "STAFF": "Corporate Staff",
             "Staff": "Corporate Staff"
         }.get(u.role, u.role)
@@ -166,20 +172,72 @@ def getChatContacts(
             "Staff": "👤"
         }.get(u.role, "👤")
 
-        # Listed prominently by email as requested
-        contact_display_name = u.email
-        extra_info = f"{role_display}" + (f" ({u.full_name})" if u.full_name else "")
+        # Category mapping for organized sidebar sections
+        is_sup = str(u.role).upper() in ["SUPERVISOR", "SUPERVISORS"]
+        is_admin_or_hr = str(u.role).upper() in ["ADMIN", "SYSTEM ADMIN", "HR", "STAFF"]
+        contact_category = "supervisors" if is_sup else ("admin_hr" if is_admin_or_hr else "staff")
+
+        # Database retrieval: Assigned sites & guards count
+        assigned_sites = []
+        assigned_guards_count = 0
+        if is_sup:
+            sites_q = db.query(Site).filter(Site.supervisor_id == u.id).all()
+            assigned_sites = [s.site_name for s in sites_q]
+            assigned_guards_count = db.query(Guard).filter(Guard.supervisor_id == u.id).count()
+
+        # Generate avatar initials
+        name_parts = (u.full_name or u.email.split('@')[0]).replace('.', ' ').split()
+        if len(name_parts) >= 2:
+            initials = f"{name_parts[0][0]}{name_parts[1][0]}".upper()
+        elif len(name_parts) == 1 and name_parts[0]:
+            initials = name_parts[0][:2].upper()
+        else:
+            initials = (u.email or "U")[:2].upper()
+
+        avatar_bg = {
+            "ADMIN": "#2563EB",
+            "admin": "#2563EB",
+            "HR": "#059669",
+            "SUPERVISOR": "#D97706",
+            "Supervisor": "#D97706",
+            "STAFF": "#0891B2"
+        }.get(u.role, "#475569")
+
+        # Build clean subtitle
+        if is_sup:
+            if assigned_sites:
+                sites_snippet = ", ".join(assigned_sites[:2])
+                if len(assigned_sites) > 2:
+                    sites_snippet += f" +{len(assigned_sites) - 2}"
+                extra_info = f"Supervisor • {sites_snippet}"
+            elif assigned_guards_count > 0:
+                extra_info = f"Supervisor • {assigned_guards_count} Guards"
+            else:
+                extra_info = "Field Supervisor • General Roster"
+        else:
+            extra_info = f"{role_display}" + (f" ({u.full_name})" if u.full_name else "")
+
+        display_name = u.full_name if (u.full_name and u.full_name.strip()) else u.email
 
         contacts.append({
             "id": f"dm_{u.id}",
             "is_group": False,
-            "name": contact_display_name,
+            "category": contact_category,
+            "display_name": display_name,
+            "name": display_name,
             "email": u.email,
+            "phone": u.phone or "",
             "full_name": u.full_name or "",
             "subtitle": extra_info,
             "role": u.role,
+            "role_display": role_display,
+            "assigned_sites": assigned_sites,
+            "assigned_sites_str": ", ".join(assigned_sites) if assigned_sites else "None assigned",
+            "assigned_guards_count": assigned_guards_count,
             "avatar": avatar_icon,
-            "last_message": format_chat_last_message(last_dm, f"Click to chat with {u.email}"),
+            "avatar_initials": initials,
+            "avatar_bg": avatar_bg,
+            "last_message": format_chat_last_message(last_dm, f"Click to chat with {display_name}"),
             "last_time": last_dm.created_at.isoformat() if last_dm else None,
             "user_id": u.id,
             "unread_count": dm_unread_count
@@ -187,13 +245,25 @@ def getChatContacts(
 
     total_unread = sum(c["unread_count"] for c in contacts)
 
+    channels_count = len([c for c in contacts if c.get("category") == "channels"])
+    supervisors_count = len([c for c in contacts if c.get("category") == "supervisors"])
+    admin_hr_count = len([c for c in contacts if c.get("category") in ["admin_hr", "staff"]])
+
     return {
         "status": "success",
         "current_user": {
             "id": current_user.id,
             "name": current_user.full_name or current_user.email,
             "email": current_user.email,
-            "role": current_user.role
+            "role": current_user.role,
+            "phone": current_user.phone
+        },
+        "counts": {
+            "all": len(contacts),
+            "channels": channels_count,
+            "supervisors": supervisors_count,
+            "admin_hr": admin_hr_count,
+            "unread": total_unread
         },
         "total_unread": total_unread,
         "contacts": contacts

@@ -96,6 +96,11 @@ def get_bank_schedule(
     return {
         "period_id": period.id,
         "period_name": period.period_name,
+        "billing_period": recon_data.get("billing_period"),
+        "is_month_to_date": recon_data.get("is_month_to_date"),
+        "eval_end_date": recon_data.get("eval_end_date"),
+        "total_days_in_month": recon_data.get("total_days_in_month"),
+        "elapsed_calendar_days": recon_data.get("elapsed_calendar_days"),
         "total_employees": recon_data["bank_records_count"],
         "total_amount": recon_data["total_bank_amount"],
         "unrouted_count": recon_data["unrouted_records_count"],
@@ -172,6 +177,11 @@ def get_mpesa_schedule(
     return {
         "period_id": period.id,
         "period_name": period.period_name,
+        "billing_period": recon_data.get("billing_period"),
+        "is_month_to_date": recon_data.get("is_month_to_date"),
+        "eval_end_date": recon_data.get("eval_end_date"),
+        "total_days_in_month": recon_data.get("total_days_in_month"),
+        "elapsed_calendar_days": recon_data.get("elapsed_calendar_days"),
         "total_employees": recon_data["mpesa_records_count"],
         "total_amount": recon_data["total_mpesa_amount"],
         "unrouted_count": recon_data["unrouted_records_count"],

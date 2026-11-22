@@ -97,6 +97,22 @@ function showManualInstallHelp() {
   alert('To install CorpSec Guard: tap the Chrome menu (⋮) and choose “Install app” or “Add to Home screen”.');
 }
 
+window.triggerPortalPwaInstall = async function () {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    hideInstallBanner(true);
+    if (outcome === 'accepted') {
+      alert('🎉 CorpSec Guard App installed successfully!');
+    }
+  } else if (isPortalStandalone()) {
+    alert('✅ CorpSec Guard App is already installed and running on your device!');
+  } else {
+    showManualInstallHelp();
+  }
+};
+
 function setupInstallPrompt() {
   const installButton = document.getElementById('install-app-button');
   const dismissButton = document.getElementById('dismiss-install-button');

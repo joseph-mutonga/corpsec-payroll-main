@@ -33,7 +33,7 @@ async def query_system_ai_insights(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Prompt cannot be empty.")
 
     # 1. Aggregate real-time system performance & database telemetry (Strictly Read-Only)
-    telemetry = AITelemetryService.get_system_telemetry(db) if payload.include_telemetry else {}
+    telemetry = AITelemetryService.get_system_telemetry(db, user_query=clean_prompt) if payload.include_telemetry else {}
 
     # 2. Query Google Gemini Analyst Model
     result = await GeminiAIService.analyze_system_insights(
@@ -87,5 +87,11 @@ def get_live_system_telemetry(
         operations_telemetry=telemetry.get("workforce_and_operations", {}),
         financial_telemetry=telemetry.get("financial_and_payroll", {}),
         active_users=telemetry.get("users_and_sessions", {}),
-        recent_audit_actions=telemetry.get("recent_audit_trail", [])
+        recent_audit_actions=telemetry.get("recent_audit_trail", []),
+        guards_register=telemetry.get("guards_register", []),
+        supervisors_register=telemetry.get("supervisors_register", []),
+        client_sites_register=telemetry.get("client_sites_register", []),
+        shifts_register=telemetry.get("shifts_register", []),
+        client_contracts_register=telemetry.get("client_contracts_register", []),
+        recent_incidents_register=telemetry.get("recent_incidents_register", [])
     )

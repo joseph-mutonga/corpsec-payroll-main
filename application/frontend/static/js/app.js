@@ -3629,8 +3629,9 @@ async function loadPayments(selectedPeriodId = null) {
               <div style="display:flex; align-items:center; gap:12px;">
                 <div style="font-size:26px; line-height:1;">ℹ️</div>
                 <div>
-                  <div style="font-size:14px; font-weight:800; color:#1E40AF; display:flex; align-items:center; gap:8px;">
-                    <span>Current Month Payment Schedule: ${recon.period_name}</span>
+                  <div style="font-size:14px; font-weight:800; color:#1E40AF; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span>Payment Schedule: ${escapeHtml(recon.period_name)}</span>
+                    <span class="badge" style="background:#4338CA; color:#FFF; font-size:11px; padding:3px 8px; border-radius:12px;">📅 Billing Period: ${escapeHtml(recon.billing_period || 'Month-to-Date')}</span>
                     <span class="badge" style="background:#2563EB; color:#FFF; font-size:11px; padding:3px 8px; border-radius:12px;">UNPAID / SCHEDULED</span>
                   </div>
                   <div style="font-size:12px; color:#1E3A8A; margin-top:3px;">
@@ -3747,7 +3748,7 @@ async function loadPayments(selectedPeriodId = null) {
 
     const hasNoItems = (recon.bank_items.length === 0 && recon.mpesa_items.length === 0 && (!recon.unrouted_items || recon.unrouted_items.length === 0));
     if (hasNoItems) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748B;">No payment disbursement records found for this period. Click 🔄 Refresh to recalculate.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:32px; color:#64748B;">No payment disbursement records found for this period. Click 🔄 Refresh to recalculate.</td></tr>';
       return;
     }
 
@@ -3757,13 +3758,19 @@ async function loadPayments(selectedPeriodId = null) {
         ? '<span class="badge" style="background:#16A34A; color:#FFF; font-weight:700;">✅ PAID</span>'
         : '<span class="badge" style="background:#2563EB; color:#FFF; font-weight:700; font-size:11px;" title="Calculated net salary pending bank batch transfer">⏳ PENDING PAYMENT</span>';
 
+      const daysWorked = (item.days_worked !== undefined && item.days_worked !== null) ? `${item.days_worked} days` : '—';
+      const offDays = item.off_days_display || ((item.off_days_used !== undefined && item.off_days_used !== null) ? `${item.off_days_used} used / ${item.off_days_remaining} rem` : '—');
+      const accruedPay = (item.accrued_amount !== undefined && item.accrued_amount !== null ? item.accrued_amount : item.amount);
+
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
         <td>${escapeHtml(item.guard_name)}</td>
         <td><span class="badge badge-active" style="background:#2563EB;">Bank Transfer</span></td>
         <td>${escapeHtml(item.bank_name)}</td>
         <td><code>${escapeHtml(item.bank_account)}</code></td>
-        <td><b>KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
+        <td><span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">${daysWorked}</span></td>
+        <td><span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">${offDays}</span></td>
+        <td><b style="color:#0F172A;">KES ${accruedPay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
         <td>${statusBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
@@ -3780,13 +3787,19 @@ async function loadPayments(selectedPeriodId = null) {
         ? '<span class="badge" style="background:#16A34A; color:#FFF; font-weight:700;">✅ PAID</span>'
         : '<span class="badge" style="background:#059669; color:#FFF; font-weight:700; font-size:11px;" title="Calculated net salary pending M-Pesa disbursement">⏳ PENDING PAYMENT</span>';
 
+      const daysWorked = (item.days_worked !== undefined && item.days_worked !== null) ? `${item.days_worked} days` : '—';
+      const offDays = item.off_days_display || ((item.off_days_used !== undefined && item.off_days_used !== null) ? `${item.off_days_used} used / ${item.off_days_remaining} rem` : '—');
+      const accruedPay = (item.accrued_amount !== undefined && item.accrued_amount !== null ? item.accrued_amount : item.amount);
+
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
         <td>${escapeHtml(item.guard_name)}</td>
         <td><span class="badge badge-active" style="background:#059669;">M-Pesa</span></td>
         <td>Safaricom M-Pesa</td>
         <td><code>${escapeHtml(item.mpesa_number)}</code></td>
-        <td><b>KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
+        <td><span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">${daysWorked}</span></td>
+        <td><span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">${offDays}</span></td>
+        <td><b style="color:#0F172A;">KES ${accruedPay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
         <td>${statusBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
@@ -3799,12 +3812,18 @@ async function loadPayments(selectedPeriodId = null) {
 
     recon.unrouted_items.forEach(item => {
       const tr = document.createElement('tr');
+      const daysWorked = (item.days_worked !== undefined && item.days_worked !== null) ? `${item.days_worked} days` : '—';
+      const offDays = item.off_days_display || ((item.off_days_used !== undefined && item.off_days_used !== null) ? `${item.off_days_used} used / ${item.off_days_remaining} rem` : '—');
+      const accruedPay = (item.accrued_amount !== undefined && item.accrued_amount !== null ? item.accrued_amount : item.net_pay);
+
       tr.innerHTML = `
         <td><b>${item.employee_number}</b></td>
         <td>${escapeHtml(item.guard_name)}</td>
         <td><span class="badge badge-inactive" style="background:#EF4444; color:white;">Unrouted</span></td>
         <td colspan="2" style="color:#DC2626; font-size:12px;">⚠️ ${escapeHtml(item.reason)}</td>
-        <td><b style="color:#DC2626;">KES ${item.net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
+        <td><span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">${daysWorked}</span></td>
+        <td><span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">${offDays}</span></td>
+        <td><b style="color:#DC2626;">KES ${accruedPay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
         <td><span class="badge badge-inactive" style="background:#F59E0B; color:white;">EXCLUDED</span></td>
         <td><span style="font-size:11px; color:#94A3B8;">—</span></td>
       `;
@@ -8027,8 +8046,10 @@ function switchGuardSubTab(tab) {
   currentGuardSubTab = tab;
   const activeBtn = document.getElementById('guard-tab-btn-active');
   const inactiveBtn = document.getElementById('guard-tab-btn-inactive');
+  const downloadBtn = document.getElementById('guard-tab-btn-download');
   const activeView = document.getElementById('guards-subview-active');
   const inactiveView = document.getElementById('guards-subview-inactive');
+  const downloadView = document.getElementById('guards-subview-download');
 
   if (tab === 'active') {
     if (activeBtn) {
@@ -8039,9 +8060,14 @@ function switchGuardSubTab(tab) {
       inactiveBtn.style.background = '#F1F5F9';
       inactiveBtn.style.color = '#475569';
     }
+    if (downloadBtn) {
+      downloadBtn.style.background = '#F1F5F9';
+      downloadBtn.style.color = '#475569';
+    }
     if (activeView) activeView.style.display = 'block';
     if (inactiveView) inactiveView.style.display = 'none';
-  } else {
+    if (downloadView) downloadView.style.display = 'none';
+  } else if (tab === 'inactive') {
     if (activeBtn) {
       activeBtn.style.background = '#F1F5F9';
       activeBtn.style.color = '#475569';
@@ -8050,10 +8076,106 @@ function switchGuardSubTab(tab) {
       inactiveBtn.style.background = '#DC2626';
       inactiveBtn.style.color = '#FFFFFF';
     }
+    if (downloadBtn) {
+      downloadBtn.style.background = '#F1F5F9';
+      downloadBtn.style.color = '#475569';
+    }
     if (activeView) activeView.style.display = 'none';
     if (inactiveView) inactiveView.style.display = 'block';
+    if (downloadView) downloadView.style.display = 'none';
+  } else if (tab === 'download') {
+    if (activeBtn) {
+      activeBtn.style.background = '#F1F5F9';
+      activeBtn.style.color = '#475569';
+    }
+    if (inactiveBtn) {
+      inactiveBtn.style.background = '#F1F5F9';
+      inactiveBtn.style.color = '#475569';
+    }
+    if (downloadBtn) {
+      downloadBtn.style.background = '#2563EB';
+      downloadBtn.style.color = '#FFFFFF';
+    }
+    if (activeView) activeView.style.display = 'none';
+    if (inactiveView) inactiveView.style.display = 'none';
+    if (downloadView) downloadView.style.display = 'block';
+    initGuardDirectoryDownloadSection();
   }
 }
+
+function initGuardDirectoryDownloadSection() {
+  const osElem = document.getElementById('guards-detected-machine-os');
+  const browserElem = document.getElementById('guards-detected-machine-browser');
+  const portalUrlInput = document.getElementById('guard-directory-portal-url');
+
+  const ua = navigator.userAgent;
+  let osName = 'Windows PC';
+  if (ua.indexOf('Win') !== -1) osName = 'Windows PC (10/11)';
+  else if (ua.indexOf('Mac') !== -1) osName = 'macOS';
+  else if (ua.indexOf('Linux') !== -1) osName = 'Linux';
+  else if (ua.indexOf('Android') !== -1) osName = 'Android Smartphone';
+  else if (ua.indexOf('iPhone') !== -1 || ua.indexOf('iPad') !== -1) osName = 'Apple iOS Device';
+
+  let browserName = 'Chrome / Edge';
+  if (ua.indexOf('Edg') !== -1) browserName = 'Microsoft Edge';
+  else if (ua.indexOf('Chrome') !== -1) browserName = 'Google Chrome';
+  else if (ua.indexOf('Safari') !== -1 && ua.indexOf('Chrome') === -1) browserName = 'Apple Safari';
+  else if (ua.indexOf('Firefox') !== -1) browserName = 'Mozilla Firefox';
+
+  if (osElem) osElem.innerText = `Current Device: ${osName}`;
+  if (browserElem) browserElem.innerText = `Browser: ${browserName} • Ready for Native Launcher, Mobile PWA & Offline Installation`;
+
+  const portalUrl = `${window.location.origin}/portal`;
+  if (portalUrlInput) portalUrlInput.value = portalUrl;
+}
+
+function copyGuardPortalUrl() {
+  const portalUrl = `${window.location.origin}/portal`;
+  const btn = document.getElementById('btn-copy-guard-link');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(portalUrl).then(() => {
+      if (btn) {
+        const original = btn.innerHTML;
+        btn.innerHTML = '✅ Copied!';
+        btn.style.background = '#DCFCE7';
+        btn.style.color = '#15803D';
+        setTimeout(() => {
+          btn.innerHTML = original;
+          btn.style.background = '';
+          btn.style.color = '';
+        }, 2500);
+      }
+      if (typeof showToast === 'function') {
+        showToast('📋 Guard Portal URL copied to clipboard!', 'success');
+      }
+    }).catch(() => {
+      if (typeof showToast === 'function') {
+        showToast(`Guard Portal URL: ${portalUrl}`, 'info');
+      }
+    });
+  } else {
+    if (typeof showToast === 'function') {
+      showToast(`Guard Portal URL: ${portalUrl}`, 'info');
+    }
+  }
+}
+
+function shareGuardPortalWhatsApp() {
+  const portalUrl = `${window.location.origin}/portal`;
+  const msg = encodeURIComponent(`*CorpSec Security Guard Portal*\n\nPlease access and install your official CorpSec Guard Application on your phone to clock in with GPS, view duty rosters, and download digital payslips:\n${portalUrl}`);
+  window.open(`https://wa.me/?text=${msg}`, '_blank');
+}
+
+function shareGuardPortalSMS() {
+  const portalUrl = `${window.location.origin}/portal`;
+  const msg = encodeURIComponent(`CorpSec Guard App: Access and install your guard application on your phone here: ${portalUrl}`);
+  window.open(`sms:?body=${msg}`, '_blank');
+}
+
+window.initGuardDirectoryDownloadSection = initGuardDirectoryDownloadSection;
+window.copyGuardPortalUrl = copyGuardPortalUrl;
+window.shareGuardPortalWhatsApp = shareGuardPortalWhatsApp;
+window.shareGuardPortalSMS = shareGuardPortalSMS;
 
 function openDeactivateGuardModal(guardId, guardName, empNo) {
   const modal = document.getElementById('modal-deactivate-guard');
@@ -14994,7 +15116,12 @@ async function initWhatsAppChat() {
 
   const container = document.getElementById('wa-contact-list');
   if (container) {
-    container.innerHTML = '<div style="text-align:center; padding:25px; color:#8696a0; font-size:13px;">Loading team directory...</div>';
+    container.innerHTML = `
+      <div style="text-align:center; padding:35px 20px; color:#8696a0; font-size:13px;">
+        <div class="ai-spinner" style="width:24px; height:24px; margin:0 auto 10px auto; border-color:rgba(0,168,132,0.25); border-top-color:#00a884;"></div>
+        <div>Loading live team directory from database...</div>
+      </div>
+    `;
   }
 
   try {
@@ -15003,10 +15130,21 @@ async function initWhatsAppChat() {
       if (res.status === 403) {
         showToast('Access Denied: Team Chat is restricted to Admin, HR, Staff, and Supervisors.', 'danger');
       }
-      throw new Error('Could not fetch team directory');
+      throw new Error(`Server returned HTTP ${res.status}`);
     }
     const data = await res.json();
     waContactsCache = data.contacts || [];
+
+    // Update filter pill counts from live database
+    const counts = data.counts || {};
+    const cntAll = document.getElementById('wa-pill-cnt-all');
+    if (cntAll) cntAll.innerText = counts.all || waContactsCache.length;
+    const cntCh = document.getElementById('wa-pill-cnt-channels');
+    if (cntCh) cntCh.innerText = counts.channels || waContactsCache.filter(c => c.category === 'channels' || c.is_group).length;
+    const cntSup = document.getElementById('wa-pill-cnt-supervisors');
+    if (cntSup) cntSup.innerText = counts.supervisors || waContactsCache.filter(c => c.category === 'supervisors').length;
+    const cntAdmin = document.getElementById('wa-pill-cnt-admin_hr');
+    if (cntAdmin) cntAdmin.innerText = counts.admin_hr || waContactsCache.filter(c => c.category === 'admin_hr').length;
 
     // Update global and pill unread badges
     updateTeamChatBadges(data.total_unread || 0);
@@ -15016,10 +15154,10 @@ async function initWhatsAppChat() {
       const myName = document.getElementById('wa-my-name');
       const myRole = document.getElementById('wa-my-role');
       const myAvatar = document.getElementById('wa-my-avatar');
-      if (myName) myName.innerText = data.current_user.email || data.current_user.name || 'User';
-      if (myRole) myRole.innerText = data.current_user.role || 'Member';
+      if (myName) myName.innerText = data.current_user.name || data.current_user.email || 'User';
+      if (myRole) myRole.innerText = `${data.current_user.role || 'Member'} • Online`;
       if (myAvatar) {
-        const initial = (data.current_user.email || 'U').charAt(0).toUpperCase();
+        const initial = (data.current_user.name || data.current_user.email || 'U').charAt(0).toUpperCase();
         myAvatar.innerText = initial;
       }
     }
@@ -15040,9 +15178,91 @@ async function initWhatsAppChat() {
   } catch (err) {
     console.error('initWhatsAppChat error:', err);
     if (container) {
-      container.innerHTML = '<div style="text-align:center; padding:25px; color:#ef4444; font-size:13px;">⚠️ Error loading contacts: ' + (err.message || 'Check network') + '</div>';
+      container.innerHTML = `
+        <div style="text-align:center; padding:30px 20px; color:#ef4444; font-size:13px;">
+          <div style="font-size:24px; margin-bottom:8px;">⚠️</div>
+          <div style="font-weight:700;">Unable to connect to Team Chat API</div>
+          <div style="font-size:11.5px; color:#8696a0; margin-top:4px;">${escapeHtml(err.message || 'Check database connection')}</div>
+          <button type="button" class="btn btn-sm" style="margin-top:14px; background:#202c33; color:#00a884; border:1px solid #00a884; padding:5px 14px; border-radius:8px; cursor:pointer;" onclick="initWhatsAppChat()">
+            🔄 Retry Connection
+          </button>
+        </div>
+      `;
     }
   }
+}
+
+function renderWhatsAppContactItem(c) {
+  const isActive = c.id === waActiveContact.id;
+  const unread = parseInt(c.unread_count, 10) || 0;
+  const hasUnread = unread > 0;
+
+  let timeFormatted = '';
+  if (c.last_time) {
+    const d = new Date(c.last_time);
+    timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  const roleColor = {
+    'ADMIN': '#3B82F6',
+    'admin': '#3B82F6',
+    'System Admin': '#3B82F6',
+    'HR': '#00A884',
+    'SUPERVISOR': '#F59E0B',
+    'Supervisor': '#F59E0B',
+    'STAFF': '#06B6D4',
+    'Staff': '#06B6D4'
+  }[c.role] || '#8696A0';
+
+  const timeStyle = hasUnread
+    ? 'color:#00a884; font-weight:700;'
+    : 'color:#8696a0;';
+
+  const nameStyle = hasUnread
+    ? 'color:#FFFFFF; font-weight:700;'
+    : 'color:#e9edef; font-weight:600;';
+
+  const msgStyle = hasUnread
+    ? 'color:#e9edef; font-weight:600;'
+    : 'color:#8696a0;';
+
+  const unreadBadgeHtml = hasUnread
+    ? `<span class="wa-unread-badge">${unread > 99 ? '99+' : unread}</span>`
+    : '';
+
+  const avatarBg = c.avatar_bg || '#202c33';
+  const avatarInitials = c.avatar_initials || (c.name ? c.name.slice(0, 2).toUpperCase() : '👥');
+
+  return `
+    <div class="wa-contact-item ${isActive ? 'active' : ''}" onclick="selectWhatsAppChat('${c.id}')">
+      <div class="wa-avatar-inits" style="background:${avatarBg};">
+        ${c.is_group ? '👥' : avatarInitials}
+        <span class="wa-online-dot"></span>
+      </div>
+      <div class="wa-contact-info">
+        <div class="wa-contact-top">
+          <span class="wa-contact-name" style="${nameStyle}" title="${escapeHtml(c.email || c.name)}">
+            ${escapeHtml(c.display_name || c.name)}
+          </span>
+          <span class="wa-contact-time" style="${timeStyle}">${timeFormatted}</span>
+        </div>
+        <div style="font-size:11px; color:#8696a0; margin-bottom:2px; display:flex; align-items:center; gap:6px;">
+          ${!c.is_group ? `<span style="color:#60a5fa; font-weight:500;">${escapeHtml(c.email || '')}</span>` : ''}
+          <span class="wa-role-tag" style="background:rgba(255,255,255,0.08); color:${roleColor};">
+            ${escapeHtml(c.role_display || c.role || 'MEMBER')}
+          </span>
+        </div>
+        <div class="wa-contact-bottom">
+          <span class="wa-contact-msg" style="${msgStyle}">
+            ${escapeHtml(c.subtitle || c.last_message || '')}
+          </span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            ${unreadBadgeHtml}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderWhatsAppContacts(filterQuery = '') {
@@ -15052,8 +15272,12 @@ function renderWhatsAppContacts(filterQuery = '') {
   let list = waContactsCache || [];
 
   // Filter by pill
-  if (waCurrentFilter === 'group') {
-    list = list.filter(c => c.is_group);
+  if (waCurrentFilter === 'channels' || waCurrentFilter === 'group') {
+    list = list.filter(c => c.is_group || c.category === 'channels');
+  } else if (waCurrentFilter === 'supervisors') {
+    list = list.filter(c => c.category === 'supervisors' || strCaseEqual(c.role, 'SUPERVISOR'));
+  } else if (waCurrentFilter === 'admin_hr') {
+    list = list.filter(c => c.category === 'admin_hr' || strCaseEqual(c.role, 'ADMIN') || strCaseEqual(c.role, 'HR'));
   } else if (waCurrentFilter === 'direct') {
     list = list.filter(c => !c.is_group);
   } else if (waCurrentFilter === 'unread') {
@@ -15064,76 +15288,77 @@ function renderWhatsAppContacts(filterQuery = '') {
   if (filterQuery && filterQuery.trim()) {
     const q = filterQuery.toLowerCase().trim();
     list = list.filter(c =>
+      (c.display_name || '').toLowerCase().includes(q) ||
       (c.name || '').toLowerCase().includes(q) ||
       (c.email || '').toLowerCase().includes(q) ||
+      (c.full_name || '').toLowerCase().includes(q) ||
+      (c.role || '').toLowerCase().includes(q) ||
+      (c.role_display || '').toLowerCase().includes(q) ||
+      (c.assigned_sites_str || '').toLowerCase().includes(q) ||
       (c.subtitle || '').toLowerCase().includes(q)
     );
   }
 
   if (!list || list.length === 0) {
     const emptyMsg = waCurrentFilter === 'unread'
-      ? 'No unread messages'
-      : 'No contacts found';
-    container.innerHTML = `<div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">${emptyMsg}</div>`;
+      ? 'No unread announcements or messages'
+      : (filterQuery ? `No team members or channels matching "${escapeHtml(filterQuery)}"` : 'No team contacts found in database');
+    container.innerHTML = `
+      <div style="text-align:center; padding:40px 20px; color:#8696a0; font-size:13px;">
+        <div style="font-size:28px; margin-bottom:8px;">🔍</div>
+        <div>${emptyMsg}</div>
+      </div>
+    `;
     return;
   }
 
-  container.innerHTML = list.map(c => {
-    const isActive = c.id === waActiveContact.id;
-    const unread = parseInt(c.unread_count, 10) || 0;
-    const hasUnread = unread > 0;
+  // If viewing 'all' without search filter, group into well-organized visual sections
+  if ((waCurrentFilter === 'all' || !waCurrentFilter) && !filterQuery) {
+    const channels = list.filter(c => c.is_group || c.category === 'channels');
+    const supervisors = list.filter(c => c.category === 'supervisors');
+    const adminHr = list.filter(c => c.category === 'admin_hr' || (!c.is_group && c.category !== 'supervisors'));
 
-    let timeFormatted = '';
-    if (c.last_time) {
-      const d = new Date(c.last_time);
-      timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    let html = '';
+    if (channels.length > 0) {
+      html += `
+        <div class="wa-section-header">
+          <span>📢 Operations Channels &amp; Groups</span>
+          <span class="wa-section-badge">${channels.length}</span>
+        </div>
+      `;
+      html += channels.map(renderWhatsAppContactItem).join('');
     }
 
-    const roleColor = {
-      'ADMIN': '#3B82F6',
-      'System Admin': '#3B82F6',
-      'HR': '#00A884',
-      'SUPERVISOR': '#F59E0B',
-      'Supervisor': '#F59E0B',
-      'STAFF': '#06B6D4',
-      'Staff': '#06B6D4'
-    }[c.role] || '#8696A0';
-
-    const timeStyle = hasUnread
-      ? 'color:#00a884; font-weight:700;'
-      : 'color:#8696a0;';
-
-    const nameStyle = hasUnread
-      ? 'color:#FFFFFF; font-weight:700;'
-      : 'color:#e9edef; font-weight:600;';
-
-    const msgStyle = hasUnread
-      ? 'color:#e9edef; font-weight:600;'
-      : 'color:#8696a0;';
-
-    const unreadBadgeHtml = hasUnread
-      ? `<span class="wa-unread-badge">${unread > 99 ? '99+' : unread}</span>`
-      : '';
-
-    return `
-      <div class="wa-contact-item ${isActive ? 'active' : ''}" onclick="selectWhatsAppChat('${c.id}')">
-        <div class="wa-contact-avatar">${c.avatar || '👤'}</div>
-        <div class="wa-contact-info">
-          <div class="wa-contact-top">
-            <span class="wa-contact-name" style="${nameStyle}" title="${escapeHtml(c.email || c.name)}">${escapeHtml(c.name)}</span>
-            <span class="wa-contact-time" style="${timeStyle}">${timeFormatted}</span>
-          </div>
-          <div class="wa-contact-bottom">
-            <span class="wa-contact-msg" style="${msgStyle}">${escapeHtml(c.last_message || '')}</span>
-            <div style="display:flex; align-items:center; gap:6px;">
-              ${!c.is_group ? `<span class="wa-role-tag" style="background:rgba(255,255,255,0.08); color:${roleColor};">${c.subtitle || ''}</span>` : `<span class="wa-role-tag" style="background:rgba(0,168,132,0.15); color:#00A884;">GROUP</span>`}
-              ${unreadBadgeHtml}
-            </div>
-          </div>
+    if (supervisors.length > 0) {
+      html += `
+        <div class="wa-section-header">
+          <span>🛡️ Field Supervisors (Client Sites)</span>
+          <span class="wa-section-badge">${supervisors.length}</span>
         </div>
-      </div>
-    `;
-  }).join('');
+      `;
+      html += supervisors.map(renderWhatsAppContactItem).join('');
+    }
+
+    if (adminHr.length > 0) {
+      html += `
+        <div class="wa-section-header">
+          <span>💼 Management &amp; HR Administration</span>
+          <span class="wa-section-badge">${adminHr.length}</span>
+        </div>
+      `;
+      html += adminHr.map(renderWhatsAppContactItem).join('');
+    }
+
+    container.innerHTML = html;
+    return;
+  }
+
+  // Otherwise render filtered list directly
+  container.innerHTML = list.map(renderWhatsAppContactItem).join('');
+}
+
+function strCaseEqual(a, b) {
+  return String(a || '').toUpperCase().trim() === String(b || '').toUpperCase().trim();
 }
 
 function selectWhatsAppChat(contactId) {
@@ -15162,18 +15387,53 @@ function selectWhatsAppChat(contactId) {
   const nameEl = document.getElementById('wa-active-name');
   const statusEl = document.getElementById('wa-active-status');
   const avatarEl = document.getElementById('wa-active-avatar');
+  const callBtn = document.getElementById('wa-header-call-btn');
 
-  if (nameEl) nameEl.innerText = found.name;
+  if (nameEl) nameEl.innerText = found.display_name || found.name;
   if (statusEl) {
-    statusEl.innerText = found.is_group
-      ? 'Group • All Supervisors, HR & Staff (Guards Excluded) • Online'
-      : `${found.email} [${found.subtitle}] • Online`;
+    if (found.is_group) {
+      statusEl.innerText = 'Group • All Supervisors, HR & Staff (Guards Excluded) • Online';
+    } else {
+      const siteStr = found.assigned_sites_str && found.assigned_sites_str !== 'None assigned' ? ` • ${found.assigned_sites_str}` : '';
+      statusEl.innerText = `${found.email} [${found.role_display || found.role}]${siteStr} • Online`;
+    }
   }
-  if (avatarEl) avatarEl.innerText = found.avatar || '👤';
+  if (avatarEl) {
+    if (found.is_group) {
+      avatarEl.innerText = '👥';
+      avatarEl.style.background = '#202c33';
+    } else {
+      avatarEl.innerText = found.avatar_initials || (found.name ? found.name.slice(0, 2).toUpperCase() : '👤');
+      avatarEl.style.background = found.avatar_bg || '#202c33';
+      avatarEl.style.color = '#FFFFFF';
+    }
+  }
+
+  // If this contact has a phone number, enable the Softphone Quick-Call button in chat header
+  if (callBtn) {
+    if (!found.is_group && found.phone) {
+      callBtn.style.display = 'inline-flex';
+      callBtn.title = `Call ${found.display_name || found.name} (${found.phone}) via Softphone`;
+      callBtn.innerHTML = `<span>📞</span> Call (${found.phone})`;
+    } else {
+      callBtn.style.display = 'none';
+    }
+  }
 
   renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
   loadWhatsAppActiveMessages();
 }
+
+window.callActiveContactPhone = function () {
+  if (waActiveContact && waActiveContact.phone) {
+    if (typeof window.toggleSoftphone === 'function') {
+      window.toggleSoftphone(true);
+    }
+    if (typeof window.softphoneDialCall === 'function') {
+      window.softphoneDialCall(waActiveContact.phone);
+    }
+  }
+};
 
 window.waCurrentPinned = [];
 window.waPinnedIndex = 0;
@@ -15230,7 +15490,12 @@ function updateWhatsAppPinnedBar(pinnedList) {
 
   const snippetEl = document.getElementById('wa-pinned-snippet');
   if (snippetEl) {
-    const sender = activePin.sender_name ? `${activePin.sender_name}: ` : '';
+    const sContact = (waContactsCache || []).find(c =>
+      (c.email && (activePin.sender_name || '').toLowerCase().includes(c.email.toLowerCase())) ||
+      (activePin.user_id && Number(c.user_id) === Number(activePin.user_id))
+    );
+    const sName = sContact ? (sContact.display_name || sContact.name) : (activePin.sender_name || 'Announcement');
+    const sender = `${sName}: `;
     const body = activePin.message || (activePin.attachment_name ? `📎 ${activePin.attachment_name}` : 'Attachment');
     snippetEl.innerText = `${sender}${body}`;
   }
@@ -15433,6 +15698,12 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
         </button>
       `;
 
+      const senderContact = (waContactsCache || []).find(c =>
+        (c.email && (m.sender_name || '').toLowerCase().includes(c.email.toLowerCase())) ||
+        (m.user_id && Number(c.user_id) === Number(m.user_id))
+      );
+      const senderDisplayName = senderContact ? (senderContact.display_name || senderContact.name) : m.sender_name;
+
       if (isOut) {
         const ticksHtml = m.is_read
           ? '<span class="wa-blue-ticks" title="Read">✓✓</span>'
@@ -15459,7 +15730,7 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
               ${pinTagHtml}
               ${waActiveContact.is_group ? `
                 <div class="wa-sender-lbl" style="color:${senderRoleColor};">
-                  <span>${escapeHtml(m.sender_name)}</span>
+                  <span>${escapeHtml(senderDisplayName)}</span>
                   <span class="wa-role-pill" style="color:${senderRoleColor}; border-color:${senderRoleColor};">${escapeHtml(m.sender_role || 'Staff')}</span>
                 </div>
               ` : ''}

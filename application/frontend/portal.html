@@ -570,6 +570,26 @@
 
 
 
+      <!-- Install & Download Guard Mobile Application Card -->
+      <div class="portal-card" style="border:1.5px solid #BFDBFE; background:linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 100%);">
+        <div class="card-title" style="display:flex; align-items:center; gap:8px; color:#1D4ED8;">
+          <span>📲</span> Download &amp; Install Guard App
+        </div>
+        <p style="font-size:12.5px; color:#475569; margin:4px 0 14px 0; line-height:1.5;">
+          Install the official CorpSec Guard Application directly on your phone home screen for faster GPS duty clock-in, live shift rosters, and digital payslips.
+        </p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button type="button" class="btn-clock" style="background:#2563EB; width:100%; font-size:13px; padding:12px; font-weight:700; border-radius:10px;" onclick="triggerPortalPwaInstall()">
+            ⚡ Install App on Phone Home Screen
+          </button>
+          <a href="/api/v1/desktop/download-launcher" download class="btn-clock" style="background:#0F172A; width:100%; font-size:12px; padding:10px; font-weight:700; border-radius:10px; text-decoration:none; text-align:center; display:block;">
+            💻 Download Windows PC Launcher (.bat)
+          </a>
+        </div>
+      </div>
+
+
+
       <div class="portal-card">
 
         <button class="btn-clock clock-out" style="width:100%;" onclick="logoutGuard()">

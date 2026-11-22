@@ -826,7 +826,7 @@
           </div>
           <div class="ai-hero-actions">
             <span class="ai-badge ai-badge-model" id="ai-model-badge">
-              <span>✨</span> gemini-3.5-flash-lite
+              <span>✨</span> gemini-3.8-flash
             </span>
             <span class="ai-badge ai-badge-grounded">
               <span class="ai-badge-pulse"></span> DB & Telemetry Grounded
@@ -992,15 +992,61 @@
               <span id="inactive-guards-tab-badge" class="badge"
                 style="background:#FEE2E2; color:#991B1B; font-size:12px; padding:2px 8px; border-radius:12px;">0</span>
             </button>
+            <button id="guard-tab-btn-download" class="btn"
+              style="background:#F1F5F9; color:#475569; font-weight:600; border-radius:8px; padding:9px 20px; display:flex; align-items:center; gap:8px; cursor:pointer;"
+              onclick="switchGuardSubTab('download')">
+              <span>📲 Download Application</span>
+              <span class="badge"
+                style="background:#EEF2FF; color:#4338CA; font-size:11px; padding:2px 8px; border-radius:12px;">Mobile &amp; PC</span>
+            </button>
           </div>
 
           <!-- SUB-VIEW 1: Active Guard Roster -->
           <div id="guards-subview-active">
+            <!-- Guard Application Quick Download & Deployment Banner -->
+            <div
+              style="background:linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border:1px solid #BFDBFE; border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+              <div style="display:flex; align-items:center; gap:14px;">
+                <div
+                  style="width:46px; height:46px; border-radius:12px; background:#2563EB; color:#FFF; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; box-shadow:0 4px 10px rgba(37,99,235,0.25);">
+                  📲
+                </div>
+                <div>
+                  <div style="font-size:14.5px; font-weight:800; color:#1E3A8A; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span>Download CorpSec Application for Guards &amp; Field Stations</span>
+                    <span class="badge" style="background:#2563EB; color:#FFF; font-size:10.5px; padding:2px 8px; border-radius:10px;">PC &bull; Android &bull; iOS</span>
+                  </div>
+                  <div style="font-size:12px; color:#3B82F6; margin-top:3px;">
+                    Equip security guards with the mobile portal for GPS clock-in, duty rosters, and digital payslips, or install the standalone Windows desktop application on station PCs.
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <a href="/api/v1/desktop/download-launcher" class="btn btn-primary" download
+                  style="text-decoration:none; font-size:12px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; font-weight:700; background:#2563EB; border-color:#2563EB;">
+                  <span>⬇️</span> Windows Launcher (.bat)
+                </a>
+                <a href="/api/v1/desktop/download-package" class="btn btn-secondary" download
+                  style="text-decoration:none; font-size:12px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; font-weight:700; background:#FFFFFF; color:#1E40AF; border-color:#93C5FD;">
+                  <span>📦</span> Full Package (.zip)
+                </a>
+                <button type="button" class="btn" onclick="switchGuardSubTab('download')"
+                  style="background:#1E40AF; color:#FFFFFF; font-size:12px; padding:7px 14px; font-weight:700; border:none; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                  <span>📱</span> Complete Download Center &rarr;
+                </button>
+              </div>
+            </div>
+
             <div
               style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
               <input type="text" placeholder="Search active guards by name, ID or phone..." class="form-control"
                 style="max-width:340px;" onkeyup="filterGuardsTable(this.value)">
-              <div style="display:flex; gap:10px;">
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="switchGuardSubTab('download')"
+                  style="background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; font-weight:700; display:inline-flex; align-items:center; gap:6px;"
+                  title="Download application for PC or Mobile">
+                  <span>📲</span> Download App
+                </button>
                 <button class="btn btn-secondary" onclick="openOffDayAllowanceModal()">🗓️ Set Off-Day
                   Allowance</button>
                 <button class="btn btn-primary" onclick="openAddGuardModal()">+ Add New Guard</button>
@@ -1070,6 +1116,251 @@
                   <!-- Dynamically populated with INACTIVE guards -->
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- SUB-VIEW 3: Guard Directory Download Application Section -->
+          <div id="guards-subview-download" style="display:none;">
+            <!-- Download Hero Header -->
+            <div
+              style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:14px;">
+              <div>
+                <h2
+                  style="font-size:20px; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:10px; margin:0;">
+                  <span>📲</span> CorpSec Guard &amp; Station Application Download Center
+                </h2>
+                <div style="font-size:13px; color:#64748B; margin-top:4px;">
+                  Equip security personnel, field supervisors, and site post control rooms with the official CorpSec Desktop and Mobile Application packages.
+                </div>
+              </div>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <a href="/api/v1/desktop/download-launcher" class="btn btn-primary" download
+                  style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; padding:8px 16px; font-size:13px; font-weight:700;">
+                  <span>⬇️</span> Download Windows Launcher (.bat)
+                </a>
+                <a href="/api/v1/desktop/download-package" class="btn btn-secondary" download
+                  style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; padding:8px 16px; font-size:13px; font-weight:700;">
+                  <span>📦</span> Full Setup Bundle (.ZIP)
+                </a>
+              </div>
+            </div>
+
+            <!-- Device Detection & Quick Install Banner -->
+            <div
+              style="background:linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius:14px; padding:20px 24px; margin-bottom:24px; color:#FFFFFF; box-shadow:0 10px 25px -5px rgba(15,23,42,0.15); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+              <div style="display:flex; align-items:center; gap:16px;">
+                <div
+                  style="width:52px; height:52px; border-radius:12px; background:rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; font-size:26px; border:1px solid rgba(255,255,255,0.15);">
+                  💻
+                </div>
+                <div>
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:16px; font-weight:800;" id="guards-detected-machine-os">Current Device: Detecting...</span>
+                    <span class="badge"
+                      style="background:#10B981; color:#FFFFFF; font-size:11px; padding:3px 10px; font-weight:700;">100% Compatible</span>
+                  </div>
+                  <div style="font-size:12px; color:#94A3B8; margin-top:3px;" id="guards-detected-machine-browser">
+                    Ready for Native Desktop Launcher, Mobile PWA &amp; Offline Installation
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; gap:10px;">
+                <button class="btn btn-primary" onclick="triggerPwaInstall()"
+                  style="background:#2563EB; border:none; padding:8px 18px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px;">
+                  <span>⚡</span> Install on this Machine
+                </button>
+              </div>
+            </div>
+
+            <!-- Automatic Silent Updates Banner -->
+            <div
+              style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; padding:14px 20px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="font-size:24px;">🔄</div>
+                <div>
+                  <div style="font-size:13.5px; font-weight:800; color:#166534; display:flex; align-items:center; gap:8px;">
+                    <span>Automatic Background Updates Enabled</span>
+                    <span class="badge"
+                      style="background:#22C55E; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:4px;">AUTO-SYNC</span>
+                  </div>
+                  <div style="font-size:12px; color:#15803D; margin-top:2px;">
+                    Guards and supervisors running the installed application automatically receive background updates whenever rosters, shifts, or payroll rules are published. No manual reinstallation needed.
+                  </div>
+                </div>
+              </div>
+              <div>
+                <button type="button" class="btn btn-secondary"
+                  onclick="window.CorpSecUpdater &amp;&amp; window.CorpSecUpdater.checkForUpdates()"
+                  style="font-size:12px; padding:6px 14px; font-weight:700; color:#166534; border-color:#86EFAC; background:#DCFCE7; cursor:pointer;">
+                  🔍 Check for Updates
+                </button>
+              </div>
+            </div>
+
+            <!-- 4 Prominent Download & Deployment Cards Grid -->
+            <div
+              style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:18px; margin-bottom:28px;">
+
+              <!-- Card 1: Windows Desktop Launcher -->
+              <div
+                style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+                <div style="position:absolute; top:12px; right:12px;">
+                  <span class="badge"
+                    style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BFDBFE;">FIELD STATIONS</span>
+                </div>
+                <div>
+                  <div style="font-size:32px; margin-bottom:12px;">🪟</div>
+                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Windows Desktop Launcher</h3>
+                  <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                    One-click batch launcher for site control rooms, field supervisor laptops, and guard post stations.
+                  </div>
+                  <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                    <li>Creates "CorpSec Payroll System" desktop shortcut</li>
+                    <li>Frameless native desktop window (App Mode)</li>
+                    <li>No administrative privileges required</li>
+                  </ul>
+                </div>
+                <div>
+                  <a href="/api/v1/desktop/download-launcher" class="btn btn-primary" download
+                    style="display:flex; justify-content:center; align-items:center; gap:8px; text-decoration:none; padding:10px; font-size:13px; font-weight:700; width:100%;">
+                    <span>⬇️</span> Download Launcher (.bat)
+                  </a>
+                </div>
+              </div>
+
+              <!-- Card 2: Full Setup Bundle ZIP -->
+              <div
+                style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+                <div style="position:absolute; top:12px; right:12px;">
+                  <span class="badge"
+                    style="background:#F0FDF4; color:#166534; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BBF7D0;">OFFLINE COMPLETE</span>
+                </div>
+                <div>
+                  <div style="font-size:32px; margin-bottom:12px;">📦</div>
+                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Full Setup Bundle (.ZIP)</h3>
+                  <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                    Complete offline installer archive containing the batch launcher, PowerShell installer, server scripts, and manual.
+                  </div>
+                  <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                    <li>CorpSec_Desktop_Launcher.bat</li>
+                    <li>Install_CorpSec_Desktop.ps1 (PowerShell)</li>
+                    <li>Start_Local_Server.bat &amp; Setup Readme</li>
+                  </ul>
+                </div>
+                <div>
+                  <a href="/api/v1/desktop/download-package" class="btn btn-secondary" download
+                    style="display:flex; justify-content:center; align-items:center; gap:8px; text-decoration:none; padding:10px; font-size:13px; font-weight:700; width:100%; border-color:#CBD5E1;">
+                    <span>📦</span> Download Package (.ZIP)
+                  </a>
+                </div>
+              </div>
+
+              <!-- Card 3: Guard Mobile Portal App (PWA) -->
+              <div
+                style="background:#FFFFFF; border:2px solid #3B82F6; border-radius:14px; padding:22px; box-shadow:0 8px 16px -2px rgba(37,99,235,0.08); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+                <div style="position:absolute; top:12px; right:12px;">
+                  <span class="badge"
+                    style="background:#2563EB; color:#FFF; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px;">FOR GUARDS</span>
+                </div>
+                <div>
+                  <div style="font-size:32px; margin-bottom:12px;">📱</div>
+                  <h3 style="font-size:17px; font-weight:800; color:#1E3A8A; margin:0 0 6px 0;">Guard Mobile App (PWA)</h3>
+                  <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
+                    Smartphone app for guards on duty. Supports GPS clock-in, duty registers, digital payslips, and shift rosters.
+                  </div>
+                  <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
+                    <li>Works on Android &amp; iOS devices</li>
+                    <li>1-click home screen installation</li>
+                    <li>Offline duty register &amp; GPS geofence checks</li>
+                  </ul>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <button type="button" class="btn btn-primary" onclick="triggerPwaInstall()"
+                    style="display:flex; justify-content:center; align-items:center; gap:8px; padding:10px; font-size:13px; font-weight:700; width:100%; background:#2563EB;">
+                    <span>⚡</span> Install on Current Device
+                  </button>
+                  <a href="/portal" target="_blank" class="btn btn-secondary"
+                    style="display:flex; justify-content:center; align-items:center; gap:8px; text-decoration:none; padding:8px; font-size:12px; font-weight:700; width:100%; color:#1E40AF; border-color:#93C5FD; background:#EFF6FF;">
+                    <span>🔗</span> Open Guard Portal (/portal)
+                  </a>
+                </div>
+              </div>
+
+              <!-- Card 4: Share App Link to Guards -->
+              <div
+                style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+                <div style="position:absolute; top:12px; right:12px;">
+                  <span class="badge"
+                    style="background:#F0FDF4; color:#15803D; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BBF7D0;">DISPATCH TOOL</span>
+                </div>
+                <div>
+                  <div style="font-size:32px; margin-bottom:12px;">💬</div>
+                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Dispatch App to Guards</h3>
+                  <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:12px;">
+                    Send the mobile application link directly to security guards via WhatsApp, SMS, or copy the direct portal link.
+                  </div>
+                  <div style="margin-bottom:14px;">
+                    <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Guard Portal URL:</label>
+                    <div style="display:flex; gap:6px;">
+                      <input type="text" id="guard-directory-portal-url" readonly class="form-control"
+                        style="font-size:11px; font-family:monospace; padding:6px 8px; background:#F8FAFC;" value="">
+                      <button type="button" class="btn btn-secondary" id="btn-copy-guard-link" onclick="copyGuardPortalUrl()"
+                        style="font-size:11px; font-weight:700; padding:6px 10px; white-space:nowrap;">
+                        📋 Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <button type="button" class="btn" onclick="shareGuardPortalWhatsApp()"
+                    style="background:#25D366; color:#FFFFFF; border:none; border-radius:6px; padding:10px; font-size:12px; font-weight:700; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:8px;">
+                    <span>💬</span> Share via WhatsApp
+                  </button>
+                  <button type="button" class="btn btn-secondary" onclick="shareGuardPortalSMS()"
+                    style="padding:8px; font-size:12px; font-weight:700; display:flex; justify-content:center; align-items:center; gap:8px;">
+                    <span>✉️</span> Send via SMS
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Installation Instructions Tabs / Steps -->
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; margin-bottom:24px;">
+              <h3 style="font-size:16px; font-weight:800; color:#0F172A; margin:0 0 16px 0; display:flex; align-items:center; gap:8px;">
+                <span>📖</span> Step-by-Step Installation Guide for Guards &amp; Field Stations
+              </h3>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                  <div style="font-weight:800; font-size:14px; color:#1E40AF; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                    <span>🪟</span> For Windows PCs (Stations &amp; Desks)
+                  </div>
+                  <ol style="font-size:12px; color:#475569; padding-left:18px; margin:0; line-height:1.7;">
+                    <li>Click <strong>Download Windows Launcher (.bat)</strong> above.</li>
+                    <li>Double-click the downloaded file in your Downloads folder.</li>
+                    <li>A <em>"CorpSec Payroll System"</em> shortcut is instantly created on your desktop and opens in full application mode!</li>
+                  </ol>
+                </div>
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                  <div style="font-weight:800; font-size:14px; color:#15803D; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                    <span>📱</span> For Android Smartphones (Guards)
+                  </div>
+                  <ol style="font-size:12px; color:#475569; padding-left:18px; margin:0; line-height:1.7;">
+                    <li>Open <code>/portal</code> in Google Chrome on your phone.</li>
+                    <li>Tap the <strong>"Install"</strong> button on the bottom prompt (or Chrome Menu ⋮ &rarr; <em>"Add to Home screen"</em>).</li>
+                    <li>The CorpSec Guard icon is added to your app drawer and home screen.</li>
+                  </ol>
+                </div>
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
+                  <div style="font-weight:800; font-size:14px; color:#7C3AED; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                    <span>🍎</span> For iPhones / iOS (Guards)
+                  </div>
+                  <ol style="font-size:12px; color:#475569; padding-left:18px; margin:0; line-height:1.7;">
+                    <li>Open <code>/portal</code> in Apple Safari on your iPhone.</li>
+                    <li>Tap the <strong>Share</strong> button (box with upward arrow at bottom).</li>
+                    <li>Scroll down and tap <strong>"Add to Home Screen"</strong>, then tap <em>Add</em>.</li>
+                  </ol>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1807,7 +2098,9 @@
                 <th>Payment Method</th>
                 <th>Bank / Phone</th>
                 <th>Account Number</th>
-                <th>Net Amount (KES)</th>
+                <th>Days Worked (Jobs)</th>
+                <th>Off-Days (Used / Rem)</th>
+                <th>Accrued Net Payable (KES)</th>
                 <th>Status</th>
                 <th style="min-width:110px;">Actions</th>
               </tr>
@@ -2327,6 +2620,77 @@
             background-color: #00a884;
             color: #111b21;
             font-weight: 700;
+          }
+
+          .wa-pill-badge {
+            font-size: 10px;
+            font-weight: 800;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 1px 6px;
+            border-radius: 10px;
+            margin-left: 3px;
+          }
+
+          .wa-pill.active .wa-pill-badge {
+            background: rgba(17, 27, 33, 0.25);
+            color: #111b21;
+          }
+
+          .wa-pill-badge-alert {
+            background: #ef4444 !important;
+            color: #ffffff !important;
+          }
+
+          .wa-section-header {
+            padding: 10px 16px 6px 16px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #8696a0;
+            background: #111b21;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+          }
+
+          .wa-section-badge {
+            font-size: 10px;
+            background: #202c33;
+            color: #00a884;
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-weight: 700;
+          }
+
+          .wa-avatar-inits {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+            color: #FFFFFF;
+            flex-shrink: 0;
+            position: relative;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          }
+
+          .wa-online-dot {
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #22c55e;
+            border: 2px solid #111b21;
           }
 
           .wa-contact-list {
@@ -3050,18 +3414,17 @@
             </div>
 
             <!-- Filter Pills -->
-            <div class="wa-filter-pills">
-              <button class="wa-pill active" onclick="setWaFilter('all', this)">All</button>
-              <button class="wa-pill" id="wa-pill-unread" onclick="setWaFilter('unread', this)">Unread <span
-                  id="wa-unread-filter-count"
-                  style="display:none; background:#00a884; color:#111b21; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:800; margin-left:4px;">0</span></button>
-              <button class="wa-pill" onclick="setWaFilter('group', this)">Groups</button>
-              <button class="wa-pill" onclick="setWaFilter('direct', this)">Direct</button>
+            <div class="wa-filter-pills" id="wa-filter-pills-bar">
+              <button class="wa-pill active" id="wa-pill-all" onclick="setWaFilter('all', this)">All <span id="wa-pill-cnt-all" class="wa-pill-badge">13</span></button>
+              <button class="wa-pill" id="wa-pill-channels" onclick="setWaFilter('channels', this)">Channels <span id="wa-pill-cnt-channels" class="wa-pill-badge">1</span></button>
+              <button class="wa-pill" id="wa-pill-supervisors" onclick="setWaFilter('supervisors', this)">Supervisors <span id="wa-pill-cnt-supervisors" class="wa-pill-badge">9</span></button>
+              <button class="wa-pill" id="wa-pill-admin_hr" onclick="setWaFilter('admin_hr', this)">Admin &amp; HR <span id="wa-pill-cnt-admin_hr" class="wa-pill-badge">3</span></button>
+              <button class="wa-pill" id="wa-pill-unread" onclick="setWaFilter('unread', this)">Unread <span id="wa-unread-filter-count" style="display:none;" class="wa-pill-badge wa-pill-badge-alert">0</span></button>
             </div>
 
             <!-- Contacts / Chats List -->
             <div class="wa-contact-list" id="wa-contact-list">
-              <div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading chats...</div>
+              <div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading team directory...</div>
             </div>
           </div>
 
@@ -3072,13 +3435,14 @@
               <div class="wa-chat-target">
                 <div class="wa-contact-avatar" id="wa-active-avatar">👥</div>
                 <div>
-                  <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team
-                  </div>
-                  <div style="font-size:12px; color:#8696a0;" id="wa-active-status">Admin, HR, Staff &amp; Supervisors •
-                    Online</div>
+                  <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team</div>
+                  <div style="font-size:12px; color:#8696a0;" id="wa-active-status">Admin, HR, Staff &amp; Supervisors • Online</div>
                 </div>
               </div>
-              <div style="display:flex; align-items:center; gap:12px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <button type="button" id="wa-header-call-btn" style="display:none; align-items:center; gap:6px; background:rgba(37,99,235,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer;" onclick="callActiveContactPhone()" title="Call contact via Softphone">
+                  <span>📞</span> Call
+                </button>
                 <button class="wa-icon-btn" onclick="initWhatsAppChat()" title="Refresh Chat">🔄</button>
                 <button class="wa-icon-btn" title="Search in chat">🔍</button>
                 <button class="wa-icon-btn" title="More options">⋮</button>
@@ -11478,7 +11842,7 @@
       title="Ask Gemini AI Assistant & View Performance Charts (Click to open, Drag to move)">
       <span class="ai-drag-grip" title="Drag to move">⋮⋮</span>
       <span class="ai-floating-icon">🤖</span>
-      <span class="ai-floating-label">AI Assistant & Charts</span>
+      <span class="ai-floating-label">AI Assistant Ready</span>
       <span class="ai-floating-gemini-pill">✨ GEMINI</span>
     </div>
   </div>

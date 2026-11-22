@@ -9,12 +9,19 @@ from application.backend.app.schemas.ai_insights import ChatMessage
 logger = logging.getLogger(__name__)
 
 GEMINI_SYSTEM_INSTRUCTION = (
-    "You are an expert System Performance Analyst embedded in the Admin Dashboard. "
-    "Your job is to analyze the provided system telemetry, database metrics, and logs to answer the "
-    "administrator's questions accurately. Base your answers strictly on the provided system data. "
-    "If the data needed to answer a question is missing or unavailable, explicitly state that you do not have "
-    "access to that metric—never guess or hallucinate numbers. "
-    "Highlight anomalies, bottlenecks, or critical alerts clearly using bullet points and concise summaries."
+    "You are the CorpSec ERP System AI Assistant embedded in the Admin Dashboard. "
+    "You have complete, direct, real-time access to the live CorpSec MySQL database, including:\n"
+    "- Complete Guards Register (names, employee numbers, phone numbers, assigned sites, shifts, supervisors, salaries, and statuses).\n"
+    "- Complete Field Supervisors Register (names, emails, phone numbers, assigned client sites, and deployed guards).\n"
+    "- Complete Client Sites Register (site names, locations, client names, assigned supervisors, stationed guards, daily rates).\n"
+    "- Shift Rosters, Client Contracts, Attendance Logs, Security Incidents, and Payroll Records.\n"
+    "Your job is to answer the administrator's questions accurately, thoroughly, and professionally. "
+    "Base your answers strictly on the provided real-time database records and telemetry. "
+    "Always quote exact names, employee numbers, phone numbers, site names, and figures whenever relevant. "
+    "If the administrator asks for lists (e.g., 'list all guards', 'who are the supervisors', 'what guards are at Westlands Mall?'), "
+    "format your response using neat Markdown tables or bulleted lists with all details retrieved from the database. "
+    "Never claim that you lack access to individual database records or that you can only see high-level metrics, because the full database records are provided right here in your grounding context. "
+    "If a specific individual or record is not in the database records, explicitly mention that it was not found in the database."
 )
 
 
@@ -100,6 +107,76 @@ class GeminiAIService:
             "---"
         ])
 
+        # Targeted Matches or Specific Registries when requested
+        targeted = telemetry.get("targeted_database_matches", {})
+        guards_reg = telemetry.get("guards_register", [])
+        supervisors_reg = telemetry.get("supervisors_register", [])
+        sites_reg = telemetry.get("client_sites_register", [])
+
+        # Matched entities section if user search hit specific records
+        if targeted and any(targeted.get(k) for k in ["matched_guards", "matched_supervisors", "matched_sites", "matched_incidents"]):
+            response_lines.append("#### 🎯 Targeted Database Query Matches")
+            if targeted.get("matched_guards"):
+                response_lines.append("**Matching Guards in Database:**")
+                for mg in targeted["matched_guards"]:
+                    response_lines.append(f"- **{mg.get('full_name')}** (`{mg.get('employee_number')}`) | Phone: `{mg.get('phone')}` | Site: `{mg.get('assigned_site')}` | Shift: `{mg.get('assigned_shift')}` | Supervisor: `{mg.get('supervisor')}` | Salary: `KES {mg.get('basic_salary_kes', 0):,.2f}` | Status: `{mg.get('status')}`")
+                response_lines.append("")
+            if targeted.get("matched_supervisors"):
+                response_lines.append("**Matching Field Supervisors in Database:**")
+                for ms in targeted["matched_supervisors"]:
+                    g_list = ", ".join(ms.get("assigned_guards", [])) or "None assigned"
+                    s_list = ", ".join(ms.get("assigned_sites", [])) or "None assigned"
+                    response_lines.append(f"- **{ms.get('full_name')}** | Email: `{ms.get('email')}` | Phone: `{ms.get('phone')}` | Assigned Sites: `{s_list}` | Guards ({ms.get('assigned_guards_count', 0)}): {g_list}")
+                response_lines.append("")
+            if targeted.get("matched_sites"):
+                response_lines.append("**Matching Client Sites in Database:**")
+                for mst in targeted["matched_sites"]:
+                    sg_list = ", ".join(mst.get("stationed_guards", [])) or "None assigned"
+                    response_lines.append(f"- **{mst.get('site_name')}** ({mst.get('client_name')}) | Location: `{mst.get('location')}` | Supervisor: `{mst.get('supervisor')}` | Stationed Guards ({mst.get('stationed_guards_count', 0)}): {sg_list}")
+                response_lines.append("")
+
+        # Complete Guards Register if asked
+        if any(w in p_lower for w in ["guard", "guards", "roster", "all guard"]):
+            response_lines.extend([
+                "#### 🛡️ Complete Active Guards Register (Queried from Database)",
+                "| Guard Name | Emp Number | Phone | Assigned Site | Shift | Supervisor | Basic Salary | Status |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+            ])
+            for g in guards_reg:
+                response_lines.append(
+                    f"| **{g.get('full_name')}** | `{g.get('employee_number')}` | `{g.get('phone')}` | {g.get('assigned_site')} | {g.get('assigned_shift')} | {g.get('supervisor_name')} | KES {g.get('basic_salary_kes', 0):,.2f} | `{g.get('status')}` |"
+                )
+            response_lines.append("")
+
+        # Complete Supervisors Register if asked
+        if any(w in p_lower for w in ["supervisor", "supervisors"]):
+            response_lines.extend([
+                "#### 👨‍💼 Complete Field Supervisors Register (Queried from Database)",
+                "| Supervisor Name | Official Email | Phone | Assigned Sites | Guards Under Supervision | Status |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- |"
+            ])
+            for s in supervisors_reg:
+                s_sites = ", ".join(s.get("assigned_sites", [])) or "None"
+                s_guards = ", ".join([g.get("full_name") for g in s.get("assigned_guards", [])]) or "None"
+                response_lines.append(
+                    f"| **{s.get('full_name')}** | `{s.get('email')}` | `{s.get('phone')}` | {s_sites} | {s_guards} ({s.get('assigned_guards_count', 0)}) | `{s.get('status')}` |"
+                )
+            response_lines.append("")
+
+        # Complete Sites Register if asked
+        if any(w in p_lower for w in ["site", "sites", "client site"]):
+            response_lines.extend([
+                "#### 🏢 Client Sites Register (Queried from Database)",
+                "| Site Name | Client Name | Location | Assigned Supervisor | Daily Rate | Stationed Guards |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- |"
+            ])
+            for st in sites_reg:
+                st_guards = ", ".join([g.get("full_name") for g in st.get("stationed_guards", [])]) or "None"
+                response_lines.append(
+                    f"| **{st.get('site_name')}** | {st.get('client_name')} | {st.get('location')} | {st.get('assigned_supervisor')} | KES {st.get('daily_rate_kes', 0):,.2f} | {st_guards} ({st.get('stationed_guards_count', 0)}) |"
+                )
+            response_lines.append("")
+
         if include_missing_key_note:
             response_lines.append("*To ask natural-language questions with Gemini, add your `GEMINI_API_KEY` to the `.env` file on the server.*")
 
@@ -180,11 +257,10 @@ class GeminiAIService:
             if model_name:
                 candidate_models.append(model_name)
             for fallback_m in [
-                "gemini-3.5-flash-lite",
+                "gemini-3.8-flash",
                 "gemini-3.1-flash-lite",
                 "gemini-3.5-flash",
-                "gemini-3.7-flash",
-                "gemini-3.8-flash"
+                "gemini-2.5-flash-lite",
             ]:
                 if fallback_m not in candidate_models:
                     candidate_models.append(fallback_m)

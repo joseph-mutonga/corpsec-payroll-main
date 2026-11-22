@@ -53,6 +53,12 @@ class PayrollRecordResponse(BaseModel):
     reliever_earnings: Optional[float] = 0.0
     total_deductions: float
     net_pay: float
+    off_days_taken: Optional[int] = 0
+    off_days_remaining: Optional[int] = 4
+    total_payable_days: Optional[int] = 0
+    accrued_payable: Optional[float] = 0.0
+    calculation_cutoff_date: Optional[date] = None
+    billing_period: Optional[str] = None
     is_on_hold: Optional[bool] = False
     hold_reason: Optional[str] = None
     held_by: Optional[str] = None
@@ -100,6 +106,9 @@ class PayrollCalculationSummary(BaseModel):
     total_damage_deductions: Optional[float] = 0.0
     error_count: int
     status: str = "CALCULATED"
+    billing_period: Optional[str] = None
+    is_month_to_date: Optional[bool] = False
+    cutoff_date: Optional[str] = None
 
 
 class ResolveErrorRequest(BaseModel):

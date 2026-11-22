@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # Google Gemini AI Insights (System Telemetry & Operational Analytics)
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     GEMINI_PROJECT_NAME: Optional[str] = "projects/345414341679"
     GEMINI_PROJECT_NUMBER: Optional[str] = "345414341679"
     

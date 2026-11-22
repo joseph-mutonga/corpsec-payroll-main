@@ -1,9 +1,9 @@
 {
   "app_name": "CorpSec Payroll & Security Workforce System",
-  "version": "2.5.29",
-  "build_number": 2026111909,
-  "release_name": "CorpSec Enterprise 2.5.29",
-  "release_date": "2026-11-19",
+  "version": "2.5.32",
+  "build_number": 2026112202,
+  "release_name": "CorpSec Enterprise 2.5.32",
+  "release_date": "2026-11-22",
   "silent_update": true,
   "check_interval_seconds": 15,
   "assets": [
@@ -20,6 +20,13 @@
     "/portal-sw.js"
   ],
   "features": [
+    "Guards Directory Application Download Center (Windows Batch Launcher, Full Setup Bundle ZIP, Mobile PWA & WhatsApp/SMS dispatch tools)",
+    "Guard Portal Profile Install Card for security guards to add the mobile portal directly to their smartphone home screen",
+    "Dynamic Month-to-Date (MTD) Guard Payroll calculations prorated strictly up to current date with 4 paid off-days per month entitlement",
+    "Enhanced Payment Schedule displaying Billing/Pay Period, Days Worked (Job Entries), Off-Days Used/Remaining, and Accrued Net Payable",
+    "Active Google Gemini 3.8 Flash telemetry & operational AI model integration grounded in live MySQL database and server metrics",
+    "Floating AI Assistant widget cleanly isolated; telecom softphone remains completely unattached with zero idle pill on dashboard",
+    "Admin Call Recordings audio playback directly from MySQL LONGBLOB database with range seeking and instant modal player",
     "Dedicated Google Gemini AI Assistant & Operational Telemetry Charts page with live CPU, RAM, MySQL latency, and bottleneck gauges",
     "Dashboard KPI cards restored to top of overview page with 1-line sleek AI quick-launcher banner",
     "Persistent floating AI Assistant & Charts launcher widget on all pages with 1-click navigation",

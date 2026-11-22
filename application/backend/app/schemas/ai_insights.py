@@ -31,3 +31,9 @@ class TelemetrySnapshotResponse(BaseModel):
     financial_telemetry: Dict[str, Any]
     active_users: Dict[str, Any]
     recent_audit_actions: List[Dict[str, Any]]
+    guards_register: Optional[List[Dict[str, Any]]] = Field(default=None, description="Complete register of all guards")
+    supervisors_register: Optional[List[Dict[str, Any]]] = Field(default=None, description="Complete register of all supervisors")
+    client_sites_register: Optional[List[Dict[str, Any]]] = Field(default=None, description="Complete register of client sites")
+    shifts_register: Optional[List[Dict[str, Any]]] = Field(default=None, description="Complete register of shifts")
+    client_contracts_register: Optional[List[Dict[str, Any]]] = Field(default=None, description="Active client contracts")
+    recent_incidents_register: Optional[List[Dict[str, Any]]] = Field(default=None, description="Recent incident logs")

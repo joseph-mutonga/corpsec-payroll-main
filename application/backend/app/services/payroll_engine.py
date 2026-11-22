@@ -382,3 +382,99 @@ def calculate_guard_payroll(
         "total_employer_statutory": total_employer_statutory,
         "paye_breakdown": paye_details
     }
+
+
+def format_pay_period_label(start_date: datetime.date, end_date: datetime.date) -> str:
+    """
+    Formats a billing pay period as '1st Nov – 20th Nov 2026' or '1st Oct – 31st Oct 2026'.
+    """
+    def ordinal(n: int) -> str:
+        if 11 <= (n % 100) <= 13:
+            return f"{n}th"
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        return f"{n}{suffix}"
+
+    start_str = f"{ordinal(start_date.day)} {start_date.strftime('%b')}"
+    end_str = f"{ordinal(end_date.day)} {end_date.strftime('%b')} {end_date.year}"
+    return f"{start_str} – {end_str}"
+
+
+def calculate_month_to_date_guard_pay(
+    monthly_salary: float,
+    days_worked: int,
+    off_days_taken: int = 0,
+    has_explicit_off_days: bool = False,
+    period_start: Optional[datetime.date] = None,
+    period_end: Optional[datetime.date] = None,
+    as_of_date: Optional[datetime.date] = None,
+    monthly_off_days_allowance: int = 4,
+    total_days_in_month: Optional[int] = None,
+    elapsed_calendar_days: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Dynamically calculates prorated Month-to-Date (MTD) guard pay strictly up to today's date
+    accounting for 4 paid off-days per month.
+
+    Business Rules:
+    1. Date Range: Evaluates days strictly from Day 1 of the month up to Today's date (inclusive).
+    2. Off-Days: Every guard is entitled to 4 paid off-days per month.
+       - Count actual days worked between Day 1 and Today (days_worked).
+       - Count approved/scheduled off-days taken between Day 1 and Today (off_days_taken, capped at max 4).
+       - Total Payable Days = days_worked + valid_off_days_taken (capped at elapsed calendar days up to today).
+       - If off-days are not explicitly logged in DB: Daily Rate = Monthly Salary / (Total Days - 4),
+         and Payable Amount = Daily Rate * days_worked.
+    """
+    if period_start and period_end:
+        days_in_month = (period_end - period_start).days + 1
+    elif total_days_in_month:
+        days_in_month = total_days_in_month
+    else:
+        days_in_month = 30
+
+    if period_start and as_of_date:
+        cutoff = min(period_end or as_of_date, as_of_date)
+        if cutoff < period_start:
+            elapsed = 0
+        else:
+            elapsed = (cutoff - period_start).days + 1
+    elif elapsed_calendar_days is not None:
+        elapsed = elapsed_calendar_days
+    else:
+        elapsed = days_in_month
+
+    elapsed = max(0, min(days_in_month, elapsed))
+    actual_days_worked = max(0, min(elapsed, int(days_worked)))
+
+    if has_explicit_off_days or off_days_taken > 0:
+        valid_off_days = min(monthly_off_days_allowance, max(0, int(off_days_taken)))
+        off_days_remaining = max(0, monthly_off_days_allowance - valid_off_days)
+
+        raw_payable_days = actual_days_worked + valid_off_days
+        total_payable_days = min(elapsed, raw_payable_days)
+
+        daily_rate = monthly_salary / float(days_in_month) if days_in_month > 0 else 0.0
+        accrued_amount = round(daily_rate * total_payable_days, 2)
+        calculation_method = "EXPLICIT_OFF_DAYS"
+    else:
+        valid_off_days = 0
+        off_days_remaining = monthly_off_days_allowance
+        expected_working_days = max(1, days_in_month - monthly_off_days_allowance)
+
+        total_payable_days = min(actual_days_worked, expected_working_days)
+        daily_rate = monthly_salary / float(expected_working_days)
+        accrued_amount = round(daily_rate * total_payable_days, 2)
+        calculation_method = "IMPLICIT_WORKING_DAYS"
+
+    return {
+        "monthly_salary": monthly_salary,
+        "days_worked": actual_days_worked,
+        "off_days_used": valid_off_days,
+        "off_days_remaining": off_days_remaining,
+        "off_days_display": f"{valid_off_days} used / {off_days_remaining} remaining",
+        "total_payable_days": total_payable_days,
+        "elapsed_calendar_days": elapsed,
+        "total_days_in_month": days_in_month,
+        "daily_rate": round(daily_rate, 2),
+        "accrued_amount": accrued_amount,
+        "calculation_method": calculation_method
+    }

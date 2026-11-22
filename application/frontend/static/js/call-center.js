@@ -854,15 +854,16 @@
     const minBtn = document.getElementById('softphone-minimized');
     if (minBtn) {
       minBtn.classList.remove('on-call', 'ringing');
-      document.getElementById('minimized-call-status').innerText = 'Softphone Ready';
+      minBtn.style.display = 'none';
     }
 
-    // Hide unattached softphone if it is not currently expanded
+    // Hide unattached softphone completely if it is not currently expanded
     const expanded = document.getElementById('softphone-expanded');
     const widget = document.getElementById('softphone-widget-container');
-    if (expanded && (expanded.style.display === 'none' || !window.CallCenter.isSoftphoneOpen) && widget) {
-      widget.style.display = 'none';
-      if (minBtn) minBtn.style.display = 'none';
+    if (widget) {
+      if (!window.CallCenter.isSoftphoneOpen || !expanded || expanded.style.display === 'none') {
+        widget.style.display = 'none';
+      }
     }
   }
 

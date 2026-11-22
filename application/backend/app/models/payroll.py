@@ -58,6 +58,13 @@ class PayrollRecord(Base):
     
     total_deductions = Column(Float, default=0.0, nullable=False)
     net_pay = Column(Float, default=0.0, nullable=False)
+
+    # Dynamic Month-to-Date (MTD) and Off-Day Tracking
+    off_days_taken = Column(Integer, default=0, nullable=True)
+    off_days_remaining = Column(Integer, default=4, nullable=True)
+    total_payable_days = Column(Integer, default=0, nullable=True)
+    accrued_payable = Column(Float, default=0.0, nullable=True)
+    calculation_cutoff_date = Column(Date, nullable=True)
     
     # Salary Payment Hold & Investigation Tracking
     is_on_hold = Column(Boolean, default=False, nullable=False)

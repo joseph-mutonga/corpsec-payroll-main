@@ -101,4 +101,41 @@ def test_site_edit_and_supervisor_assignment_ui(client):
     assert "saveSupervisorSiteAssignments" in js_text
 
 
+def test_guards_directory_download_application_section(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    html = response.text
+
+    # Verify download subtab in Guards Directory
+    assert 'id="guard-tab-btn-download"' in html
+    assert 'switchGuardSubTab(\'download\')' in html
+    assert 'id="guards-subview-download"' in html
+
+    # Verify download links and launcher actions inside guards directory
+    assert '/api/v1/desktop/download-launcher' in html
+    assert '/api/v1/desktop/download-package' in html
+    assert 'id="guards-detected-machine-os"' in html
+    assert 'id="guard-directory-portal-url"' in html
+    assert 'copyGuardPortalUrl()' in html
+    assert 'shareGuardPortalWhatsApp()' in html
+    assert 'shareGuardPortalSMS()' in html
+
+    # Verify JS exports in app.js
+    js_resp = client.get("/static/js/app.js")
+    assert js_resp.status_code == 200
+    js_text = js_resp.text
+    assert "initGuardDirectoryDownloadSection" in js_text
+    assert "copyGuardPortalUrl" in js_text
+    assert "shareGuardPortalWhatsApp" in js_text
+    assert "shareGuardPortalSMS" in js_text
+
+    # Verify Guard Portal (portal.html) download and install section
+    portal_resp = client.get("/portal")
+    assert portal_resp.status_code == 200
+    p_html = portal_resp.text
+    assert "Download &amp; Install Guard App" in p_html
+    assert "triggerPortalPwaInstall()" in p_html
+
+
+
 
