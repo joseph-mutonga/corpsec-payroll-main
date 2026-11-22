@@ -28,6 +28,10 @@ from application.backend.app.models.invoice import SiteInvoice
 from application.backend.app.models.expense import Expense, PettyCashTransaction
 from application.backend.app.models.client_contract import ClientContract, Client
 from application.backend.app.models.call_center import CallLog
+from application.backend.app.services.erp_analytics_service import (
+    AttendanceAnalyticsService,
+    OvertimeAnalyticsService
+)
 
 
 # ==============================================================================
@@ -143,18 +147,29 @@ def classify_user_query(prompt: Optional[str]) -> str:
     if any(h in p for h in host_terms) and not any(w in p for w in business_entities):
         return QuestionCategory.SIMPLE
 
-    # 3. Payroll & Statutory Deductions
+    # 3. Security Workforce & Attendance Operations (check before generic payroll if attendance mentioned)
+    workforce_terms = [
+        "guard", "guards", "supervisor", "supervisors", "shift", "shifts",
+        "roster", "attendance", "clock in", "clock-in", "clock out", "clock-out",
+        "duty", "on duty", "who is on duty", "deployment", "station",
+        "client site", "site", "sites", "absent", "absence", "leave",
+        "present", "attended", "who attended", "guards present"
+    ]
+    if any(w in p for w in workforce_terms):
+        return QuestionCategory.WORKFORCE
+
+    # 4. Payroll & Statutory Deductions
     payroll_terms = [
         "payroll", "salary", "salaries", "pay", "payslip", "advance", "advances",
         "nssf", "shif", "nhif", "housing levy", "levy", "tax", "paye", "relief",
         "personal relief", "deduction", "deductions", "gross pay", "net pay",
         "disbursement", "remittance", "statutory", "allowance", "overtime pay",
-        "basic salary", "effective salary", "salary advance"
+        "overtime", "ot", "basic salary", "effective salary", "salary advance"
     ]
     if any(w in p for w in payroll_terms):
         return QuestionCategory.PAYROLL
 
-    # 4. Management & Commercial Financials
+    # 5. Management & Commercial Financials
     mgmt_terms = [
         "mrr", "revenue", "monthly recurring revenue", "contract", "contracts",
         "client", "clients", "invoice", "invoices", "billing", "profit",
@@ -162,15 +177,6 @@ def classify_user_query(prompt: Optional[str]) -> str:
     ]
     if any(w in p for w in mgmt_terms):
         return QuestionCategory.MANAGEMENT
-
-    # 5. Security Workforce & Operations
-    workforce_terms = [
-        "guard", "guards", "supervisor", "supervisors", "shift", "shifts",
-        "roster", "attendance", "clock in", "clock out", "duty", "deployment",
-        "station", "client site", "site", "sites", "absent", "leave"
-    ]
-    if any(w in p for w in workforce_terms):
-        return QuestionCategory.WORKFORCE
 
     # 6. Default to Complex Analytical
     return QuestionCategory.COMPLEX
@@ -500,16 +506,29 @@ class AITelemetryService:
         audit_trail = []
 
         # ======================================================================
+        # DETERMINISTIC GROUNDING: ATTENDANCE & OVERTIME SINGLE SOURCE OF TRUTH
+        # ======================================================================
+        att_report = AttendanceAnalyticsService.get_attendance_report(db)
+        ot_report = OvertimeAnalyticsService.get_overtime_analysis(db)
+
+        # ======================================================================
         # CATEGORY-BASED SELECTIVE QUERY EXECUTION
         # ======================================================================
 
         if category == QuestionCategory.SIMPLE:
             # Simple questions: greetings, status check, CPU/RAM/Disk stats
-            # Requires NO business entity queries. Takes < 3ms total DB time.
-            total_guards = db.query(func.count(Guard.id)).scalar() or 0
-            active_guards = db.query(func.count(Guard.id)).filter(Guard.status == "ACTIVE").scalar() or 0
-            operations_telemetry["total_guards_registered"] = total_guards
-            operations_telemetry["active_guards_on_duty_roster"] = active_guards
+            total_guards = att_report["total_registered_guards"]
+            active_guards = att_report["active_guards"]
+            operations_telemetry.update({
+                "total_guards_registered": total_guards,
+                "active_registered_guards": active_guards,
+                "guards_clocked_in_today": att_report["guards_clocked_in"],
+                "guards_clocked_out_today": att_report["guards_clocked_out"],
+                "guards_currently_on_duty": att_report["currently_on_duty"],
+                "active_guards_on_duty_roster": att_report["currently_on_duty"],
+                "guards_absent_today": att_report["absent_guards_count"],
+                "incomplete_attendance_records": att_report["incomplete_records_count"]
+            })
 
         elif category == QuestionCategory.WORKFORCE:
             # Workforce questions: guards, supervisors, shifts, deployments
@@ -519,8 +538,8 @@ class AITelemetryService:
                 joinedload(Guard.supervisor)
             )
             guards_all = guards_q.limit(100).all()
-            total_guards = db.query(func.count(Guard.id)).scalar() or len(guards_all)
-            active_guards = db.query(func.count(Guard.id)).filter(Guard.status == "ACTIVE").scalar() or len([g for g in guards_all if g.status == "ACTIVE"])
+            total_guards = att_report["total_registered_guards"]
+            active_guards = att_report["active_guards"]
 
             sites_all = db.query(Site).options(joinedload(Site.supervisor)).all()
             total_sites = len(sites_all)
@@ -543,11 +562,18 @@ class AITelemetryService:
 
             operations_telemetry.update({
                 "total_guards_registered": total_guards,
-                "active_guards_on_duty_roster": active_guards,
+                "active_registered_guards": active_guards,
+                "guards_clocked_in_today": att_report["guards_clocked_in"],
+                "guards_clocked_out_today": att_report["guards_clocked_out"],
+                "guards_currently_on_duty": att_report["currently_on_duty"],
+                "active_guards_on_duty_roster": att_report["currently_on_duty"],
+                "guards_absent_today": att_report["absent_guards_count"],
+                "incomplete_attendance_records": att_report["incomplete_records_count"],
                 "total_client_sites": total_sites,
                 "active_client_sites": total_sites,
                 "active_field_supervisors": supervisors_count
             })
+            recent_attendance_register = att_report.get("details_rows", [])
 
             # Guards Register
             for g in guards_all:
@@ -728,24 +754,30 @@ class AITelemetryService:
 
             guards_q = db.query(Guard).options(joinedload(Guard.site), joinedload(Guard.shift), joinedload(Guard.supervisor))
             guards_all = guards_q.limit(100).all()
-            total_guards = db.query(func.count(Guard.id)).scalar() or len(guards_all)
-            active_guards = len([g for g in guards_all if g.status == "ACTIVE"])
+            total_guards = att_report["total_registered_guards"]
+            active_guards = att_report["active_guards"]
             sites_all = db.query(Site).options(joinedload(Site.supervisor)).all()
             total_sites = len(sites_all)
-            today_attendance_count = db.query(Attendance).filter(Attendance.shift_date >= today_start.date()).count()
             supervisors_all = db.query(User).filter(User.role == UserRole.SUPERVISOR.value).all()
             supervisors_count = len(supervisors_all)
             total_call_logs_today = db.query(CallLog).filter(CallLog.created_at >= today_start).count()
 
             operations_telemetry = {
                 "total_guards_registered": total_guards,
-                "active_guards_on_duty_roster": active_guards,
+                "active_registered_guards": active_guards,
+                "guards_clocked_in_today": att_report["guards_clocked_in"],
+                "guards_clocked_out_today": att_report["guards_clocked_out"],
+                "guards_currently_on_duty": att_report["currently_on_duty"],
+                "active_guards_on_duty_roster": att_report["currently_on_duty"],
+                "guards_absent_today": att_report["absent_guards_count"],
+                "incomplete_attendance_records": att_report["incomplete_records_count"],
                 "total_client_sites": total_sites,
                 "active_client_sites": total_sites,
-                "today_attendance_punches_logged": today_attendance_count,
+                "today_attendance_punches_logged": att_report["records_count"],
                 "active_field_supervisors": supervisors_count,
                 "call_center_calls_handled_today": total_call_logs_today
             }
+            recent_attendance_register = att_report.get("details_rows", [])
 
             for g in guards_all:
                 guards_register.append({
@@ -928,6 +960,11 @@ class AITelemetryService:
             "database_telemetry": db_telemetry,
             "error_rates_and_alerts": error_rates,
             "workforce_and_operations": operations_telemetry,
+            "attendance_analytics": att_report,
+            "overtime_analytics": ot_report,
+            "standardized_attendance_report": att_report.get("standardized_report", ""),
+            "standardized_overtime_report": ot_report.get("standardized_report", ""),
+            "attendance_details_table": att_report.get("details_rows", []),
             "guards_register": guards_register,
             "supervisors_register": supervisors_register,
             "client_sites_register": client_sites_register,
