@@ -63,7 +63,18 @@ class GeminiAIService:
         ops = telemetry.get("workforce_and_operations", {})
         fin = telemetry.get("financial_and_payroll", {})
 
-        p_lower = prompt.lower()
+        p_lower = prompt.lower().strip()
+
+        # Conversational greeting handler
+        if p_lower in ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening", "habari", "hello!"]:
+            return (
+                "Hello, Administrator! I am the CorpSec ERP System AI Assistant, connected live to the MySQL database and operational registers.\n\n"
+                f"- **Active Guards on Duty:** {ops.get('active_guards_on_duty_roster', 0)} of {ops.get('total_guards_registered', 0)} registered guards\n"
+                f"- **Active Client Sites:** {ops.get('active_client_sites', 0)} sites monitored\n"
+                f"- **Active Field Supervisors:** {ops.get('active_field_supervisors', 0)} supervisors\n"
+                f"- **Database Status:** Healthy (Latency: {db_stat.get('latency_ms', 'N/A')} ms, {db_stat.get('status_vars', {}).get('Threads_connected', 0)} active threads)\n\n"
+                "How can I assist you today with active guards, field supervisors, client sites, shift rosters, or statutory payroll records?"
+            )
 
         latest_cycle = fin.get("latest_payroll_cycle") or {}
         cycle_name = latest_cycle.get("period_name", "None")
@@ -465,18 +476,18 @@ class GeminiAIService:
             ))
 
             candidate_models = []
-            if model_name:
+            if model_name and model_name not in ["gemini-3.8-flash"]:
                 candidate_models.append(model_name)
             for fallback_m in [
                 "gemini-3.5-flash-lite",
                 "gemini-3.5-flash",
                 "gemini-3.1-flash-lite",
-                "gemini-3.8-flash",
             ]:
                 if fallback_m not in candidate_models:
                     candidate_models.append(fallback_m)
 
-            response_stream = None
+            stream_succeeded = False
+            full_chunks: List[str] = []
             successful_model = candidate_models[0]
             last_error = None
 
@@ -502,21 +513,31 @@ class GeminiAIService:
                             response_stream = await stream_call
                         else:
                             response_stream = stream_call
-                        successful_model = m
-                        break
+                    else:
+                        response_stream = client.models.generate_content_stream(
+                            model=m,
+                            contents=contents,
+                            config=config
+                        )
+
+                    model_chunks: List[str] = []
+                    async for chunk in response_stream:
+                        chunk_text = chunk.text or ""
+                        if chunk_text:
+                            model_chunks.append(chunk_text)
+                            yield f"data: {json.dumps({'token': chunk_text, 'status': 'generating'})}\n\n"
+
+                    full_chunks = model_chunks
+                    successful_model = m
+                    stream_succeeded = True
+                    break
                 except Exception as stream_err:
                     last_error = stream_err
                     logger.warning(f"Streaming candidate model {m} failed: {stream_err}. Trying next...")
+                    continue
 
-            if not response_stream:
+            if not stream_succeeded:
                 raise last_error or RuntimeError("All Gemini streaming candidate models failed.")
-
-            full_chunks: List[str] = []
-            async for chunk in response_stream:
-                chunk_text = chunk.text or ""
-                if chunk_text:
-                    full_chunks.append(chunk_text)
-                    yield f"data: {json.dumps({'token': chunk_text, 'status': 'generating'})}\n\n"
 
             full_answer = "".join(full_chunks).strip()
             if not full_answer:
