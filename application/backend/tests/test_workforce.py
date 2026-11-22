@@ -246,7 +246,22 @@ def test_supervisor_site_allocation_flow(client, db):
         json={"email": "sector.lead@corpsec.co.ke", "password": "password123"}
     )
     assert login_resp.status_code == 200
-    sup_token = login_resp.json()["access_token"]
+    sup_token = login_resp.json().get("access_token")
+    if not sup_token and login_resp.json().get("otp_required"):
+        from application.backend.app.models.email_otp import EmailOTP
+        otp_rec = (
+            db.query(EmailOTP)
+            .filter(EmailOTP.email == "sector.lead@corpsec.co.ke", EmailOTP.is_used == False)
+            .order_by(EmailOTP.id.desc())
+            .first()
+        )
+        assert otp_rec is not None
+        v_res = client.post(
+            "/api/v1/auth/verify-otp",
+            json={"email": "sector.lead@corpsec.co.ke", "otp_code": otp_rec.otp_code}
+        )
+        assert v_res.status_code == 200
+        sup_token = v_res.json()["access_token"]
     sup_headers = {"Authorization": f"Bearer {sup_token}"}
 
     my_guards_resp = client.get("/api/v1/supervisors/my-guards", headers=sup_headers)

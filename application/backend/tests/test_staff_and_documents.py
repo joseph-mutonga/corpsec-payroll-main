@@ -13,7 +13,27 @@ def get_auth_token(client, email, password):
         json={"email": email, "password": password}
     )
     assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
-    return login_resp.json()["access_token"]
+    data = login_resp.json()
+    if data.get("access_token"):
+        return data["access_token"]
+    if data.get("otp_required"):
+        from application.backend.app.models.email_otp import EmailOTP
+        from application.backend.app.core.database import SessionLocal
+        with SessionLocal() as db_session:
+            otp_record = (
+                db_session.query(EmailOTP)
+                .filter(EmailOTP.email.ilike(email.strip()), EmailOTP.is_used == False)
+                .order_by(EmailOTP.id.desc())
+                .first()
+            )
+            code = otp_record.otp_code if otp_record else "123456"
+        v_resp = client.post(
+            "/api/v1/auth/verify-otp",
+            json={"email": email, "otp_code": code}
+        )
+        assert v_resp.status_code == 200, f"OTP verification failed: {v_resp.text}"
+        return v_resp.json()["access_token"]
+    return None
 
 
 def get_admin_headers(client):

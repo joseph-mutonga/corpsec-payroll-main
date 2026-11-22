@@ -93,7 +93,7 @@ def build_payment_schedules_and_reconciliation(
     ).all()
 
     # If records not yet calculated for this period, auto-calculate with MTD cutoff
-    if not records and period.status in ["CALCULATED", "CONFIRMED", "DRAFT"]:
+    if not records and period.status in ["CALCULATED", "CONFIRMED"]:
         from application.backend.app.api.v1.payroll import execute_payroll_calculation
         admin_user = db.query(User).filter(User.role == "ADMIN").first()
         if admin_user:

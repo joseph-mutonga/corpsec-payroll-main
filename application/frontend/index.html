@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CorpSec Payroll & Workforce System</title>
+  <title>CorpSec</title>
   <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0F172A">
@@ -169,7 +169,8 @@
       <li class="nav-item" id="nav-item-ai-assistant" onclick="switchTab('ai-assistant')"
         style="display:flex; align-items:center; justify-content:space-between;">
         <span>🤖 AI Assistant & Charts</span>
-        <span class="badge" style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">GEMINI</span>
+        <span class="badge"
+          style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">GEMINI</span>
       </li>
       <li class="nav-item" onclick="switchTab('reports')">📈 Chart Analytics & Reports</li>
       <li class="nav-item" id="nav-item-team-chat"
@@ -181,14 +182,6 @@
         <span>📞 Call Center</span>
         <span id="call-center-nav-badge" class="badge"
           style="background:#22C55E; color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">LIVE</span>
-      </li>
-      <li class="nav-item" id="nav-item-call-recordings"
-        onclick="switchTab('call-center'); switchCallCenterSubTab('recordings');"
-        style="display:flex; align-items:center; justify-content:space-between;"
-        title="Listen to call audio recordings in the system">
-        <span>⏺️ Audio Recordings</span>
-        <span id="call-recordings-nav-badge" class="badge"
-          style="background:#EFF6FF; color:#2563EB; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">DB</span>
       </li>
       <li class="nav-item" onclick="switchTab('documents')">📑 Company Documents</li>
       <li class="nav-item" onclick="switchTab('staff')">👥 Staff & HR</li>
@@ -389,11 +382,13 @@
                 <span class="dash-ai-banner-badge-grounded">🟢 Live Telemetry</span>
               </div>
               <div class="dash-ai-banner-sub">
-                Ask natural-language questions about server health, database latency, active workforce, and payroll errors.
+                Ask natural-language questions about server health, database latency, active workforce, and payroll
+                errors.
               </div>
             </div>
           </div>
-          <button type="button" class="dash-ai-banner-btn" onclick="event.stopPropagation(); switchTab('ai-assistant');">
+          <button type="button" class="dash-ai-banner-btn"
+            onclick="event.stopPropagation(); switchTab('ai-assistant');">
             Open AI Charts Page <span>↗</span>
           </button>
         </div>
@@ -817,10 +812,13 @@
             <div>
               <div class="ai-hero-title">
                 <span>Google Gemini AI Assistant & Operational Telemetry Charts</span>
-                <span class="badge" style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:11px; font-weight:800; padding:3px 9px; border-radius:12px;">✨ GEMINI ACTIVE</span>
+                <span class="badge"
+                  style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:11px; font-weight:800; padding:3px 9px; border-radius:12px;">✨
+                  GEMINI ACTIVE</span>
               </div>
               <div class="ai-hero-subtitle">
-                Autonomous system intelligence, live server CPU/RAM telemetry, MySQL database latency diagnostics, and workforce analytics.
+                Autonomous system intelligence, live server CPU/RAM telemetry, MySQL database latency diagnostics, and
+                workforce analytics.
               </div>
             </div>
           </div>
@@ -831,10 +829,12 @@
             <span class="ai-badge ai-badge-grounded">
               <span class="ai-badge-pulse"></span> DB & Telemetry Grounded
             </span>
-            <button class="btn btn-secondary" onclick="SystemAIAssistant.loadTelemetryCharts(true)" title="Force re-query live host & MySQL telemetry">
+            <button class="btn btn-secondary" onclick="SystemAIAssistant.loadTelemetryCharts(true)"
+              title="Force re-query live host & MySQL telemetry">
               <span id="ai-telemetry-refresh-icon">🔄</span> Refresh Telemetry
             </button>
-            <button type="button" class="ai-btn-sm" onclick="SystemAIAssistant.clearConversation()" title="Clear conversation history">
+            <button type="button" class="ai-btn-sm" onclick="SystemAIAssistant.clearConversation()"
+              title="Clear conversation history">
               <span>🗑️</span> Clear Chat
             </button>
           </div>
@@ -856,7 +856,7 @@
               <div id="ai-chart-cpu-bar" class="ai-chart-progress-fill cpu" style="width: 0%;"></div>
             </div>
             <div class="ai-chart-footer">
-              <span id="ai-chart-cpu-cores">8 Logical Cores</span> &bull; 
+              <span id="ai-chart-cpu-cores">8 Logical Cores</span> &bull;
               <span id="ai-chart-cpu-os">Windows Host</span>
             </div>
           </div>
@@ -875,7 +875,7 @@
               <div id="ai-chart-ram-bar" class="ai-chart-progress-fill ram" style="width: 0%;"></div>
             </div>
             <div class="ai-chart-footer">
-              <span id="ai-chart-ram-usage">0 MB / 0 MB</span> &bull; 
+              <span id="ai-chart-ram-usage">0 MB / 0 MB</span> &bull;
               <span id="ai-chart-ram-avail">0 MB Available</span>
             </div>
           </div>
@@ -894,7 +894,7 @@
               <div id="ai-chart-db-bar" class="ai-chart-progress-fill db" style="width: 15%;"></div>
             </div>
             <div class="ai-chart-footer">
-              <span id="ai-chart-db-threads">0 Connected Threads</span> &bull; 
+              <span id="ai-chart-db-threads">0 Connected Threads</span> &bull;
               <span>MySQL 8.0 Community</span>
             </div>
           </div>
@@ -910,9 +910,12 @@
               <span class="ai-chart-tag warn" id="ai-chart-alerts-tag">Monitoring</span>
             </div>
             <div class="ai-chart-details-list">
-              <div class="ai-alert-row"><span>Unresolved Payroll Errors:</span> <strong id="ai-chart-payroll-errors">0</strong></div>
-              <div class="ai-alert-row"><span>Open Security Incidents:</span> <strong id="ai-chart-incidents">0</strong></div>
-              <div class="ai-alert-row"><span>Missed Calls Today:</span> <strong id="ai-chart-missed-calls">0</strong></div>
+              <div class="ai-alert-row"><span>Unresolved Payroll Errors:</span> <strong
+                  id="ai-chart-payroll-errors">0</strong></div>
+              <div class="ai-alert-row"><span>Open Security Incidents:</span> <strong id="ai-chart-incidents">0</strong>
+              </div>
+              <div class="ai-alert-row"><span>Missed Calls Today:</span> <strong id="ai-chart-missed-calls">0</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -928,7 +931,8 @@
                   <span style="font-size:11px; opacity:0.8; font-weight:normal;">— Real-time System Q&A</span>
                 </div>
                 <div class="ai-header-subtitle">
-                  Ask natural-language questions about server health, database latency, error spikes, guard deployment, and payroll metrics.
+                  Ask natural-language questions about server health, database latency, error spikes, guard deployment,
+                  and payroll metrics.
                 </div>
               </div>
             </div>
@@ -946,7 +950,9 @@
               <div class="ai-welcome-icon">🛡️🤖</div>
               <div class="ai-welcome-title">System Performance & Operations Intelligence</div>
               <div class="ai-welcome-text">
-                I am your embedded AI System Performance Analyst powered by Google Gemini. I analyze live telemetry, database metrics, and server logs in real time to give you accurate, strictly data-grounded insights without guessing. Click any starter question above or type your inquiry below.
+                I am your embedded AI System Performance Analyst powered by Google Gemini. I analyze live telemetry,
+                database metrics, and server logs in real time to give you accurate, strictly data-grounded insights
+                without guessing. Click any starter question above or type your inquiry below.
               </div>
             </div>
           </div>
@@ -962,9 +968,11 @@
             <div class="ai-input-wrap">
               <textarea id="ai-assistant-input" class="ai-textarea" rows="2"
                 placeholder="Ask anything about system health, error rates, database latency, active workforce, or financial metrics..."></textarea>
-              <div class="ai-input-hint">Press <strong>Enter</strong> to send &bull; <strong>Shift + Enter</strong> for newline &bull; Strictly read-only analysis</div>
+              <div class="ai-input-hint">Press <strong>Enter</strong> to send &bull; <strong>Shift + Enter</strong> for
+                newline &bull; Strictly read-only analysis</div>
             </div>
-            <button type="button" class="ai-send-btn" onclick="SystemAIAssistant.sendUserPrompt()" id="ai-assistant-send-btn">
+            <button type="button" class="ai-send-btn" onclick="SystemAIAssistant.sendUserPrompt()"
+              id="ai-assistant-send-btn">
               <span>➤</span> Send
             </button>
           </div>
@@ -997,7 +1005,8 @@
               onclick="switchGuardSubTab('download')">
               <span>📲 Download Application</span>
               <span class="badge"
-                style="background:#EEF2FF; color:#4338CA; font-size:11px; padding:2px 8px; border-radius:12px;">Mobile &amp; PC</span>
+                style="background:#EEF2FF; color:#4338CA; font-size:11px; padding:2px 8px; border-radius:12px;">Mobile
+                &amp; PC</span>
             </button>
           </div>
 
@@ -1012,12 +1021,16 @@
                   📲
                 </div>
                 <div>
-                  <div style="font-size:14.5px; font-weight:800; color:#1E3A8A; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <div
+                    style="font-size:14.5px; font-weight:800; color:#1E3A8A; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <span>Download CorpSec Application for Guards &amp; Field Stations</span>
-                    <span class="badge" style="background:#2563EB; color:#FFF; font-size:10.5px; padding:2px 8px; border-radius:10px;">PC &bull; Android &bull; iOS</span>
+                    <span class="badge"
+                      style="background:#2563EB; color:#FFF; font-size:10.5px; padding:2px 8px; border-radius:10px;">PC
+                      &bull; Android &bull; iOS</span>
                   </div>
                   <div style="font-size:12px; color:#3B82F6; margin-top:3px;">
-                    Equip security guards with the mobile portal for GPS clock-in, duty rosters, and digital payslips, or install the standalone Windows desktop application on station PCs.
+                    Equip security guards with the mobile portal for GPS clock-in, duty rosters, and digital payslips,
+                    or install the standalone Windows desktop application on station PCs.
                   </div>
                 </div>
               </div>
@@ -1130,7 +1143,8 @@
                   <span>📲</span> CorpSec Guard &amp; Station Application Download Center
                 </h2>
                 <div style="font-size:13px; color:#64748B; margin-top:4px;">
-                  Equip security personnel, field supervisors, and site post control rooms with the official CorpSec Desktop and Mobile Application packages.
+                  Equip security personnel, field supervisors, and site post control rooms with the official CorpSec
+                  Desktop and Mobile Application packages.
                 </div>
               </div>
               <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -1155,9 +1169,11 @@
                 </div>
                 <div>
                   <div style="display:flex; align-items:center; gap:10px;">
-                    <span style="font-size:16px; font-weight:800;" id="guards-detected-machine-os">Current Device: Detecting...</span>
+                    <span style="font-size:16px; font-weight:800;" id="guards-detected-machine-os">Current Device:
+                      Detecting...</span>
                     <span class="badge"
-                      style="background:#10B981; color:#FFFFFF; font-size:11px; padding:3px 10px; font-weight:700;">100% Compatible</span>
+                      style="background:#10B981; color:#FFFFFF; font-size:11px; padding:3px 10px; font-weight:700;">100%
+                      Compatible</span>
                   </div>
                   <div style="font-size:12px; color:#94A3B8; margin-top:3px;" id="guards-detected-machine-browser">
                     Ready for Native Desktop Launcher, Mobile PWA &amp; Offline Installation
@@ -1178,13 +1194,15 @@
               <div style="display:flex; align-items:center; gap:12px;">
                 <div style="font-size:24px;">🔄</div>
                 <div>
-                  <div style="font-size:13.5px; font-weight:800; color:#166534; display:flex; align-items:center; gap:8px;">
+                  <div
+                    style="font-size:13.5px; font-weight:800; color:#166534; display:flex; align-items:center; gap:8px;">
                     <span>Automatic Background Updates Enabled</span>
                     <span class="badge"
                       style="background:#22C55E; color:#FFFFFF; font-size:10px; font-weight:800; padding:2px 8px; border-radius:4px;">AUTO-SYNC</span>
                   </div>
                   <div style="font-size:12px; color:#15803D; margin-top:2px;">
-                    Guards and supervisors running the installed application automatically receive background updates whenever rosters, shifts, or payroll rules are published. No manual reinstallation needed.
+                    Guards and supervisors running the installed application automatically receive background updates
+                    whenever rosters, shifts, or payroll rules are published. No manual reinstallation needed.
                   </div>
                 </div>
               </div>
@@ -1206,11 +1224,13 @@
                 style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
                 <div style="position:absolute; top:12px; right:12px;">
                   <span class="badge"
-                    style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BFDBFE;">FIELD STATIONS</span>
+                    style="background:#EFF6FF; color:#1D4ED8; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BFDBFE;">FIELD
+                    STATIONS</span>
                 </div>
                 <div>
                   <div style="font-size:32px; margin-bottom:12px;">🪟</div>
-                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Windows Desktop Launcher</h3>
+                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Windows Desktop Launcher
+                  </h3>
                   <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
                     One-click batch launcher for site control rooms, field supervisor laptops, and guard post stations.
                   </div>
@@ -1233,13 +1253,16 @@
                 style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
                 <div style="position:absolute; top:12px; right:12px;">
                   <span class="badge"
-                    style="background:#F0FDF4; color:#166534; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BBF7D0;">OFFLINE COMPLETE</span>
+                    style="background:#F0FDF4; color:#166534; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BBF7D0;">OFFLINE
+                    COMPLETE</span>
                 </div>
                 <div>
                   <div style="font-size:32px; margin-bottom:12px;">📦</div>
-                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Full Setup Bundle (.ZIP)</h3>
+                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Full Setup Bundle (.ZIP)
+                  </h3>
                   <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
-                    Complete offline installer archive containing the batch launcher, PowerShell installer, server scripts, and manual.
+                    Complete offline installer archive containing the batch launcher, PowerShell installer, server
+                    scripts, and manual.
                   </div>
                   <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
                     <li>CorpSec_Desktop_Launcher.bat</li>
@@ -1260,13 +1283,16 @@
                 style="background:#FFFFFF; border:2px solid #3B82F6; border-radius:14px; padding:22px; box-shadow:0 8px 16px -2px rgba(37,99,235,0.08); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
                 <div style="position:absolute; top:12px; right:12px;">
                   <span class="badge"
-                    style="background:#2563EB; color:#FFF; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px;">FOR GUARDS</span>
+                    style="background:#2563EB; color:#FFF; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px;">FOR
+                    GUARDS</span>
                 </div>
                 <div>
                   <div style="font-size:32px; margin-bottom:12px;">📱</div>
-                  <h3 style="font-size:17px; font-weight:800; color:#1E3A8A; margin:0 0 6px 0;">Guard Mobile App (PWA)</h3>
+                  <h3 style="font-size:17px; font-weight:800; color:#1E3A8A; margin:0 0 6px 0;">Guard Mobile App (PWA)
+                  </h3>
                   <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:16px;">
-                    Smartphone app for guards on duty. Supports GPS clock-in, duty registers, digital payslips, and shift rosters.
+                    Smartphone app for guards on duty. Supports GPS clock-in, duty registers, digital payslips, and
+                    shift rosters.
                   </div>
                   <ul style="font-size:11px; color:#475569; padding-left:18px; margin-bottom:20px; line-height:1.8;">
                     <li>Works on Android &amp; iOS devices</li>
@@ -1291,20 +1317,26 @@
                 style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
                 <div style="position:absolute; top:12px; right:12px;">
                   <span class="badge"
-                    style="background:#F0FDF4; color:#15803D; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BBF7D0;">DISPATCH TOOL</span>
+                    style="background:#F0FDF4; color:#15803D; font-size:10px; font-weight:800; padding:4px 8px; border-radius:6px; border:1px solid #BBF7D0;">DISPATCH
+                    TOOL</span>
                 </div>
                 <div>
                   <div style="font-size:32px; margin-bottom:12px;">💬</div>
-                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Dispatch App to Guards</h3>
+                  <h3 style="font-size:17px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Dispatch App to Guards
+                  </h3>
                   <div style="font-size:12px; color:#64748B; line-height:1.5; margin-bottom:12px;">
-                    Send the mobile application link directly to security guards via WhatsApp, SMS, or copy the direct portal link.
+                    Send the mobile application link directly to security guards via WhatsApp, SMS, or copy the direct
+                    portal link.
                   </div>
                   <div style="margin-bottom:14px;">
-                    <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Guard Portal URL:</label>
+                    <label
+                      style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Guard
+                      Portal URL:</label>
                     <div style="display:flex; gap:6px;">
                       <input type="text" id="guard-directory-portal-url" readonly class="form-control"
                         style="font-size:11px; font-family:monospace; padding:6px 8px; background:#F8FAFC;" value="">
-                      <button type="button" class="btn btn-secondary" id="btn-copy-guard-link" onclick="copyGuardPortalUrl()"
+                      <button type="button" class="btn btn-secondary" id="btn-copy-guard-link"
+                        onclick="copyGuardPortalUrl()"
                         style="font-size:11px; font-weight:700; padding:6px 10px; white-space:nowrap;">
                         📋 Copy
                       </button>
@@ -1325,33 +1357,40 @@
             </div>
 
             <!-- Installation Instructions Tabs / Steps -->
-            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; margin-bottom:24px;">
-              <h3 style="font-size:16px; font-weight:800; color:#0F172A; margin:0 0 16px 0; display:flex; align-items:center; gap:8px;">
+            <div
+              style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:14px; padding:22px; margin-bottom:24px;">
+              <h3
+                style="font-size:16px; font-weight:800; color:#0F172A; margin:0 0 16px 0; display:flex; align-items:center; gap:8px;">
                 <span>📖</span> Step-by-Step Installation Guide for Guards &amp; Field Stations
               </h3>
               <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
                 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
-                  <div style="font-weight:800; font-size:14px; color:#1E40AF; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                  <div
+                    style="font-weight:800; font-size:14px; color:#1E40AF; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
                     <span>🪟</span> For Windows PCs (Stations &amp; Desks)
                   </div>
                   <ol style="font-size:12px; color:#475569; padding-left:18px; margin:0; line-height:1.7;">
                     <li>Click <strong>Download Windows Launcher (.bat)</strong> above.</li>
                     <li>Double-click the downloaded file in your Downloads folder.</li>
-                    <li>A <em>"CorpSec Payroll System"</em> shortcut is instantly created on your desktop and opens in full application mode!</li>
+                    <li>A <em>"CorpSec Payroll System"</em> shortcut is instantly created on your desktop and opens in
+                      full application mode!</li>
                   </ol>
                 </div>
                 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
-                  <div style="font-weight:800; font-size:14px; color:#15803D; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                  <div
+                    style="font-weight:800; font-size:14px; color:#15803D; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
                     <span>📱</span> For Android Smartphones (Guards)
                   </div>
                   <ol style="font-size:12px; color:#475569; padding-left:18px; margin:0; line-height:1.7;">
                     <li>Open <code>/portal</code> in Google Chrome on your phone.</li>
-                    <li>Tap the <strong>"Install"</strong> button on the bottom prompt (or Chrome Menu ⋮ &rarr; <em>"Add to Home screen"</em>).</li>
+                    <li>Tap the <strong>"Install"</strong> button on the bottom prompt (or Chrome Menu ⋮ &rarr; <em>"Add
+                        to Home screen"</em>).</li>
                     <li>The CorpSec Guard icon is added to your app drawer and home screen.</li>
                   </ol>
                 </div>
                 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px;">
-                  <div style="font-weight:800; font-size:14px; color:#7C3AED; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                  <div
+                    style="font-weight:800; font-size:14px; color:#7C3AED; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
                     <span>🍎</span> For iPhones / iOS (Guards)
                   </div>
                   <ol style="font-size:12px; color:#475569; padding-left:18px; margin:0; line-height:1.7;">
@@ -2679,7 +2718,7 @@
             color: #FFFFFF;
             flex-shrink: 0;
             position: relative;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
           }
 
           .wa-online-dot {
@@ -3245,8 +3284,15 @@
           }
 
           @keyframes waPinPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
+
+            0%,
+            100% {
+              transform: scale(1);
+            }
+
+            50% {
+              transform: scale(1.08);
+            }
           }
 
           .wa-pinned-info {
@@ -3379,6 +3425,7 @@
               box-shadow: 0 0 0 4px #00a884, 0 0 20px rgba(0, 168, 132, 0.6);
               transform: scale(1.02);
             }
+
             100% {
               box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
               transform: scale(1);
@@ -3415,16 +3462,23 @@
 
             <!-- Filter Pills -->
             <div class="wa-filter-pills" id="wa-filter-pills-bar">
-              <button class="wa-pill active" id="wa-pill-all" onclick="setWaFilter('all', this)">All <span id="wa-pill-cnt-all" class="wa-pill-badge">13</span></button>
-              <button class="wa-pill" id="wa-pill-channels" onclick="setWaFilter('channels', this)">Channels <span id="wa-pill-cnt-channels" class="wa-pill-badge">1</span></button>
-              <button class="wa-pill" id="wa-pill-supervisors" onclick="setWaFilter('supervisors', this)">Supervisors <span id="wa-pill-cnt-supervisors" class="wa-pill-badge">9</span></button>
-              <button class="wa-pill" id="wa-pill-admin_hr" onclick="setWaFilter('admin_hr', this)">Admin &amp; HR <span id="wa-pill-cnt-admin_hr" class="wa-pill-badge">3</span></button>
-              <button class="wa-pill" id="wa-pill-unread" onclick="setWaFilter('unread', this)">Unread <span id="wa-unread-filter-count" style="display:none;" class="wa-pill-badge wa-pill-badge-alert">0</span></button>
+              <button class="wa-pill active" id="wa-pill-all" onclick="setWaFilter('all', this)">All <span
+                  id="wa-pill-cnt-all" class="wa-pill-badge">13</span></button>
+              <button class="wa-pill" id="wa-pill-channels" onclick="setWaFilter('channels', this)">Channels <span
+                  id="wa-pill-cnt-channels" class="wa-pill-badge">1</span></button>
+              <button class="wa-pill" id="wa-pill-supervisors" onclick="setWaFilter('supervisors', this)">Supervisors
+                <span id="wa-pill-cnt-supervisors" class="wa-pill-badge">9</span></button>
+              <button class="wa-pill" id="wa-pill-admin_hr" onclick="setWaFilter('admin_hr', this)">Admin &amp; HR <span
+                  id="wa-pill-cnt-admin_hr" class="wa-pill-badge">3</span></button>
+              <button class="wa-pill" id="wa-pill-unread" onclick="setWaFilter('unread', this)">Unread <span
+                  id="wa-unread-filter-count" style="display:none;"
+                  class="wa-pill-badge wa-pill-badge-alert">0</span></button>
             </div>
 
             <!-- Contacts / Chats List -->
             <div class="wa-contact-list" id="wa-contact-list">
-              <div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading team directory...</div>
+              <div style="text-align:center; padding:30px; color:#8696a0; font-size:13px;">Loading team directory...
+              </div>
             </div>
           </div>
 
@@ -3435,12 +3489,16 @@
               <div class="wa-chat-target">
                 <div class="wa-contact-avatar" id="wa-active-avatar">👥</div>
                 <div>
-                  <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team</div>
-                  <div style="font-size:12px; color:#8696a0;" id="wa-active-status">Admin, HR, Staff &amp; Supervisors • Online</div>
+                  <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team
+                  </div>
+                  <div style="font-size:12px; color:#8696a0;" id="wa-active-status">Admin, HR, Staff &amp; Supervisors •
+                    Online</div>
                 </div>
               </div>
               <div style="display:flex; align-items:center; gap:10px;">
-                <button type="button" id="wa-header-call-btn" style="display:none; align-items:center; gap:6px; background:rgba(37,99,235,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer;" onclick="callActiveContactPhone()" title="Call contact via Softphone">
+                <button type="button" id="wa-header-call-btn"
+                  style="display:none; align-items:center; gap:6px; background:rgba(37,99,235,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer;"
+                  onclick="callActiveContactPhone()" title="Call contact via Softphone">
                   <span>📞</span> Call
                 </button>
                 <button class="wa-icon-btn" onclick="initWhatsAppChat()" title="Refresh Chat">🔄</button>
@@ -3450,7 +3508,8 @@
             </div>
 
             <!-- WhatsApp Pinned Messages Bar (Important Operational Announcements) -->
-            <div id="wa-pinned-bar" class="wa-pinned-bar" style="display:none;" onclick="handlePinnedBarClick()" title="Click to jump to pinned message (or cycle through pinned notices)">
+            <div id="wa-pinned-bar" class="wa-pinned-bar" style="display:none;" onclick="handlePinnedBarClick()"
+              title="Click to jump to pinned message (or cycle through pinned notices)">
               <div class="wa-pinned-left">
                 <div class="wa-pinned-pin-icon">📌</div>
                 <div class="wa-pinned-info">
@@ -3463,10 +3522,12 @@
                 </div>
               </div>
               <div class="wa-pinned-actions" onclick="event.stopPropagation();">
-                <button type="button" class="wa-pinned-action-btn" onclick="handlePinnedBarClick()" title="Jump to message">
+                <button type="button" class="wa-pinned-action-btn" onclick="handlePinnedBarClick()"
+                  title="Jump to message">
                   ↗
                 </button>
-                <button type="button" class="wa-pinned-action-btn wa-pinned-unpin-btn" onclick="unpinCurrentPinnedMessage()" title="Unpin this message">
+                <button type="button" class="wa-pinned-action-btn wa-pinned-unpin-btn"
+                  onclick="unpinCurrentPinnedMessage()" title="Unpin this message">
                   ✕
                 </button>
               </div>
@@ -3608,8 +3669,10 @@
             <div class="cc-sub-nav-item" data-subtab="recordings" onclick="switchCallCenterSubTab('recordings')">
               <div class="cc-item-left">
                 <span class="cc-item-icon">⏺️</span>
-                <span>Recordings</span>
+                <span>Audio Recordings</span>
               </div>
+              <span class="cc-sub-nav-pill-badge" id="badge-cc-recordings"
+                style="background:#EFF6FF; color:#2563EB; font-weight:700;">DB</span>
             </div>
             <div class="cc-sub-nav-item" data-subtab="missed" onclick="switchCallCenterSubTab('missed')">
               <div class="cc-item-left">
@@ -3643,6 +3706,11 @@
                   onclick="toggleAgentStatusDropdown(event)" style="cursor:pointer;">
                   <span class="status-indicator-dot"></span> <span>Online / Available</span>
                 </span>
+                <button class="btn btn-secondary" onclick="switchCallCenterSubTab('recordings')"
+                  style="display:inline-flex; align-items:center; gap:6px; font-weight:700; background:#EFF6FF; border-color:#BFDBFE; color:#1D4ED8;"
+                  title="View and listen to call audio recordings in the database">
+                  <span>🎧</span> Audio Recordings
+                </button>
                 <button class="btn btn-secondary" onclick="simulateIncomingCallModal()"
                   style="display:inline-flex; align-items:center; gap:6px; font-weight:700; background:#F0FDF4; border-color:#86EFAC; color:#15803D;">
                   <span>⚡</span> Simulate Inbound Call
@@ -12234,7 +12302,8 @@
           <div>
             <div id="modal-audio-caller-name" style="font-size:16px; font-weight:800; color:#0F172A;">Caller Name</div>
             <div id="modal-audio-caller-number"
-              style="font-size:13px; font-family:monospace; color:#2563EB; font-weight:700; margin-top:2px;">+254 700 000
+              style="font-size:13px; font-family:monospace; color:#2563EB; font-weight:700; margin-top:2px;">+254 700
+              000
               000</div>
           </div>
           <span id="modal-audio-call-id"
@@ -12254,12 +12323,14 @@
         <div style="font-size:12px; font-weight:700; color:#475569;">Playback Speed:</div>
         <div style="display:flex; gap:6px;">
           <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="0.75"
-            onclick="setAudioPlaybackRate(0.75)" style="font-size:11px; padding:4px 9px; font-weight:700;">0.75x</button>
+            onclick="setAudioPlaybackRate(0.75)"
+            style="font-size:11px; padding:4px 9px; font-weight:700;">0.75x</button>
           <button type="button" class="btn btn-secondary btn-playback-rate active" data-rate="1.0"
             onclick="setAudioPlaybackRate(1.0)"
             style="font-size:11px; padding:4px 9px; font-weight:700; background:#2563EB; color:#FFF;">1.0x</button>
           <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="1.25"
-            onclick="setAudioPlaybackRate(1.25)" style="font-size:11px; padding:4px 9px; font-weight:700;">1.25x</button>
+            onclick="setAudioPlaybackRate(1.25)"
+            style="font-size:11px; padding:4px 9px; font-weight:700;">1.25x</button>
           <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="1.5"
             onclick="setAudioPlaybackRate(1.5)" style="font-size:11px; padding:4px 9px; font-weight:700;">1.5x</button>
           <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="2.0"
