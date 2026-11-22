@@ -12,12 +12,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
   <link rel="stylesheet" href="/static/css/styles.css?v=20261119_v3">
-  <link rel="stylesheet" href="/static/css/call-center.css?v=20261122_v5">
-  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261122_v5">
-  <script src="/static/js/app.js?v=20261122_v5"></script>
-  <script src="/static/js/silent-updater.js?v=20261122_v5"></script>
-  <script src="/static/js/call-center.js?v=20261122_v5"></script>
-  <script src="/static/js/ai-assistant.js?v=20261122_v5"></script>
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261122_v7">
+  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261122_v7">
+  <script src="/static/js/app.js?v=20261122_v7"></script>
+  <script src="/static/js/silent-updater.js?v=20261122_v7"></script>
+  <script src="/static/js/call-center.js?v=20261122_v7"></script>
+  <script src="/static/js/ai-assistant.js?v=20261122_v7"></script>
 </head>
 
 <body>
@@ -372,7 +372,8 @@
 
         <!-- Compact AI Quick-Access Banner (Opens Dedicated AI Assistant & Telemetry Charts Page - System Admin Only) -->
         <div class="dash-ai-quick-banner" id="dash-ai-quick-banner" onclick="switchTab('ai-assistant')"
-          style="display:none;" title="Open Google Gemini AI Assistant & Live Performance Charts in Dedicated Page">
+          style="display:none;"
+          title="Open Google Gemini AI Assistant & Live Performance Charts in Dedicated Page">
           <div class="dash-ai-banner-left">
             <div class="dash-ai-banner-icon">🤖</div>
             <div class="dash-ai-banner-text">
@@ -9278,4 +9279,3197 @@
 
 
   <!-- ======================================================== -->
-  ... [truncated for diff preview]
+  <!-- MODALS FOR MODULE 2: CLIENT & CONTRACT MANAGEMENT       -->
+  <!-- ======================================================== -->
+
+  <!-- Modal: Register Client -->
+  <div id="modal-register-client" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeRegisterClientModal()">
+    <div class="modal-content" style="max-width: 680px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">🏢 Register New Client Organization</h3>
+        <button onclick="closeRegisterClientModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-register-client" onsubmit="handleRegisterClientSubmit(event)">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Client / Organization Name *</label>
+            <input type="text" id="client-reg-name" class="form-control" placeholder="e.g. Kenya Commercial Bank HQ"
+              required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Client Type *</label>
+            <select id="client-reg-type" class="form-control" required>
+              <option value="CORPORATE">Corporate Organization</option>
+              <option value="COMMERCIAL">Commercial Building / Mall</option>
+              <option value="RESIDENTIAL">Residential Estate / Gated Community</option>
+              <option value="INDUSTRIAL">Industrial / Factory / Warehouse</option>
+              <option value="EDUCATIONAL">School / University</option>
+              <option value="HEALTHCARE">Hospital / Medical Center</option>
+              <option value="GOVERNMENT">Government Institution</option>
+              <option value="INDIVIDUAL">Private Individual</option>
+              <option value="OTHER">Other Organization</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Industry / Sector</label>
+            <input type="text" id="client-reg-industry" class="form-control"
+              placeholder="e.g. Banking, Retail, Logistics">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Business Reg. No / PIN</label>
+            <input type="text" id="client-reg-tax-pin" class="form-control" placeholder="KRA PIN or Reg Number">
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Physical Address *</label>
+            <input type="text" id="client-reg-address" class="form-control" placeholder="Street, Building, Floor"
+              required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">County / City *</label>
+            <input type="text" id="client-reg-city" class="form-control" placeholder="Nairobi, Mombasa, Kisumu"
+              value="Nairobi" required>
+          </div>
+        </div>
+
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; margin-bottom:12px;">
+          <div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:8px;">
+            Primary Contact Person</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Contact Name *</label>
+              <input type="text" id="client-reg-contact-name" class="form-control" placeholder="Jane Doe" required>
+            </div>
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Designation / Title</label>
+              <input type="text" id="client-reg-contact-title" class="form-control"
+                placeholder="Head of Security / Facilities Mgr">
+            </div>
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Phone Number *</label>
+              <input type="text" id="client-reg-contact-phone" class="form-control" placeholder="+254 700 000000"
+                required>
+            </div>
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Email Address *</label>
+              <input type="email" id="client-reg-contact-email" class="form-control" placeholder="contact@company.com"
+                required>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Additional Client Notes / Requirements</label>
+          <textarea id="client-reg-notes" class="form-control" rows="2"
+            placeholder="Specific SLA requirements, billing cycle notes, escalation protocol..."></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRegisterClientModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-client">Register Client</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: View Client Profile (Full Hub) -->
+  <div id="modal-client-profile" class="modal-overlay"
+    style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;"
+    onclick="if(event.target === this) closeClientProfileModal()">
+    <div class="modal-content"
+      style="max-width: 860px; width:100%; margin:auto; background:#FFFFFF; border-radius:12px; max-height:90vh; overflow-y:auto;">
+      <div
+        style="background:#0D7682; color:#FFFFFF; padding:20px 24px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span id="cp-badge-type" class="badge"
+            style="background:rgba(255,255,255,0.2); color:#FFFFFF; font-size:11px; font-weight:700; margin-bottom:6px;">CORPORATE</span>
+          <h2 id="cp-name" style="font-size:22px; font-weight:900; margin:0; letter-spacing:-0.5px;">Client Profile</h2>
+          <div id="cp-subinfo" style="font-size:12px; color:#E0F2FE; margin-top:4px;">ID: CLT-0001 | Registered:
+            2026-01-15</div>
+        </div>
+        <button onclick="closeClientProfileModal()"
+          style="background:none; border:none; color:#FFFFFF; font-size:22px; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="padding:20px 24px;">
+        <!-- Top Metrics Grid -->
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:20px;">
+          <div
+            style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">ACTIVE CONTRACTS</div>
+            <div id="cp-stat-contracts" style="font-size:18px; font-weight:900; color:#0D7682; margin-top:2px;">0</div>
+          </div>
+          <div
+            style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">DEPLOYED GUARDS</div>
+            <div id="cp-stat-guards" style="font-size:18px; font-weight:900; color:#0D7682; margin-top:2px;">0</div>
+          </div>
+          <div
+            style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">PROTECTED SITES</div>
+            <div id="cp-stat-sites" style="font-size:18px; font-weight:900; color:#0F172A; margin-top:2px;">0</div>
+          </div>
+          <div
+            style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">TOTAL INVOICED</div>
+            <div id="cp-stat-billed" style="font-size:18px; font-weight:900; color:#059669; margin-top:2px;">KES 0</div>
+          </div>
+        </div>
+
+        <!-- Contact & Location Box -->
+        <div
+          style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; font-size:12px; background:#F1F5F9; border-radius:8px; padding:14px;">
+          <div>
+            <div style="font-weight:800; color:#1E293B; margin-bottom:4px;">Primary Contact:</div>
+            <div>Name: <strong id="cp-contact-name">-</strong> (<span id="cp-contact-title">-</span>)</div>
+            <div>Phone: <strong id="cp-contact-phone">-</strong></div>
+            <div>Email: <strong id="cp-contact-email">-</strong></div>
+          </div>
+          <div>
+            <div style="font-weight:800; color:#1E293B; margin-bottom:4px;">Location & Tax Details:</div>
+            <div>Physical: <strong id="cp-address">-</strong></div>
+            <div>City/County: <strong id="cp-city">-</strong></div>
+            <div>Tax PIN: <strong id="cp-pin">-</strong></div>
+          </div>
+        </div>
+
+        <!-- Contract SLAs Section -->
+        <div style="margin-bottom:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h4 style="font-size:14px; font-weight:800; color:#0F172A; margin:0;">📋 Contracts & Service Level
+              Agreements</h4>
+            <button class="btn btn-primary" style="font-size:11px; padding:4px 10px;"
+              onclick="openCreateContractForClient()">+ Add Contract</button>
+          </div>
+          <div style="border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+              <thead style="background:#F8FAFC; border-bottom:1px solid #E2E8F0;">
+                <tr>
+                  <th style="padding:8px 10px; text-align:left;">REF & TITLE</th>
+                  <th style="padding:8px 10px; text-align:left;">PERIOD</th>
+                  <th style="padding:8px 10px; text-align:right;">MONTHLY (KES)</th>
+                  <th style="padding:8px 10px; text-align:center;">GUARDS</th>
+                  <th style="padding:8px 10px; text-align:center;">VER</th>
+                  <th style="padding:8px 10px; text-align:center;">STATUS</th>
+                  <th style="padding:8px 10px; text-align:right;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="cp-contracts-body">
+                <tr>
+                  <td colspan="7" style="text-align:center; padding:16px; color:#94A3B8;">Loading contracts...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Linked Client Sites Section -->
+        <div style="margin-bottom:20px;">
+          <h4 style="font-size:14px; font-weight:800; color:#0F172A; margin:0 0 10px 0;">📍 Client Sites & Deployed
+            Posts</h4>
+          <div style="border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+              <thead style="background:#F8FAFC; border-bottom:1px solid #E2E8F0;">
+                <tr>
+                  <th style="padding:8px 10px; text-align:left;">SITE NAME</th>
+                  <th style="padding:8px 10px; text-align:left;">LOCATION / REGION</th>
+                  <th style="padding:8px 10px; text-align:center;">REQUIRED GUARDS</th>
+                  <th style="padding:8px 10px; text-align:center;">ASSIGNED SUPERVISOR</th>
+                  <th style="padding:8px 10px; text-align:right;">HOURLY RATE</th>
+                </tr>
+              </thead>
+              <tbody id="cp-sites-body">
+                <tr>
+                  <td colspan="5" style="text-align:center; padding:16px; color:#94A3B8;">Loading sites...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:14px; border-top:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:11px; color:#64748B;">Complete CRM history linked to CorpSec operational database.</div>
+          <button type="button" class="btn btn-secondary" onclick="closeClientProfileModal()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create / Add Contract -->
+  <div id="modal-create-contract" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeCreateContractModal()">
+    <div class="modal-content" style="max-width: 680px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">📄 Create Client Contract SLA</h3>
+        <button onclick="closeCreateContractModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-create-contract" onsubmit="handleCreateContractSubmit(event)">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Client *</label>
+            <select id="contract-create-client-id" class="form-control" required>
+              <option value="">Select Client...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Contract Ref No *</label>
+            <input type="text" id="contract-create-ref" class="form-control" placeholder="e.g. CTR-2026-KCB-01"
+              required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Contract Title *</label>
+          <input type="text" id="contract-create-title" class="form-control"
+            placeholder="e.g. 24/7 Armed Guarding & Rapid Response SLA" required>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Contract Type</label>
+            <select id="contract-create-type" class="form-control">
+              <option value="ANNUAL">Annual Guarding SLA</option>
+              <option value="MULTI_YEAR">Multi-Year Security Contract</option>
+              <option value="PROJECT">Project / Construction Security</option>
+              <option value="AD_HOC">Ad-Hoc / Event Security</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Billing Frequency</label>
+            <select id="contract-create-billing-freq" class="form-control">
+              <option value="MONTHLY" selected>Monthly in Arrears</option>
+              <option value="QUARTERLY">Quarterly</option>
+              <option value="ANNUALLY">Annually</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Start Date *</label>
+            <input type="date" id="contract-create-start" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">End Date *</label>
+            <input type="date" id="contract-create-end" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Monthly Charge (KES) *</label>
+            <input type="number" step="0.01" id="contract-create-monthly" class="form-control" placeholder="0.00"
+              required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Total Contract Value (KES) *</label>
+            <input type="number" step="0.01" id="contract-create-total" class="form-control" placeholder="0.00"
+              required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Guards Required</label>
+            <input type="number" id="contract-create-guards" class="form-control" placeholder="4" value="2" min="1">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Payment Terms</label>
+            <input type="text" id="contract-create-terms" class="form-control" placeholder="Net 30 Days"
+              value="Net 30 Days">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Special Conditions & Scope</label>
+          <textarea id="contract-create-conditions" class="form-control" rows="2"
+            placeholder="Includes CCTV monitoring, K9 handler, perimeter alarm response..."></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateContractModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-contract">Create Contract</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Renew Contract (Preserves History) -->
+  <div id="modal-renew-contract" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeRenewContractModal()">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">🔄 Renew Contract (Preserves History)</h3>
+        <button onclick="closeRenewContractModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-renew-contract" onsubmit="handleRenewContractSubmit(event)">
+        <input type="hidden" id="contract-renew-id">
+        <div
+          style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px; margin-bottom:14px; font-size:12px; color:#1E3A8A;">
+          <div>Renewing: <strong id="contract-renew-title-label">-</strong></div>
+          <div style="margin-top:2px; font-size:11px; color:#3B82F6;">This will set the current contract version to
+            RENEWED and generate Version <strong id="contract-renew-next-ver">2</strong> preserving full audit history.
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">New Start Date *</label>
+            <input type="date" id="contract-renew-start" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">New End Date *</label>
+            <input type="date" id="contract-renew-end" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Revised Monthly (KES) *</label>
+            <input type="number" step="0.01" id="contract-renew-monthly" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Revised Total Value (KES) *</label>
+            <input type="number" step="0.01" id="contract-renew-total" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Guards Required</label>
+            <input type="number" id="contract-renew-guards" class="form-control" min="1">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Payment Terms</label>
+            <input type="text" id="contract-renew-terms" class="form-control" placeholder="Net 30 Days">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Renewal Notes & Adjusted Conditions</label>
+          <textarea id="contract-renew-conditions" class="form-control" rows="2"
+            placeholder="Rate adjustment 5% inflation, added guard patrol dog..."></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRenewContractModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-renewal">Execute Renewal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODALS FOR MODULE 3: COMPANY HISTORY & GOVERNANCE       -->
+  <!-- ======================================================== -->
+
+  <!-- Modal: Add Historical Milestone -->
+  <div id="modal-add-milestone" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeAddMilestoneModal()">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">🏆 Record Corporate Milestone</h3>
+        <button onclick="closeAddMilestoneModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-milestone" onsubmit="handleAddMilestoneSubmit(event)">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Milestone Title *</label>
+          <input type="text" id="milestone-title" class="form-control"
+            placeholder="e.g. Expansion to Coastal Region - Mombasa Office" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Event Date *</label>
+            <input type="date" id="milestone-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Category *</label>
+            <select id="milestone-category" class="form-control" required>
+              <option value="EXPANSION">Geographical Expansion</option>
+              <option value="LICENSING">Regulatory Licensing (PSRA/Govt)</option>
+              <option value="ACCREDITATION">ISO & Quality Accreditation</option>
+              <option value="CONTRACT">Major Key Account Secured</option>
+              <option value="TECHNOLOGY">Technology & CCTV Deployment</option>
+              <option value="FOUNDING">Founding & Establishment</option>
+              <option value="AWARD">Industry Award & Recognition</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Location / Branch</label>
+          <input type="text" id="milestone-location" class="form-control" placeholder="e.g. Mombasa, Coast HQ">
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Description *</label>
+          <textarea id="milestone-desc" class="form-control" rows="3"
+            placeholder="Full historical details of this milestone..." required></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Strategic Significance / Impact</label>
+          <input type="text" id="milestone-impact" class="form-control"
+            placeholder="e.g. Extended guard force by 120 guards and 8 patrol cruisers">
+        </div>
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddMilestoneModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-milestone">Save Milestone</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Ownership & Director Record -->
+  <div id="modal-add-ownership" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeAddOwnershipModal()">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">👔 Add Director / Shareholder Record</h3>
+        <button onclick="closeAddOwnershipModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-ownership" onsubmit="handleAddOwnershipSubmit(event)">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Full Name / Entity Name *</label>
+          <input type="text" id="owner-name" class="form-control" placeholder="e.g. Col. (Rtd) James Mwangi" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Role / Board Designation *</label>
+            <select id="owner-role" class="form-control" required>
+              <option value="BOARD_CHAIR">Board Chairperson</option>
+              <option value="MANAGING_DIRECTOR">Managing Director / CEO</option>
+              <option value="DIRECTOR">Executive Director</option>
+              <option value="NON_EXEC_DIRECTOR">Non-Executive Director</option>
+              <option value="SHAREHOLDER">Institutional / Individual Shareholder</option>
+              <option value="FOUNDER">Founding Partner</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Shareholding (%) *</label>
+            <input type="number" step="0.01" id="owner-share-pct" class="form-control" placeholder="0.00" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Number of Shares</label>
+            <input type="number" id="owner-shares-count" class="form-control" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Appointment Date *</label>
+            <input type="date" id="owner-appoint-date" class="form-control" required>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">National ID / Reg No</label>
+            <input type="text" id="owner-id-number" class="form-control" placeholder="ID or Passport No">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Board Resolution Ref</label>
+            <input type="text" id="owner-resolution" class="form-control" placeholder="BR-2020-01">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Contact & Biographical Notes</label>
+          <textarea id="owner-notes" class="form-control" rows="2"
+            placeholder="Contact email, phone, background in security services..."></textarea>
+        </div>
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddOwnershipModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-ownership">Save Governance Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Modal: Edit Client Organization -->
+  <div id="modal-edit-client" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeEditClientModal()">
+    <div class="modal-content" style="max-width: 680px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">✏️ Edit Client Organization</h3>
+        <button onclick="closeEditClientModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-client" onsubmit="handleEditClientSubmit(event)">
+        <input type="hidden" id="client-edit-id">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Client / Organization Name *</label>
+            <input type="text" id="client-edit-name" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Client Type *</label>
+            <select id="client-edit-type" class="form-control" required>
+              <option value="CORPORATE">Corporate Organization</option>
+              <option value="COMMERCIAL">Commercial Building / Mall</option>
+              <option value="RESIDENTIAL">Residential Estate / Gated Community</option>
+              <option value="INDUSTRIAL">Industrial / Factory / Warehouse</option>
+              <option value="EDUCATIONAL">School / University</option>
+              <option value="HEALTHCARE">Hospital / Medical Center</option>
+              <option value="GOVERNMENT">Government Institution</option>
+              <option value="INDIVIDUAL">Private Individual</option>
+              <option value="OTHER">Other Organization</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Industry / Sector</label>
+            <input type="text" id="client-edit-industry" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Business Reg. No / PIN</label>
+            <input type="text" id="client-edit-tax-pin" class="form-control">
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Physical Address *</label>
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Designation / Title</label>
+              <input type="text" id="client-edit-contact-title" class="form-control">
+            </div>
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Phone Number *</label>
+              <input type="text" id="client-edit-contact-phone" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label style="font-size:11px; font-weight:700;">Email Address *</label>
+              <input type="email" id="client-edit-contact-email" class="form-control" required>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Client Account Status</label>
+            <select id="client-edit-status" class="form-control">
+              <option value="ACTIVE">Active Account</option>
+              <option value="PROSPECT">Prospect / Lead</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="TERMINATED">Terminated</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Additional Notes</label>
+          <textarea id="client-edit-notes" class="form-control" rows="2"></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditClientModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-update-client">Save Client Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Contract SLA -->
+  <div id="modal-edit-contract" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeEditContractModal()">
+    <div class="modal-content" style="max-width: 680px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">✏️ Edit Service Contract SLA</h3>
+        <button onclick="closeEditContractModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-contract" onsubmit="handleEditContractSubmit(event)">
+        <input type="hidden" id="contract-edit-id">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Contract Ref No</label>
+            <input type="text" id="contract-edit-ref" class="form-control" readonly style="background:#F1F5F9;">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Contract Status</label>
+            <select id="contract-edit-status" class="form-control">
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="EXPIRING_SOON">EXPIRING SOON</option>
+              <option value="EXPIRED">EXPIRED</option>
+              <option value="RENEWED">RENEWED</option>
+              <option value="TERMINATED">TERMINATED</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Contract Title *</label>
+          <input type="text" id="contract-edit-title" class="form-control" required>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Contract Type</label>
+            <select id="contract-edit-type" class="form-control">
+              <option value="ANNUAL">Annual Guarding SLA</option>
+              <option value="MULTI_YEAR">Multi-Year Security Contract</option>
+              <option value="PROJECT">Project / Construction Security</option>
+              <option value="AD_HOC">Ad-Hoc / Event Security</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Billing Frequency</label>
+            <select id="contract-edit-billing-freq" class="form-control">
+              <option value="MONTHLY">Monthly in Arrears</option>
+              <option value="QUARTERLY">Quarterly</option>
+              <option value="ANNUALLY">Annually</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Start Date *</label>
+            <input type="date" id="contract-edit-start" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">End Date *</label>
+            <input type="date" id="contract-edit-end" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Monthly Charge (KES) *</label>
+            <input type="number" step="0.01" id="contract-edit-monthly" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Total Contract Value (KES) *</label>
+            <input type="number" step="0.01" id="contract-edit-total" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Guards Required</label>
+            <input type="number" id="contract-edit-guards" class="form-control" min="1">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Payment Terms</label>
+            <input type="text" id="contract-edit-terms" class="form-control">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Special Conditions & Scope</label>
+          <textarea id="contract-edit-conditions" class="form-control" rows="2"></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditContractModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-update-contract">Save Contract Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Company Asset -->
+  <div id="modal-edit-asset" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeEditAssetModal()">
+    <div class="modal-content" style="max-width: 720px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">✏️ Edit Company Asset</h3>
+        <button onclick="closeEditAssetModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-asset" onsubmit="handleEditAssetSubmit(event)">
+        <input type="hidden" id="asset-edit-id">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:14px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Asset Tag / Code</label>
+            <input type="text" id="asset-edit-code" class="form-control" readonly style="background:#F1F5F9;">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Asset Name *</label>
+            <input type="text" id="asset-edit-name" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Category *</label>
+            <select id="asset-edit-category" class="form-control" required>
+              <option value="">Select Category...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Serial / Chassis Number</label>
+            <input type="text" id="asset-edit-serial" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Make / Manufacturer</label>
+            <input type="text" id="asset-edit-make" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Model</label>
+            <input type="text" id="asset-edit-model" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Purchase Date *</label>
+            <input type="date" id="asset-edit-purchase-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Purchase Price (KES) *</label>
+            <input type="number" step="0.01" id="asset-edit-price" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Depreciation Method</label>
+            <select id="asset-edit-depr-method" class="form-control">
+              <option value="STRAIGHT_LINE">Straight Line</option>
+              <option value="REDUCING_BALANCE">Reducing Balance</option>
+              <option value="NONE">None</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Depreciation Rate (%)</label>
+            <input type="number" step="0.01" id="asset-edit-depr-rate" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Salvage / Residual Value (KES)</label>
+            <input type="number" step="0.01" id="asset-edit-salvage" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Asset Condition</label>
+            <select id="asset-edit-condition" class="form-control">
+              <option value="EXCELLENT">Excellent (Brand New)</option>
+              <option value="GOOD">Good (Operational)</option>
+              <option value="FAIR">Fair (Shows Wear)</option>
+              <option value="POOR">Poor (Needs Attention)</option>
+              <option value="DAMAGED">Damaged / Non-functional</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Asset Status</label>
+            <select id="asset-edit-status" class="form-control">
+              <option value="IN_STOCK">IN STOCK</option>
+              <option value="ASSIGNED">ASSIGNED / DEPLOYED</option>
+              <option value="UNDER_MAINTENANCE">UNDER MAINTENANCE</option>
+              <option value="DISPOSED">DISPOSED</option>
+              <option value="LOST">LOST</option>
+              <option value="DAMAGED">DAMAGED</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Current Location / Branch</label>
+            <input type="text" id="asset-edit-location" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Department</label>
+            <input type="text" id="asset-edit-department" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Supplier Information</label>
+            <input type="text" id="asset-edit-supplier" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Warranty Expiry</label>
+            <input type="date" id="asset-edit-warranty" class="form-control">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Asset Description / Specification Notes</label>
+          <textarea id="asset-edit-description" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditAssetModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-update-asset">Save Asset Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Supplies Inventory Item -->
+  <div id="modal-edit-inventory-item" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeEditInventoryItemModal()">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">✏️ Edit Consumable Supply Item</h3>
+        <button onclick="closeEditInventoryItemModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-inventory-item" onsubmit="handleEditInventoryItemSubmit(event)">
+        <input type="hidden" id="inv-edit-item-id">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Item Code / SKU</label>
+            <input type="text" id="inv-edit-item-sku" class="form-control" readonly style="background:#F1F5F9;">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Category *</label>
+            <select id="inv-edit-item-category" class="form-control" required>
+              <option value="UNIFORMS">Security Uniforms</option>
+              <option value="FOOTWEAR">Tactical Boots & Footwear</option>
+              <option value="COMMUNICATIONS">Radio Batteries & Headsets</option>
+              <option value="TACTICAL">Flashlights, Batons, Whistles</option>
+              <option value="SAFETY">Reflector Vests & Raincoats</option>
+              <option value="OFFICE_SUPPLY">Logbooks, Pens & Stationery</option>
+              <option value="CLEANING">Cleaning & Janitorial Supplies</option>
+              <option value="OTHER">Other Operational Supplies</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Item Name & Specifications *</label>
+          <input type="text" id="inv-edit-item-name" class="form-control" required>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Unit of Measure *</label>
+            <input type="text" id="inv-edit-item-uom" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Unit Cost (KES) *</label>
+            <input type="number" step="0.01" id="inv-edit-item-cost" class="form-control" required>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Minimum Stock Level (Alert)</label>
+            <input type="number" id="inv-edit-item-min-level" class="form-control">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Reorder Quantity</label>
+            <input type="number" id="inv-edit-item-reorder-qty" class="form-control">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Storage Bin / Warehouse Location</label>
+          <input type="text" id="inv-edit-item-location" class="form-control">
+        </div>
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditInventoryItemModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-update-inv-item">Save Item Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Founding Heritage -->
+  <div id="modal-edit-founding" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeEditFoundingModal()">
+    <div class="modal-content" style="max-width: 620px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">📜 Edit Corporate Founding Heritage</h3>
+        <button onclick="closeEditFoundingModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-founding" onsubmit="handleEditFoundingSubmit(event)">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Founding Date *</label>
+            <input type="date" id="founding-edit-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Original Location / City *</label>
+            <input type="text" id="founding-edit-location" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Initial Guard Complement *</label>
+            <input type="number" id="founding-edit-guards" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Initial Capital (KES)</label>
+            <input type="number" step="0.01" id="founding-edit-capital" class="form-control">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">Founding Principals & Visionaries *</label>
+          <input type="text" id="founding-edit-founders" class="form-control" required>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:700;">First Key Client Name</label>
+          <input type="text" id="founding-edit-first-client" class="form-control">
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Background Story & Genesis *</label>
+          <textarea id="founding-edit-story" class="form-control" rows="4" required></textarea>
+        </div>
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditFoundingModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-update-founding">Save Founding Heritage</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODALS FOR PERSONNEL CUSTODY, AWARDS & ITEM RETURNS      -->
+  <!-- ======================================================== -->
+
+  <!-- Modal: Return Custody Item to Company -->
+  <div id="modal-return-custody-item" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeReturnCustodyModal()">
+    <div class="modal-content" style="max-width: 540px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">🔄 Record Item Return to Company Custody</h3>
+        <button onclick="closeReturnCustodyModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-return-custody-item" onsubmit="handleReturnCustodySubmit(event)">
+        <input type="hidden" id="return-custody-alloc-id">
+        <input type="hidden" id="return-custody-target-type">
+        <input type="hidden" id="return-custody-target-id">
+        <input type="hidden" id="return-custody-item-kind" value="asset">
+        <input type="hidden" id="return-custody-item-id">
+        <input type="hidden" id="return-custody-qty" value="1">
+
+        <div id="return-custody-select-container" style="display:none; margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Select Item
+            to Mark as Returned *</label>
+          <select id="return-custody-item-select" class="form-control" onchange="onReturnItemSelectChange()"></select>
+        </div>
+
+        <div id="return-custody-info-box"
+          style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:16px;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">ITEM BEING RETURNED</div>
+          <div id="return-custody-item-name" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:2px;">-
+          </div>
+          <div id="return-custody-item-tag" style="font-size:12px; font-weight:600; color:#0D7682; margin-top:2px;">-
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:14px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Return Date *</label>
+            <input type="date" id="return-custody-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Condition on Return *</label>
+            <select id="return-custody-condition" class="form-control"
+              onchange="handleReturnConditionChanged(this.value)" required>
+              <option value="EXCELLENT">EXCELLENT</option>
+              <option value="GOOD" selected>GOOD</option>
+              <option value="FAIR">FAIR</option>
+              <option value="POOR">POOR</option>
+              <option value="DAMAGED">DAMAGED (Deduct Penalty from Salary)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Damage Assessment & Salary Deduction Group (Auto-shown when condition is DAMAGED or POOR) -->
+        <div id="return-damage-deduction-box"
+          style="display:none; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:10px; padding:14px; margin-bottom:16px;">
+          <div
+            style="font-size:13px; font-weight:700; color:#991B1B; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+            <span>⚠️</span> Property Damage Detected — Apply Salary Deduction
+          </div>
+          <p style="font-size:11px; color:#B91C1C; margin:0 0 10px 0;">
+            This belonging is marked as damaged. Enter the damage repair/replacement fee to be automatically deducted
+            from the guard's monthly salary.
+          </p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:6px;">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#7F1D1D; display:block; margin-bottom:4px;">Damage
+                Penalty Amount (KES) *</label>
+              <input type="number" id="return-damage-deduction-amount" class="form-control" placeholder="e.g. 1500"
+                min="0" step="any" style="border-color:#F87171;">
+            </div>
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#7F1D1D; display:block; margin-bottom:4px;">Damage
+                Description / Assessment</label>
+              <input type="text" id="return-damage-description" class="form-control"
+                placeholder="e.g. Broken antenna / torn uniform" style="border-color:#F87171;">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Receiving Officer Notes / Verification Details *</label>
+          <textarea id="return-custody-notes" class="form-control" rows="3"
+            placeholder="e.g. Returned to central inventory store, inspected." required></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeReturnCustodyModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-confirm-return-custody">Confirm &amp; Record
+            Return</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Award / Issue Item to Guard or Staff -->
+  <div id="modal-award-item" class="modal-overlay" style="display:none;"
+    onclick="if(event.target === this) closeAwardItemModal()">
+    <div class="modal-content" style="max-width: 600px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A;">🎖️ Award / Issue Company Property or Supplies</h3>
+        <button onclick="closeAwardItemModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-award-item" onsubmit="handleAwardItemSubmit(event)">
+        <input type="hidden" id="award-target-type">
+        <input type="hidden" id="award-target-id">
+
+        <div id="award-recipient-info-box"
+          style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:12px 16px; margin-bottom:16px;">
+          <div style="font-size:11px; font-weight:700; color:#1E40AF;">RECIPIENT PERSONNEL</div>
+          <div id="award-recipient-name" style="font-size:15px; font-weight:800; color:#1E3A8A; margin-top:2px;">-</div>
+        </div>
+
+        <div id="award-guard-selector-group" class="form-group" style="display:none; margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:700;">Select Recipient Guard *</label>
+          <select id="award-guard-select" class="form-control" onchange="onAwardGuardSelected(this.value)">
+            <option value="">-- Choose Security Guard --</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:700;">Issuance Type *</label>
+          <select id="award-issuance-type" class="form-control" onchange="toggleAwardIssuanceType(this.value)" required>
+            <option value="ASSET" selected>Company Asset / Equipment / Device / Award</option>
+            <option value="SUPPLY">Uniform / Consumable Supply Item</option>
+          </select>
+        </div>
+
+        <!-- Section for Asset selection -->
+        <div id="award-asset-section" style="margin-bottom:14px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Select Company Asset *</label>
+            <select id="award-asset-select" class="form-control">
+              <option value="">-- Choose an Available Asset --</option>
+            </select>
+            <span style="font-size:11px; color:#64748B;">Radios, bodycams, vehicles, phones, patrol gear, or honor
+              awards.</span>
+          </div>
+        </div>
+
+        <!-- Section for Supply selection -->
+        <div id="award-supply-section" style="display:none; margin-bottom:14px;">
+          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px;">
+            <div class="form-group">
+              <label style="font-size:12px; font-weight:700;">Select Supply Item *</label>
+              <select id="award-supply-select" class="form-control">
+                <option value="">-- Choose Inventory Item --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label style="font-size:12px; font-weight:700;">Quantity *</label>
+              <input type="number" id="award-supply-qty" class="form-control" value="1" min="1">
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:14px;">
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Award / Issue Date *</label>
+            <input type="date" id="award-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label style="font-size:12px; font-weight:700;">Condition on Handover *</label>
+            <select id="award-condition" class="form-control" required>
+              <option value="NEW">BRAND NEW</option>
+              <option value="EXCELLENT">EXCELLENT</option>
+              <option value="GOOD" selected>GOOD</option>
+              <option value="FAIR">FAIR</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:700;">Expected Return Date (Optional)</label>
+          <input type="date" id="award-expected-return" class="form-control">
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:12px; font-weight:700;">Award Reason / Purpose / Custody Notes *</label>
+          <textarea id="award-notes" class="form-control" rows="3"
+            placeholder="e.g. Awarded Best Vigilance Guard Q3 2026, or Issued standard duty Motorola radio AST-RAD-0002"
+            required></textarea>
+        </div>
+
+        <div class="modal-footer"
+          style="padding-top:12px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAwardItemModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-award-item">Record Award &amp; Issue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Staff Personnel File & Custody Hub -->
+  <div id="modal-staff-file" class="modal-overlay"
+    style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;"
+    onclick="if(event.target === this) closeStaffFileModal()">
+    <div class="modal-content"
+      style="max-width: 900px; width:100%; margin:auto; background:#FFFFFF; border-radius:12px; max-height:90vh; overflow-y:auto; padding:24px;">
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:16px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div
+            style="width:48px; height:48px; border-radius:50%; background:#7C3AED; color:#FFF; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800;"
+            id="staff-file-avatar">S</div>
+          <div>
+            <h3 id="staff-file-name" style="font-size:20px; font-weight:900; color:#0F172A; margin:0;">Staff Personnel
+              File</h3>
+            <div id="staff-file-subinfo" style="font-size:12px; color:#64748B; margin-top:2px;">Role: Admin | Email:
+              user@corpsec.com</div>
+          </div>
+        </div>
+        <button onclick="closeStaffFileModal()"
+          style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+
+      <!-- Staff Details Cards -->
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:24px;">
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">ROLE &amp; PERMISSION</div>
+          <div id="staff-file-role-val" style="font-size:14px; font-weight:800; color:#0F172A; margin-top:2px;">ADMIN
+          </div>
+        </div>
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">PHONE CONTACT</div>
+          <div id="staff-file-phone-val" style="font-size:14px; font-weight:800; color:#0F172A; margin-top:2px;">-</div>
+        </div>
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">ACCOUNT STATUS</div>
+          <div id="staff-file-status-val" style="font-size:14px; font-weight:800; color:#10B981; margin-top:2px;">ACTIVE
+          </div>
+        </div>
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748B;">ITEMS IN CUSTODY</div>
+          <div id="staff-file-items-count" style="font-size:14px; font-weight:800; color:#0D7682; margin-top:2px;">0
+            Items</div>
+        </div>
+      </div>
+
+      <!-- Company Property & Awards Table Section -->
+      <div style="border:1px solid #E2E8F0; border-radius:12px; padding:20px; background:#FAFAFA; margin-bottom:16px;">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">🎖️ Company Property, Issued Supplies
+              &amp; Awards in Custody</h4>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">All company assets, supplies, awards, and
+              equipment issued to this staff member, with return tracking.</p>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px; padding:6px 14px;" id="btn-staff-award-item"
+            onclick="openStaffAwardModal()">+ Award / Issue Item</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>ITEM / ASSET TAG &amp; NAME</th>
+                <th>CATEGORY</th>
+                <th>SERIAL / SKU</th>
+                <th>DATE ISSUED</th>
+                <th>HANDOVER COND.</th>
+                <th>STATUS &amp; RETURN DETAILS</th>
+                <th style="text-align:right;">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="staff-custody-table-body">
+              <tr>
+                <td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading custody records...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Staff Salary Advances Section -->
+      <div style="border:1px solid #E2E8F0; border-radius:12px; padding:20px; background:#FAFAFA; margin-bottom:16px;">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">💵 Mid-Month Salary Advances</h4>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">All salary advances disbursed to this staff
+              member with deduction records.</p>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px; padding:6px 14px;"
+            onclick="openStaffIssueAdvanceModal()">+ Issue Salary Advance</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>REF #</th>
+                <th>AMOUNT</th>
+                <th>DISBURSEMENT DATE</th>
+                <th>PAYMENT METHOD</th>
+                <th>REFERENCE #</th>
+                <th>REASON</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="staff-advances-table-body">
+              <tr>
+                <td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No advances recorded.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Items Dispatched by this Staff/Supervisor to Guards Section -->
+      <div id="staff-dispatched-section"
+        style="border:1px solid #E2E8F0; border-radius:12px; padding:20px; background:#FAFAFA; margin-bottom:16px;">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📦 Equipment &amp; Inventory Issued by
+              this Officer to Guards</h4>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Official custody trail of company assets,
+              supplies, and equipment issued by this supervisor/staff officer to security guards.</p>
+          </div>
+          <span class="badge" id="staff-dispatched-badge" style="background:#EFF6FF; color:#1E40AF; font-weight:700;">0
+            Dispatches</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>ITEM / ASSET TAG &amp; NAME</th>
+                <th>CATEGORY</th>
+                <th>RECIPIENT GUARD</th>
+                <th>DATE ISSUED</th>
+                <th>CONDITION / DETAILS</th>
+                <th>STATUS</th>
+                <th>NOTES / PURPOSE</th>
+              </tr>
+            </thead>
+            <tbody id="staff-dispatched-table-body">
+              <tr>
+                <td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No items issued to guards by
+                  this officer.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SECTION: Daily System Hours & GPS Login Location Tracking (System Admin Only) -->
+      <div id="staff-location-hours-section"
+        style="border:1px solid #CBD5E1; border-radius:12px; padding:20px; background:#F8FAFC; margin-bottom:16px;">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📍 Device Location &amp; Daily
+                System Hours Tracking</h4>
+              <span class="badge"
+                style="background:#FEF2F2; color:#991B1B; font-size:10px; font-weight:800; border:1px solid #FCA5A5;">CONFIDENTIAL
+                — ADMIN ONLY</span>
+            </div>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Mandatory GPS login locations recorded upon
+              access and cumulative daily hours stayed active in the system.</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span id="staff-file-online-badge" class="badge"
+              style="background:#ECFDF5; color:#065F46; font-weight:700;">Active Status</span>
+          </div>
+        </div>
+
+        <!-- Hours & Location Quick Metrics -->
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-bottom:16px;">
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">TODAY'S SYSTEM TIME</div>
+            <div id="staff-metric-today-time" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:2px;">0h
+              0m</div>
+          </div>
+          <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">TOTAL RECORDED DAYS</div>
+            <div id="staff-metric-total-days" style="font-size:15px; font-weight:800; color:#2563EB; margin-top:2px;">0
+              Days</div>
+          </div>
+          <div
+            style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; grid-column: span 2;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">LAST VERIFIED GPS LOCATION</div>
+            <div id="staff-metric-last-location"
+              style="font-size:12px; font-weight:700; color:#0D7682; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              Acquiring...</div>
+          </div>
+        </div>
+
+        <!-- Daily Hours Breakdown Table -->
+        <div style="margin-bottom:16px;">
+          <div
+            style="font-size:13px; font-weight:800; color:#1E293B; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+            <span>🕒 Daily Hours Stayed in System</span>
+            <span style="font-size:11px; font-weight:normal; color:#64748B;">(Aggregated active duration per day)</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th>DATE</th>
+                  <th>HOURS IN SYSTEM</th>
+                  <th>FIRST LOGIN</th>
+                  <th>LAST ACTIVE</th>
+                  <th>SESSIONS</th>
+                  <th>LOCATION(S) RECORDED</th>
+                  <th>SESSION STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="staff-daily-hours-table-body">
+                <tr>
+                  <td colspan="7" style="text-align:center; padding:16px; color:#64748B;">Loading daily hours records...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Login Sessions & Geolocation Log Table -->
+        <div>
+          <div
+            style="font-size:13px; font-weight:800; color:#1E293B; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+            <span>🛰️ Login Sessions &amp; Device Geolocation Log</span>
+            <span style="font-size:11px; font-weight:normal; color:#64748B;">(Mandatory GPS verification records)</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th>LOGIN TIME</th>
+                  <th>GPS COORDINATES &amp; LOCATION</th>
+                  <th>ACCURACY</th>
+                  <th>IP ADDRESS</th>
+                  <th>DURATION</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="staff-sessions-table-body">
+                <tr>
+                  <td colspan="6" style="text-align:center; padding:16px; color:#64748B;">Loading login sessions...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION: Full Activity Audit Trail (Everything person did in system) -->
+      <div id="staff-activity-trail-section"
+        style="border:1px solid #CBD5E1; border-radius:12px; padding:20px; background:#F8FAFC; margin-bottom:16px;">
+        <div
+          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📜 Complete User Activity Trail</h4>
+              <span class="badge"
+                style="background:#EFF6FF; color:#1E40AF; font-size:10px; font-weight:800; border:1px solid #BFDBFE;">AUDIT
+                LOG</span>
+            </div>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Comprehensive chronological record of all
+              actions, approvals, roster updates, deductions, and edits performed by this person in the system.</p>
+          </div>
+          <span class="badge" id="staff-activity-count-badge"
+            style="background:#E2E8F0; color:#334155; font-weight:700;">0 Actions Logged</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th style="min-width:130px;">TIMESTAMP</th>
+                <th>ACTION EXECUTED</th>
+                <th>TARGET ENTITY</th>
+                <th>DETAILS &amp; MODIFICATIONS</th>
+                <th>IP ADDRESS</th>
+              </tr>
+            </thead>
+            <tbody id="staff-activity-table-body">
+              <tr>
+                <td colspan="5" style="text-align:center; padding:20px; color:#64748B;">Loading user activity trail...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer"
+        style="padding-top:14px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeStaffFileModal()">Close Personnel File</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Issue Mid-Month Salary Advance -->
+  <div id="modal-issue-advance" class="modal-overlay"
+    style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;"
+    onclick="if(event.target === this) closeIssueSalaryAdvanceModal()">
+    <div class="modal-content"
+      style="max-width: 650px; width:100%; margin:auto; background:#FFFFFF; border-radius:16px; padding:28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:16px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div
+            style="width:42px; height:42px; border-radius:10px; background:#ECFDF5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:22px;">
+            💵</div>
+          <div>
+            <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">Issue Mid-Month Salary Advance</h3>
+            <div style="font-size:12px; color:#64748B; margin-top:2px;">Disburse advance to guard or corporate staff.
+              Deducted automatically at month-end payroll.</div>
+          </div>
+        </div>
+        <button onclick="closeIssueSalaryAdvanceModal()"
+          style="background:#F1F5F9; border:none; border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px; color:#64748B;">✕</button>
+      </div>
+
+      <form id="form-issue-salary-advance" onsubmit="handleIssueSalaryAdvanceSubmit(event)">
+        <!-- Recipient Type -->
+        <div style="margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Recipient
+            Type *</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <label
+              style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #CBD5E1; border-radius:8px; cursor:pointer; background:#F8FAFC;"
+              id="label-adv-guard">
+              <input type="radio" name="adv_recipient_type" value="GUARD" checked
+                onchange="toggleAdvanceRecipientType()">
+              <span style="font-size:13px; font-weight:700; color:#0F172A;">🛡️ Security Guard</span>
+            </label>
+            <label
+              style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #CBD5E1; border-radius:8px; cursor:pointer; background:#F8FAFC;"
+              id="label-adv-staff">
+              <input type="radio" name="adv_recipient_type" value="STAFF" onchange="toggleAdvanceRecipientType()">
+              <span style="font-size:13px; font-weight:700; color:#0F172A;">👔 Corporate Staff</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Recipient Select: Guard vs Staff -->
+        <div id="adv-guard-select-group" style="margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select Guard
+            *</label>
+          <select id="adv-guard-id" class="form-control"
+            style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+            <option value="">-- Choose Security Guard --</option>
+          </select>
+        </div>
+
+        <div id="adv-staff-select-group" style="display:none; margin-bottom:18px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select Staff
+            Member *</label>
+          <select id="adv-staff-id" class="form-control"
+            style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+            <option value="">-- Choose Corporate Staff (HR/Supervisor/Admin) --</option>
+          </select>
+        </div>
+
+        <!-- Advance Amount & Disbursement Date -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Advance
+              Amount (KES) *</label>
+            <input type="number" id="adv-amount" class="form-control" placeholder="e.g. 5000" min="1" step="0.01"
+              required
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-weight:700; font-size:14px;">
+          </div>
+          <div>
+            <label
+              style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Disbursement
+              Date *</label>
+            <input type="date" id="adv-date" class="form-control" required
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+          </div>
+        </div>
+
+        <!-- Payroll Period & Payment Method -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Deduction
+              Payroll Period</label>
+            <select id="adv-payroll-period-id" class="form-control"
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+              <option value="">Auto-detect by Disbursement Date</option>
+            </select>
+          </div>
+          <div>
+            <label
+              style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Disbursement
+              Method *</label>
+            <select id="adv-payment-method" class="form-control"
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+              <option value="M-PESA">📱 M-Pesa</option>
+              <option value="BANK">🏛️ Bank Transfer</option>
+              <option value="CASH">💵 Cash / Petty Cash</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Transaction Reference & Reason -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Trx /
+              Reference Number</label>
+            <input type="text" id="adv-ref-number" class="form-control" placeholder="e.g. QK8912345 or Bank Ref"
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Reason /
+              Purpose *</label>
+            <input type="text" id="adv-reason" class="form-control"
+              placeholder="e.g. Mid-month emergency, Medical, School fees" required
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1;">
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div style="margin-bottom:24px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Internal
+            Notes / Approver Remarks</label>
+          <textarea id="adv-notes" class="form-control" rows="2"
+            placeholder="Optional approval notes or disbursement details..."
+            style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; resize:vertical;"></textarea>
+        </div>
+
+        <!-- Submit Footer -->
+        <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #E2E8F0; padding-top:16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeIssueSalaryAdvanceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-salary-advance">💾 Issue &amp; Approve
+            Advance</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Bulk Upload Salary Advances via Excel / CSV -->
+  <div id="modal-upload-advances-excel" class="modal-overlay"
+    style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;"
+    onclick="if(event.target === this) closeUploadSalaryAdvancesModal()">
+    <div class="modal-content"
+      style="max-width: 680px; width:100%; margin:auto; background:#FFFFFF; border-radius:16px; padding:28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+
+      <!-- Modal Header -->
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:16px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div
+            style="width:42px; height:42px; border-radius:10px; background:#ECFDF5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:22px;">
+            📊</div>
+          <div>
+            <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">Bulk Upload Salary Advances (Excel /
+              CSV)</h3>
+            <div style="font-size:12px; color:#64748B; margin-top:2px;">Upload spreadsheet of employees who received
+              mid-month salary advances for automatic payroll deduction.</div>
+          </div>
+        </div>
+        <button onclick="closeUploadSalaryAdvancesModal()"
+          style="background:none; border:none; font-size:20px; color:#94A3B8; cursor:pointer; padding:4px 8px;">✕</button>
+      </div>
+
+      <!-- Instruction / Template Banner -->
+      <div
+        style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:14px 18px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+          <div style="font-size:13px; font-weight:700; color:#166534; display:flex; align-items:center; gap:6px;">
+            <span>💡</span> Need the Excel template format?
+          </div>
+          <div style="font-size:12px; color:#15803D; margin-top:2px;">
+            Download the official CorpSec template with pre-filled sample employees and column headers.
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="downloadSalaryAdvanceTemplate()"
+          style="font-size:12px; font-weight:700; padding:6px 14px; background:#FFFFFF; border-color:#86EFAC; color:#166534; display:inline-flex; align-items:center; gap:6px;">
+          <span>📥</span> Download Template (.xlsx)
+        </button>
+      </div>
+
+      <form id="form-upload-salary-advances" onsubmit="handleSalaryAdvancesExcelUpload(event)">
+
+        <!-- Period and Default Payment Method Row -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Target
+              Payroll Period for Deduction</label>
+            <select id="upload-adv-payroll-period-id" class="form-control"
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;">
+              <option value="">Auto-detect by disbursement dates</option>
+            </select>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Period when advance will be deducted from net
+              pay.</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Default
+              Payment Method</label>
+            <select id="upload-adv-default-method" class="form-control"
+              style="width:100%; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;">
+              <option value="M-PESA">📱 M-Pesa</option>
+              <option value="BANK">🏛️ Bank Transfer</option>
+              <option value="CASH">💵 Cash / Petty Cash</option>
+            </select>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Used if payment method column is empty in Excel.
+            </div>
+          </div>
+        </div>
+
+        <!-- File Upload Dropzone -->
+        <div style="margin-bottom:20px;">
+          <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select or
+            Drop Excel / CSV File *</label>
+          <div id="adv-upload-dropzone"
+            style="border:2px dashed #94A3B8; border-radius:12px; padding:24px 20px; text-align:center; background:#F8FAFC; cursor:pointer; transition:all 0.2s;"
+            onclick="triggerAdvFilePicker(event)">
+            <div style="font-size:36px; margin-bottom:8px;">📁</div>
+            <div style="font-size:15px; font-weight:700; color:#0F172A; margin-bottom:4px;">Retrieve Advance File from
+              Your Computer</div>
+            <div style="font-size:12px; color:#64748B; margin-bottom:14px;">Supports Microsoft Excel
+              (<code>.xlsx</code>, <code>.xls</code>) and CSV (<code>.csv</code>) files</div>
+            <button type="button" class="btn btn-primary" onclick="triggerAdvFilePicker(event)"
+              style="background:#2563EB; border-color:#2563EB; font-weight:700; padding:10px 20px; font-size:13px; display:inline-flex; align-items:center; gap:8px;">
+              📂 Browse &amp; Retrieve File from Computer
+            </button>
+            <input type="file" id="adv-excel-file-input" accept=".xlsx,.xls,.csv" style="display:none;"
+              onchange="handleAdvFileSelected(event)">
+          </div>
+
+          <!-- File Info Pill (Shown after file selected) -->
+          <div id="adv-selected-file-pill"
+            style="display:none; margin-top:10px; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 14px; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:20px;">📄</span>
+              <div>
+                <div id="adv-selected-file-name" style="font-size:13px; font-weight:700; color:#1E40AF;">filename.xlsx
+                </div>
+                <div id="adv-selected-file-size" style="font-size:11px; color:#60A5FA;">15.4 KB</div>
+              </div>
+            </div>
+            <button type="button" onclick="clearSelectedAdvFile(event)"
+              style="background:none; border:none; color:#EF4444; font-size:16px; cursor:pointer; font-weight:700;"
+              title="Remove file">✕</button>
+          </div>
+        </div>
+
+        <!-- Results / Error Summary Container (Hidden by default) -->
+        <div id="adv-upload-results-box" style="display:none; margin-bottom:20px;"></div>
+
+        <!-- Submit Footer -->
+        <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #E2E8F0; padding-top:16px;">
+          <button type="button" class="btn btn-secondary" onclick="closeUploadSalaryAdvancesModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-upload-advances"
+            style="background:#059669; border-color:#059669; font-weight:700; padding:10px 20px;">
+            📤 Upload &amp; Record Advances
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Modal: Record Property / Belonging Damage Deduction -->
+  <div id="modal-record-damage-deduction" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeRecordDamageDeductionModal()">
+    <div class="modal-content" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⚠️ Record Property Damage Salary Deduction
+        </h3>
+        <button onclick="closeRecordDamageDeductionModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-record-damage-deduction" onsubmit="handleRecordDamageDeductionSubmit(event)">
+        <input type="hidden" id="damage-ded-guard-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Guard /
+              Employee *</label>
+            <div id="damage-ded-guard-name-display"
+              style="font-weight:700; color:#1E3A8A; background:#EFF6FF; padding:10px 14px; border-radius:8px; border:1px solid #BFDBFE;">
+              -</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damaged
+              Item / Belonging Name *</label>
+            <input type="text" id="damage-ded-item-name" class="form-control"
+              placeholder="e.g. Motorola Two-Way Radio / Baton / Uniform" required>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damage
+                Deduction (KES) *</label>
+              <input type="number" id="damage-ded-amount" class="form-control" placeholder="e.g. 1500" min="0.01"
+                step="any" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Incident
+                Date *</label>
+              <input type="date" id="damage-ded-date" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Damage
+              Assessment Description *</label>
+            <textarea id="damage-ded-description" class="form-control" rows="2"
+              placeholder="e.g. Antenna broken, casing damaged beyond repair upon return" required></textarea>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Target
+              Payroll Period for Deduction</label>
+            <select id="damage-ded-period-select" class="form-control">
+              <option value="">Auto-deduct in next active payroll run</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRecordDamageDeductionModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-damage-deduction"
+            style="background:#DC2626; border-color:#DC2626;">⚠️ Save &amp; Deduct in Salary</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Hold Salary Payment (Payment Schedules) -->
+  <div id="modal-hold-salary" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeHoldSalaryModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⏸️ Hold Employee Monthly Salary</h3>
+        <button onclick="closeHoldSalaryModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-hold-salary" onsubmit="handleHoldSalarySubmit(event)">
+        <input type="hidden" id="hold-salary-record-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div
+            style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:14px; font-size:13px; color:#92400E;">
+            <div style="font-weight:700; margin-bottom:4px;">Disbursement Hold Notice:</div>
+            Holding this salary will <strong>immediately exclude this employee from Bank and M-Pesa Excel payment
+              exports</strong>. The funds remain protected until the issue is cleared.
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">EMPLOYEE DETAILS</div>
+            <div id="hold-salary-guard-info" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:3px;">-
+            </div>
+            <div id="hold-salary-amount-info" style="font-size:13px; font-weight:700; color:#2563EB; margin-top:2px;">-
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Reason for
+              Salary Holding *</label>
+            <textarea id="hold-salary-reason" class="form-control" rows="3"
+              placeholder="Specify reason: e.g. Pending equipment damage reconciliation / Disciplinary case under investigation / Bank account verification issue..."
+              required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeHoldSalaryModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-hold-salary"
+            style="background:#D97706; border-color:#D97706; font-weight:700;">⏸️ Confirm Salary Hold</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Release Salary Hold (Payment Schedules) -->
+  <div id="modal-release-salary-hold" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeReleaseSalaryHoldModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">✅ Release Salary Hold &amp; Pay Employee
+        </h3>
+        <button onclick="closeReleaseSalaryHoldModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-release-salary-hold" onsubmit="handleReleaseSalaryHoldSubmit(event)">
+        <input type="hidden" id="release-salary-record-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div
+            style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:14px; font-size:13px; color:#166534;">
+            <div style="font-weight:700; margin-bottom:4px;">Issue Resolution &amp; Payment Approval:</div>
+            Releasing this hold will immediately restore the employee to the <strong>active Bank / M-Pesa disbursement
+              schedule</strong>, allowing them to be paid and included in subsequent Excel exports.
+          </div>
+          <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px;">
+            <div style="font-size:11px; font-weight:700; color:#64748B;">EMPLOYEE DETAILS</div>
+            <div id="release-salary-guard-info" style="font-size:15px; font-weight:800; color:#0F172A; margin-top:3px;">
+              -</div>
+            <div id="release-salary-amount-info"
+              style="font-size:13px; font-weight:700; color:#059669; margin-top:2px;">-</div>
+            <div id="release-salary-current-reason"
+              style="font-size:12px; color:#92400E; margin-top:6px; background:#FEF3C7; padding:6px 10px; border-radius:6px;">
+              -</div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Resolution
+              Notes / Clearance Approval</label>
+            <textarea id="release-salary-resolution-notes" class="form-control" rows="2"
+              placeholder="e.g. Missing equipment replaced, disciplinary inquiry cleared, approved for full bank disbursement."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeReleaseSalaryHoldModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-release-salary"
+            style="background:#059669; border-color:#059669; font-weight:700;">✅ Release Hold &amp; Approve for
+            Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODALS FOR EXPENSES & PETTY CASH                        -->
+  <!-- ======================================================== -->
+
+  <!-- Modal: Record Firm Expense -->
+  <div id="modal-record-expense" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeRecordExpenseModal()">
+    <div class="modal-content" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">💸 Record Firm Expense / Shop Overhead
+        </h3>
+        <button onclick="closeRecordExpenseModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-record-expense" onsubmit="handleRecordExpenseSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Date *</label>
+              <input type="date" id="exp-date" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Category
+                *</label>
+              <select id="exp-category" class="form-control" required>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Type *</label>
+              <select id="exp-type" class="form-control" required onchange="toggleRecurringExpenseFields()">
+                <option value="OPERATIONAL">Operational Disbursement</option>
+                <option value="PETTY_CASH">Petty Cash Imprest</option>
+                <option value="RECURRING">Recurring Obligation</option>
+                <option value="CAPITAL_PURCHASE">Capital Purchase</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payee / Vendor Name
+                *</label>
+              <input type="text" id="exp-payee" class="form-control" required
+                placeholder="e.g. TotalEnergies, Kenya Power">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount (KES) *</label>
+              <input type="number" step="0.01" id="exp-amount" class="form-control" required placeholder="0.00">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payment Method *</label>
+              <select id="exp-payment-method" class="form-control" required>
+                <option value="PETTY_CASH">Petty Cash Imprest</option>
+                <option value="MPESA">M-Pesa Till / Paybill</option>
+                <option value="BANK_TRANSFER">Bank EFT / Transfer</option>
+                <option value="CASH">Cash at Hand</option>
+                <option value="CHEQUE">Bank Cheque</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Receipt Ref / Voucher
+              No</label>
+            <input type="text" id="exp-receipt-no" class="form-control" placeholder="e.g. VCH-0045, KPLC-98212">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Description / Purpose
+              *</label>
+            <textarea id="exp-description" class="form-control" rows="2" required
+              placeholder="State purpose of expenditure..."></textarea>
+          </div>
+          <!-- Recurring Fields -->
+          <div id="recurring-expense-fields"
+            style="display:none; padding:12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Recurring
+                  Cycle</label>
+                <select id="exp-frequency" class="form-control">
+                  <option value="MONTHLY">Monthly</option>
+                  <option value="QUARTERLY">Quarterly</option>
+                  <option value="ANNUAL">Annual</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Next Due Date</label>
+                <input type="date" id="exp-due-date" class="form-control">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeRecordExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">💾 Save Expense Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Top-Up Petty Cash Float -->
+  <div id="modal-topup-petty-cash" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeTopUpPettyCashModal()">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">💰 Top-Up Petty Cash Float</h3>
+        <button onclick="closeTopUpPettyCashModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-topup-petty-cash" onsubmit="handleTopUpPettyCashSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Replenishment Amount (KES)
+              *</label>
+            <input type="number" step="0.01" id="topup-amount" class="form-control" required placeholder="e.g. 15000">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Disbursing Source
+              *</label>
+            <select id="topup-source" class="form-control" required>
+              <option value="Bank Withdrawal (Standard Chartered)">Bank Withdrawal (Standard Chartered)</option>
+              <option value="Director Injection (Equity)">Director Injection (Equity)</option>
+              <option value="Cash Float Transfer">Cash Float Transfer</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Bank Cheque / Reference
+              No</label>
+            <input type="text" id="topup-ref" class="form-control" placeholder="e.g. CHQ-88412, WD-0941">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Custodian Notes</label>
+            <textarea id="topup-notes" class="form-control" rows="2"
+              placeholder="Float replenishment notes..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeTopUpPettyCashModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#059669; border:none;">💰 Confirm Float
+            Top-Up</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Recurring Commitment -->
+  <div id="modal-add-recurring" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeAddRecurringExpenseModal()">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">➕ Add Recurring Expenditure Commitment
+        </h3>
+        <button onclick="closeAddRecurringExpenseModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-recurring" onsubmit="handleAddRecurringSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Obligation / Commitment
+                Title *</label>
+              <input type="text" id="rec-add-title" class="form-control" required
+                placeholder="e.g. HQ Office Rent Upper Hill">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Expense Category
+                *</label>
+              <select id="rec-add-category" class="form-control" required>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">To Whom (Payee / Vendor)
+                *</label>
+              <input type="text" id="rec-add-payee" class="form-control" required
+                placeholder="e.g. Upper Hill Properties Ltd, Safaricom">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount per Cycle (KES)
+                *</label>
+              <input type="number" step="0.01" id="rec-add-amount" class="form-control" required placeholder="0.00">
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Billing Frequency
+                *</label>
+              <select id="rec-add-interval" class="form-control" required>
+                <option value="MONTHLY" selected>Monthly</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="ANNUALLY">Annual / Yearly</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Next Due Date *</label>
+              <input type="date" id="rec-add-due-date" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Preferred Payment
+                Method</label>
+              <select id="rec-add-payment-method" class="form-control">
+                <option value="BANK_TRANSFER">Bank EFT / Transfer</option>
+                <option value="MPESA">M-Pesa Paybill / Till</option>
+                <option value="CHEQUE">Bank Cheque</option>
+                <option value="CASH">Cash at Hand</option>
+                <option value="PETTY_CASH">Petty Cash Float</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Initial Status</label>
+              <select id="rec-add-status" class="form-control">
+                <option value="ACTIVE" selected>🟢 ACTIVE</option>
+                <option value="PAUSED">⏸️ PAUSED</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Notes / Contract
+              Reference</label>
+            <textarea id="rec-add-description" class="form-control" rows="2"
+              placeholder="Lease contract reference, account number, meter number..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddRecurringExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#1D4ED8; border-color:#1D4ED8;">💾 Register
+            Recurring Commitment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Recurring Commitment -->
+  <div id="modal-edit-recurring" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeEditRecurringExpenseModal()">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">✏️ Edit Recurrent Expenditure</h3>
+        <button onclick="closeEditRecurringExpenseModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-edit-recurring" onsubmit="handleEditRecurringSubmit(event)">
+        <input type="hidden" id="rec-edit-id">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Obligation Title
+                *</label>
+              <input type="text" id="rec-edit-title" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Category *</label>
+              <select id="rec-edit-category" class="form-control" required>
+                <option value="Rent & Facilities">Rent & Facilities</option>
+                <option value="Utilities & Electricity">Utilities & Electricity</option>
+                <option value="Communications & Internet">Communications & Internet</option>
+                <option value="Licenses & Compliance">Licenses & Compliance</option>
+                <option value="Vehicle Fuel & Patrols">Vehicle Fuel & Patrols</option>
+                <option value="Office Supplies & Admin">Office Supplies & Admin</option>
+                <option value="Uniforms & Guard Gear">Uniforms & Guard Gear</option>
+                <option value="Guard Welfare & Ration">Guard Welfare & Ration</option>
+                <option value="Shop Inventory & Repairs">Shop Inventory & Repairs</option>
+                <option value="Petty Cash Sundry">Petty Cash Sundry</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">To Whom (Payee / Vendor)
+                *</label>
+              <input type="text" id="rec-edit-payee" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount per Cycle (KES)
+                *</label>
+              <input type="number" step="0.01" id="rec-edit-amount" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Frequency *</label>
+              <select id="rec-edit-interval" class="form-control" required>
+                <option value="MONTHLY">Monthly</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="ANNUALLY">Annual / Yearly</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Next Due Date *</label>
+              <input type="date" id="rec-edit-due-date" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Last Paid Date</label>
+              <input type="date" id="rec-edit-last-paid-date" class="form-control">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Status</label>
+              <select id="rec-edit-status" class="form-control">
+                <option value="ACTIVE">🟢 ACTIVE</option>
+                <option value="PAUSED">⏸️ PAUSED</option>
+                <option value="CANCELLED">🔴 CANCELLED</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Notes /
+              Description</label>
+            <textarea id="rec-edit-description" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeEditRecurringExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#1E3A5F; border-color:#1E3A5F;">💾 Save
+            Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Record Payment for Recurring Commitment -->
+  <div id="modal-pay-recurring" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closePayRecurringExpenseModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">💳 Record Recurring Obligation Payment
+        </h3>
+        <button onclick="closePayRecurringExpenseModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-pay-recurring" onsubmit="handlePayRecurringSubmit(event)">
+        <input type="hidden" id="rec-pay-id">
+        <div
+          style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px; margin-top:12px; margin-bottom:14px;">
+          <div style="font-size:13px; font-weight:800; color:#166534;" id="rec-pay-summary-title">Obligation Title</div>
+          <div style="font-size:12px; color:#15803D; margin-top:4px;">
+            <span>To Whom: <strong id="rec-pay-summary-payee">Vendor</strong></span> &bull;
+            <span>Standard: <strong id="rec-pay-summary-amount">KES 0.00</strong></span>
+          </div>
+          <div style="font-size:11px; color:#166534; margin-top:2px;" id="rec-pay-summary-due">Current Due Date: --
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payment Date *</label>
+              <input type="date" id="rec-pay-date" class="form-control" required>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Amount Paid (KES)
+                *</label>
+              <input type="number" step="0.01" id="rec-pay-amount" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Payment Method *</label>
+              <select id="rec-pay-method" class="form-control" required>
+                <option value="BANK_TRANSFER">Bank EFT / Transfer</option>
+                <option value="MPESA">M-Pesa Till / Paybill</option>
+                <option value="CHEQUE">Bank Cheque</option>
+                <option value="CASH">Cash at Hand</option>
+                <option value="PETTY_CASH">Petty Cash Float</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Receipt / Voucher / Ref
+                *</label>
+              <input type="text" id="rec-pay-ref" class="form-control" required placeholder="e.g. EFT-9941, KPLC-8812">
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Description / Billing
+              Period</label>
+            <input type="text" id="rec-pay-notes" class="form-control"
+              placeholder="e.g. November 2026 Office Rent Settlement">
+          </div>
+
+          <div
+            style="display:flex; align-items:center; gap:8px; background:#F8FAFC; padding:10px; border-radius:6px; border:1px solid #E2E8F0;">
+            <input type="checkbox" id="rec-pay-advance" checked style="width:16px; height:16px; cursor:pointer;">
+            <label for="rec-pay-advance"
+              style="font-size:12px; font-weight:600; color:#334155; cursor:pointer; margin:0;">
+              Automatically advance Next Due Date forward by 1 cycle
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closePayRecurringExpenseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#059669; border-color:#059669;">💳 Confirm &
+            Save Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Recurring Expenditure Payment History -->
+  <div id="modal-recurring-history" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeRecurringHistoryModal()">
+    <div class="modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">📜 Recurrent Payment Audit History</h3>
+          <p style="color:#64748B; font-size:12px; margin:4px 0 0 0;" id="rec-history-subtitle">Historical payments made
+            for this commitment</p>
+        </div>
+        <button onclick="closeRecurringHistoryModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:14px 0; max-height:60vh; overflow-y:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date Paid</th>
+              <th>To Whom (Payee)</th>
+              <th>Amount (KES)</th>
+              <th>Payment Method</th>
+              <th>Receipt / Voucher</th>
+              <th>Recorded By</th>
+            </tr>
+          </thead>
+          <tbody id="recurring-history-table-body">
+            <tr>
+              <td colspan="6" style="text-align:center; padding:20px; color:#64748B;">Loading payment history...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer"
+        style="display:flex; justify-content:flex-end; padding-top:12px; border-top:1px solid #E2E8F0;">
+        <button type="button" class="btn btn-secondary" onclick="closeRecurringHistoryModal()">Close</button>
+      </div>
+    </div>
+  </div>
+  <div id="modal-add-recommendation" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeAddRecommendationModal()">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">⭐ Add Client Recommendation</h3>
+        <button onclick="closeAddRecommendationModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-recommendation" onsubmit="handleCreateRecommendationSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Client Organization Name
+              *</label>
+            <input type="text" id="rec-client-name" class="form-control" required
+              placeholder="e.g. Westlands Mall, Nairobi Hospital">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Recommender Name
+                *</label>
+              <input type="text" id="rec-recommender-name" class="form-control" required
+                placeholder="e.g. Dr. Faith Kamau">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Title / Designation
+                *</label>
+              <input type="text" id="rec-title" class="form-control" required
+                placeholder="e.g. Head of Security & Safety">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Star Rating (1 - 5)
+                *</label>
+              <select id="rec-rating" class="form-control" required>
+                <option value="5">⭐⭐⭐⭐⭐ (5 Stars)</option>
+                <option value="4">⭐⭐⭐⭐ (4 Stars)</option>
+                <option value="3">⭐⭐⭐ (3 Stars)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Recommendation Date
+                *</label>
+              <input type="date" id="rec-date" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Official Contact /
+              Email</label>
+            <input type="text" id="rec-contact" class="form-control"
+              placeholder="e.g. security@client.co.ke, 0722000000">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Testimonial Statement /
+              Commendation *</label>
+            <textarea id="rec-statement" class="form-control" rows="3" required
+              placeholder="Quotes, SLA feedback, performance review..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddRecommendationModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">⭐ Publish Recommendation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Security Service -->
+  <div id="modal-add-service" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeAddServiceModal()">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">🛡️ Add Security Service Offering</h3>
+        <button onclick="closeAddServiceModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <form id="form-add-service" onsubmit="handleCreateServiceSubmit(event)">
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; margin-bottom:18px;">
+          <div style="display:grid; grid-template-columns:1fr 2fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Service Code *</label>
+              <input type="text" id="srv-code" class="form-control" required placeholder="e.g. SRV-MG">
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Service Title *</label>
+              <input type="text" id="srv-name" class="form-control" required
+                placeholder="e.g. Static Guarding & Access Control">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Category *</label>
+              <select id="srv-category" class="form-control" required>
+                <option value="Manned Guarding">Manned Guarding</option>
+                <option value="Armed Response">Armed Response</option>
+                <option value="Executive Protection">Executive Protection</option>
+                <option value="Canine Unit">Canine Unit</option>
+                <option value="Electronic Security">Electronic Security</option>
+                <option value="Risk Consulting">Risk Consulting</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Billing Model *</label>
+              <select id="srv-billing" class="form-control" required>
+                <option value="MONTHLY_CONTRACT">Monthly Contract</option>
+                <option value="DAILY_RATE">Daily Rate</option>
+                <option value="PER_INCIDENT">Per Incident / Dispatch</option>
+                <option value="PROJECT_BASED">Project Based</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Base Price / Rate
+              (KES)</label>
+            <input type="number" step="0.01" id="srv-price" class="form-control" placeholder="e.g. 45000.00">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">SLA Specification</label>
+            <input type="text" id="srv-sla" class="form-control"
+              placeholder="e.g. 100% Post Coverage, <7 min response time">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Description *</label>
+            <textarea id="srv-desc" class="form-control" rows="2" required
+              placeholder="Scope of service, personnel qualifications..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddServiceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">🛡️ Save Service Offering</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- INLINE FALLBACK SCRIPT FOR SALARY ADVANCES FILE RETRIEVAL & UPLOAD -->
+  <script>
+    window.triggerAdvFilePicker = function (e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+      const fileInput = document.getElementById('adv-excel-file-input');
+      if (fileInput) {
+        fileInput.click();
+      }
+    };
+
+    window.openUploadSalaryAdvancesModal = function (autoTriggerPicker) {
+      const modal = document.getElementById('modal-upload-advances-excel');
+      if (!modal) return;
+
+      const form = document.getElementById('form-upload-salary-advances');
+      if (form) form.reset();
+
+      const filePill = document.getElementById('adv-selected-file-pill');
+      if (filePill) filePill.style.display = 'none';
+
+      const resultsBox = document.getElementById('adv-upload-results-box');
+      if (resultsBox) {
+        resultsBox.style.display = 'none';
+        resultsBox.innerHTML = '';
+      }
+
+      const dropzone = document.getElementById('adv-upload-dropzone');
+      if (dropzone) dropzone.style.display = 'block';
+
+      const btn = document.getElementById('btn-submit-upload-advances');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '📤 Upload &amp; Record Advances';
+      }
+
+      if (typeof populateUploadPeriodDropdown === 'function') {
+        populateUploadPeriodDropdown();
+      }
+
+      modal.style.display = 'flex';
+
+      if (autoTriggerPicker) {
+        setTimeout(function () {
+          window.triggerAdvFilePicker();
+        }, 150);
+      }
+    };
+
+    window.closeUploadSalaryAdvancesModal = function () {
+      const modal = document.getElementById('modal-upload-advances-excel');
+      if (modal) modal.style.display = 'none';
+    };
+
+    // Damage Deduction & Salary Hold Fallback Stubs
+    window.handleReturnConditionChanged = window.handleReturnConditionChanged || function (val) {
+      const box = document.getElementById('return-damage-deduction-box');
+      if (box) box.style.display = (val === 'DAMAGED' || val === 'POOR') ? 'block' : 'none';
+    };
+
+    window.closeRecordDamageDeductionModal = window.closeRecordDamageDeductionModal || function () {
+      const modal = document.getElementById('modal-record-damage-deduction');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.openRecordDamageDeductionModal = window.openRecordDamageDeductionModal || async function (guardId, guardName, initialItemName, initialDesc, initialDate) {
+      const modal = document.getElementById('modal-record-damage-deduction');
+      if (!modal) return;
+      const form = document.getElementById('form-record-damage-deduction');
+      if (form) form.reset();
+      document.getElementById('damage-ded-guard-id').value = guardId;
+      const nameEl = document.getElementById('damage-ded-guard-name-display');
+      if (nameEl) nameEl.innerText = guardName || ('Guard #' + guardId);
+      document.getElementById('damage-ded-date').value = initialDate || new Date().toISOString().substring(0, 10);
+      const amtEl = document.getElementById('damage-ded-amount');
+      if (amtEl) {
+        amtEl.step = 'any';
+        amtEl.min = '0.01';
+      }
+      if (initialItemName) {
+        const itemEl = document.getElementById('damage-ded-item-name');
+        if (itemEl) itemEl.value = initialItemName;
+      }
+      if (initialDesc) {
+        const descEl = document.getElementById('damage-ded-description');
+        if (descEl) descEl.value = initialDesc;
+      }
+
+      // Populate periods in damage deduction target select
+      const periodSel = document.getElementById('damage-ded-period-select');
+      if (periodSel) {
+        try {
+          const res = await apiFetch('/payroll/periods');
+          if (res.ok) {
+            const periods = await res.json();
+            periodSel.innerHTML = '<option value="">Auto-deduct in next active payroll run</option>' +
+              periods.map(p => `<option value="${p.id}">${p.period_name} (${p.status})</option>`).join('');
+          }
+        } catch (e) {
+          console.warn('Could not load periods for damage deduction modal:', e);
+        }
+      }
+      modal.style.display = 'flex';
+    };
+
+    window.handleRecordDamageDeductionSubmit = window.handleRecordDamageDeductionSubmit || async function (event) {
+      event.preventDefault();
+      const guardId = parseInt(document.getElementById('damage-ded-guard-id').value);
+      const itemName = document.getElementById('damage-ded-item-name').value.trim();
+      const amount = parseFloat(document.getElementById('damage-ded-amount').value);
+      const incidentDateVal = document.getElementById('damage-ded-date').value;
+      const incidentDate = incidentDateVal || new Date().toISOString().substring(0, 10);
+      const desc = document.getElementById('damage-ded-description').value.trim();
+      const periodIdVal = document.getElementById('damage-ded-period-select').value;
+      const periodId = periodIdVal ? parseInt(periodIdVal) : null;
+
+      const btn = document.getElementById('btn-submit-damage-deduction');
+      if (btn) { btn.disabled = true; btn.innerText = 'Saving Deduction...'; }
+
+      try {
+        const res = await apiFetch('/assets/damage-deductions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guard_id: guardId,
+            item_name: itemName,
+            damage_description: desc,
+            deduction_amount: amount,
+            incident_date: incidentDate,
+            payroll_period_id: periodId
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to record damage deduction');
+
+        if (typeof showToast === 'function') {
+          showToast('✅ Recorded damage deduction of KES ' + amount.toLocaleString() + ' for ' + itemName + '. It will be deducted from salary.', 'success');
+        } else {
+          alert('Recorded damage deduction of KES ' + amount.toLocaleString() + ' for ' + itemName);
+        }
+        window.closeRecordDamageDeductionModal();
+        if (typeof viewGuardFile === 'function') viewGuardFile(guardId);
+      } catch (err) {
+        console.error('handleRecordDamageDeductionSubmit error:', err);
+        if (typeof showToast === 'function') showToast(err.message || 'Error recording damage deduction', 'danger');
+        else alert('Error: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '⚠️ Save & Deduct in Salary'; }
+      }
+    };
+
+    window.openHoldSalaryModal = window.openHoldSalaryModal || function (recordId, guardName, empNo, amount, defaultReason) {
+      const modal = document.getElementById('modal-hold-salary');
+      if (!modal) return;
+      const form = document.getElementById('form-hold-salary');
+      if (form) form.reset();
+      document.getElementById('hold-salary-record-id').value = recordId;
+      const guardInfo = document.getElementById('hold-salary-guard-info');
+      if (guardInfo) guardInfo.innerText = `${guardName} (${empNo})`;
+      const amtInfo = document.getElementById('hold-salary-amount-info');
+      if (amtInfo) amtInfo.innerText = `Net Salary to Hold: KES ${Number(amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+      if (defaultReason) {
+        const reasonEl = document.getElementById('hold-salary-reason');
+        if (reasonEl) reasonEl.value = defaultReason;
+      }
+      modal.style.display = 'flex';
+    };
+
+    window.closeHoldSalaryModal = window.closeHoldSalaryModal || function () {
+      const modal = document.getElementById('modal-hold-salary');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.closeReleaseSalaryHoldModal = window.closeReleaseSalaryHoldModal || function () {
+      const modal = document.getElementById('modal-release-salary-hold');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.switchPaymentsSubTab = window.switchPaymentsSubTab || function (tab) {
+      const act = document.getElementById('payments-active-container');
+      const hld = document.getElementById('payments-held-container');
+      const bAct = document.getElementById('btn-tab-payments-active');
+      const bHld = document.getElementById('btn-tab-payments-held');
+      if (tab === 'held') {
+        if (act) act.style.display = 'none';
+        if (hld) hld.style.display = 'block';
+        if (bAct) { bAct.style.background = '#F1F5F9'; bAct.style.color = '#475569'; }
+        if (bHld) { bHld.style.background = '#D97706'; bHld.style.color = '#FFF'; }
+      } else {
+        if (act) act.style.display = 'block';
+        if (hld) hld.style.display = 'none';
+        if (bAct) { bAct.style.background = '#2563EB'; bAct.style.color = '#FFF'; }
+        if (bHld) { bHld.style.background = '#F1F5F9'; bHld.style.color = '#475569'; }
+      }
+    };
+  </script>
+
+  <!-- ==========================================================================
+       PERSISTENT FLOATING AI ASSISTANT WIDGET (Google Gemini Telemetry & Operations)
+       Accessible from all screens; click to jump & query Gemini AI System Analyst
+       ========================================================================== -->
+  <div id="ai-floating-widget-container" class="ai-floating-widget-container" style="display:none;">
+    <div id="ai-floating-widget" class="ai-floating-widget-btn" onclick="activateAIAssistantWidget()"
+      title="Ask Gemini AI Assistant & View Performance Charts (Click to open, Drag to move)">
+      <span class="ai-drag-grip" title="Drag to move">⋮⋮</span>
+      <span class="ai-floating-icon">🤖</span>
+      <span class="ai-floating-label">AI Assistant Ready</span>
+      <span class="ai-floating-gemini-pill">✨ GEMINI</span>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       UNATTACHED FLOATING SOFTPHONE DIALER (Independent / Detached)
+       Accessible via Header '📞 Softphone', Call Center '📱 Open Softphone', or incoming trunk calls.
+       Stays unattached with NO persistent idle pill on Dashboard.
+       ========================================================================== -->
+  <div id="softphone-widget-container" style="display:none !important;">
+    <!-- Active Call Compact Floating Pill (Only visible when an active call or ringing is minimized) -->
+    <div id="softphone-minimized" class="softphone-minimized-btn" onclick="toggleSoftphone(true)"
+      title="Active Telecom Call (Click to open softphone dialer)" style="display:none !important;">
+      <span class="softphone-drag-grip" title="Drag to move">⋮⋮</span>
+      <span style="font-size:18px;">📞</span>
+      <span id="minimized-call-status" style="font-size:12px; font-weight:700;">In Call</span>
+    </div>
+
+    <!-- Expanded Unattached Softphone Card -->
+    <div id="softphone-expanded" class="softphone-expanded-card" style="display:none;">
+      <!-- Softphone Header -->
+      <div class="softphone-top-header">
+        <div class="softphone-top-title">
+          <span>📞</span>
+          <span>CorpSec Softphone</span>
+          <span class="softphone-unattached-badge">Unattached</span>
+        </div>
+        <div class="softphone-header-controls">
+          <button class="softphone-icon-btn" onclick="toggleSoftphone(false)" title="Close Softphone">✕</button>
+        </div>
+      </div>
+
+      <!-- Softphone Body -->
+      <div class="softphone-body">
+
+        <!-- Incoming Call Banner (Pulsing) -->
+        <div id="softphone-incoming-banner" class="softphone-incoming-banner" style="display:none;">
+          <div class="softphone-incoming-details">
+            <div style="font-size:28px;">🔔</div>
+            <div>
+              <div id="incoming-caller-name" style="font-weight:800; font-size:14px; color:#1E3A8A;">Incoming Call...
+              </div>
+              <div id="incoming-caller-number" style="font-size:12px; font-family:monospace; color:#3B82F6;">+254 700
+                000 000</div>
+              <div id="incoming-caller-queue" style="font-size:11px; color:#60A5FA; margin-top:2px;">Queue: General
+              </div>
+            </div>
+          </div>
+          <div class="softphone-incoming-actions">
+            <button class="btn-incoming-answer" onclick="softphoneAnswerCall()">
+              ✔ Accept
+            </button>
+            <button class="btn-incoming-decline" onclick="softphoneDeclineCall()">
+              ✕ Decline
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. Keypad / Outbound Screen -->
+        <div id="softphone-keypad-view">
+          <div class="softphone-screen">
+            <input type="text" id="softphone-number-input" placeholder="Dial number..."
+              onkeyup="if(event.key==='Enter') softphoneDialCall()">
+            <button class="softphone-screen-backspace" onclick="softphoneBackspace()" title="Backspace">⌫</button>
+          </div>
+
+          <div class="softphone-contact-preview" id="softphone-contact-preview"></div>
+
+          <!-- 3x4 DTMF Dialpad Grid -->
+          <div class="softphone-keypad">
+            <div class="softphone-key" onclick="softphoneKeyPress('1')">
+              <span class="softphone-key-digit">1</span>
+              <span class="softphone-key-letters">&nbsp;</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('2')">
+              <span class="softphone-key-digit">2</span>
+              <span class="softphone-key-letters">ABC</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('3')">
+              <span class="softphone-key-digit">3</span>
+              <span class="softphone-key-letters">DEF</span>
+            </div>
+
+            <div class="softphone-key" onclick="softphoneKeyPress('4')">
+              <span class="softphone-key-digit">4</span>
+              <span class="softphone-key-letters">GHI</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('5')">
+              <span class="softphone-key-digit">5</span>
+              <span class="softphone-key-letters">JKL</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('6')">
+              <span class="softphone-key-digit">6</span>
+              <span class="softphone-key-letters">MNO</span>
+            </div>
+
+            <div class="softphone-key" onclick="softphoneKeyPress('7')">
+              <span class="softphone-key-digit">7</span>
+              <span class="softphone-key-letters">PQRS</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('8')">
+              <span class="softphone-key-digit">8</span>
+              <span class="softphone-key-letters">TUV</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('9')">
+              <span class="softphone-key-digit">9</span>
+              <span class="softphone-key-letters">WXYZ</span>
+            </div>
+
+            <div class="softphone-key" onclick="softphoneKeyPress('*')">
+              <span class="softphone-key-digit">*</span>
+              <span class="softphone-key-letters">&nbsp;</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('0')">
+              <span class="softphone-key-digit">0</span>
+              <span class="softphone-key-letters">+</span>
+            </div>
+            <div class="softphone-key" onclick="softphoneKeyPress('#')">
+              <span class="softphone-key-digit">#</span>
+              <span class="softphone-key-letters">&nbsp;</span>
+            </div>
+          </div>
+
+          <div class="softphone-dial-actions">
+            <button class="btn-dial-call" onclick="softphoneDialCall()">
+              <span>📞</span> Call
+            </button>
+            <button class="btn btn-secondary" onclick="softphoneClear()"
+              style="height:48px; border-radius:12px; font-weight:700;" title="Clear Input">
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Active Connected In-Call Screen -->
+        <div id="softphone-active-call-view" style="display:none;" class="softphone-active-call-pane">
+          <div class="softphone-call-avatar" id="active-call-avatar">
+            👤
+          </div>
+          <div class="softphone-call-contact-name" id="active-call-contact">Caller Name</div>
+          <div class="softphone-call-number" id="active-call-number">+254 700 000 000</div>
+          <div class="softphone-call-timer" id="active-call-timer">00:00</div>
+
+          <!-- Controls: Mute, Hold, Transfer -->
+          <div class="softphone-incall-controls">
+            <button class="softphone-incall-btn" id="btn-softphone-mute" onclick="softphoneToggleMute()">
+              <span class="icon">🎙</span>
+              <span class="label">Mute</span>
+            </button>
+            <button class="softphone-incall-btn" id="btn-softphone-hold" onclick="softphoneToggleHold()">
+              <span class="icon">⏸</span>
+              <span class="label">Hold</span>
+            </button>
+            <button class="softphone-incall-btn" onclick="softphoneOpenTransfer()">
+              <span class="icon">↗</span>
+              <span class="label">Transfer</span>
+            </button>
+          </div>
+
+          <!-- Live Notes & Disposition -->
+          <div style="width:100%; margin-bottom:14px; text-align:left;">
+            <label style="font-size:10px; font-weight:800; color:#64748B; text-transform:uppercase;">Call
+              Disposition</label>
+            <select id="active-call-disposition"
+              style="width:100%; padding:6px 10px; border:1px solid #E2E8F0; border-radius:8px; font-size:11px; margin-top:3px; margin-bottom:8px;">
+              <option value="RESOLVED">Resolved / Routine Query</option>
+              <option value="FOLLOW_UP_REQUIRED">Follow-up Required</option>
+              <option value="ESCALATED_SUPERVISOR">Escalated to Supervisor</option>
+              <option value="EMERGENCY_DISPATCH">Emergency Guard Dispatched</option>
+            </select>
+            <textarea id="active-call-quick-notes" placeholder="Type call notes here..." rows="2"
+              style="width:100%; padding:6px 8px; border:1px solid #E2E8F0; border-radius:8px; font-size:11px; resize:none;"></textarea>
+          </div>
+
+          <button class="btn-dial-hangup" onclick="softphoneHangup()">
+            <span>🔴</span> End Call
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       CALL CENTER MODALS
+       ========================================================================== -->
+
+  <!-- 1. Simulate Inbound Call Modal -->
+  <div id="modal-simulate-call" class="modal-overlay" style="display:none; z-index:10000;"
+    onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:440px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <h4 style="margin:0; font-size:18px; font-weight:800; color:#0F172A;">⚡ Simulate Incoming Call</h4>
+        <button onclick="document.getElementById('modal-simulate-call').style.display='none'"
+          style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <p style="font-size:12px; color:#64748B; margin:0 0 16px 0;">
+        Simulate an incoming telecom trunk call routed through ACD logic to test queuing, softphone ringing, and agent
+        answer.
+      </p>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Caller Name</label>
+        <input type="text" id="sim-caller-name" class="form-control" value="Capt. David Kiprono"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Caller Phone Number</label>
+        <input type="text" id="sim-caller-number" class="form-control" value="+254 711 999 888"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Target Call Queue</label>
+        <select id="sim-queue-select" class="form-control"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="1">Emergency Guard Dispatch (Priority High)</option>
+          <option value="2">General Client Services (Standard)</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:20px;">
+        <label style="font-size:12px; font-weight:700;">Priority Level</label>
+        <select id="sim-priority-select" class="form-control"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="10">High (Emergency)</option>
+          <option value="5" selected>Normal</option>
+          <option value="1">Low</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary"
+          onclick="document.getElementById('modal-simulate-call').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="executeSimulateCall()" style="background:#22C55E;">
+          ⚡ Ring Softphone Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Transfer Active Call Modal -->
+  <div id="modal-call-transfer" class="modal-overlay" style="display:none; z-index:10000;"
+    onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:400px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">↗ Transfer Active Call</h4>
+        <button onclick="document.getElementById('modal-call-transfer').style.display='none'"
+          style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <p style="font-size:12px; color:#64748B; margin:0 0 16px 0;">Select a destination queue to transfer this caller.
+      </p>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Target Queue</label>
+        <select id="transfer-queue-select" class="form-control"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="1">Emergency Guard Dispatch</option>
+          <option value="2">General Client Services</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary"
+          onclick="document.getElementById('modal-call-transfer').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="softphoneExecuteTransfer()" style="background:#2563EB;">Transfer
+          Call</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Call Notes & Disposition Modal -->
+  <div id="modal-call-notes" class="modal-overlay" style="display:none; z-index:10000;"
+    onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:480px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <input type="hidden" id="notes-call-id" value="">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">📝 Call Notes & Disposition</h4>
+        <button onclick="document.getElementById('modal-call-notes').style.display='none'"
+          style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+      <div id="notes-caller-title" style="font-size:13px; font-weight:700; color:#3B82F6; margin-bottom:14px;">Caller
+        Record</div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:12px; font-weight:700;">Disposition</label>
+        <select id="notes-disposition-select" class="form-control"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="RESOLVED">Resolved / Routine Query</option>
+          <option value="FOLLOW_UP_REQUIRED">Follow-up Required</option>
+          <option value="ESCALATED_SUPERVISOR">Escalated to Supervisor</option>
+          <option value="EMERGENCY_DISPATCH">Emergency Guard Dispatched</option>
+          <option value="REJECTED">Spam / Rejected</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Detailed Notes</label>
+        <textarea id="notes-textarea" rows="4"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:13px; resize:vertical;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary"
+          onclick="document.getElementById('modal-call-notes').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCallNotes()" style="background:#22C55E;">Save Notes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Add Virtual Number Modal -->
+  <div id="modal-add-virtual-number" class="modal-overlay" style="display:none; z-index:10000;"
+    onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:440px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">➕ Provision Virtual Phone Number</h4>
+        <button onclick="document.getElementById('modal-add-virtual-number').style.display='none'"
+          style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Phone Number (E.164 Format)</label>
+        <input type="text" id="new-num-phone" class="form-control" placeholder="+254 20 790 0001"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Friendly Name / Label</label>
+        <input type="text" id="new-num-label" class="form-control" placeholder="HQ Primary HotLine"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Number Type</label>
+        <select id="new-num-type" class="form-control"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="TOLL_FREE">Toll-Free</option>
+          <option value="LOCAL" selected>Local Landline</option>
+          <option value="MOBILE">Mobile</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Assigned Inbound Queue</label>
+        <select id="new-num-queue" class="form-control"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+          <option value="1">Emergency Guard Dispatch</option>
+          <option value="2">General Client Services</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary"
+          onclick="document.getElementById('modal-add-virtual-number').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddVirtualNumber()" style="background:#22C55E;">Save
+          Number</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4b. Call Recording Audio Player Modal -->
+  <div id="modal-audio-player" class="modal-overlay" style="display:none; z-index:10001;"
+    onclick="if(event.target===this) closeAudioPlayerModal()">
+    <div class="modal-box"
+      style="max-width:520px; padding:28px; border-radius:20px; background:#FFFFFF; box-shadow:0 25px 60px -15px rgba(15,23,42,0.4);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div
+            style="width:42px; height:42px; border-radius:12px; background:linear-gradient(135deg, #2563EB, #1D4ED8); display:flex; align-items:center; justify-content:center; color:#FFF; font-size:22px; box-shadow:0 4px 12px rgba(37,99,235,0.3);">
+            🎧
+          </div>
+          <div>
+            <h4 style="margin:0; font-size:18px; font-weight:800; color:#0F172A;">Call Audio Recording</h4>
+            <div
+              style="font-size:11px; color:#059669; font-weight:700; display:flex; align-items:center; gap:4px; margin-top:2px;">
+              <span>🗄️</span> 100% Retained & Streamed from Database
+            </div>
+          </div>
+        </div>
+        <button onclick="closeAudioPlayerModal()"
+          style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <!-- Caller & Call Session Metadata Card -->
+      <div
+        style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:14px; padding:14px 18px; margin-bottom:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div id="modal-audio-caller-name" style="font-size:16px; font-weight:800; color:#0F172A;">Caller Name</div>
+            <div id="modal-audio-caller-number"
+              style="font-size:13px; font-family:monospace; color:#2563EB; font-weight:700; margin-top:2px;">+254 700
+              000
+              000</div>
+          </div>
+          <span id="modal-audio-call-id"
+            style="font-size:11px; background:#EFF6FF; color:#1D4ED8; padding:3px 10px; border-radius:9999px; font-weight:800; border:1px solid #BFDBFE;">#0</span>
+        </div>
+      </div>
+
+      <!-- High-Quality Audio Player -->
+      <div style="margin-bottom:18px;">
+        <audio id="modal-audio-element" controls
+          style="width:100%; height:44px; border-radius:12px; outline:none;"></audio>
+      </div>
+
+      <!-- Playback Speed Controls -->
+      <div
+        style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px 14px; background:#F1F5F9; border-radius:12px; margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:#475569;">Playback Speed:</div>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="0.75"
+            onclick="setAudioPlaybackRate(0.75)"
+            style="font-size:11px; padding:4px 9px; font-weight:700;">0.75x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate active" data-rate="1.0"
+            onclick="setAudioPlaybackRate(1.0)"
+            style="font-size:11px; padding:4px 9px; font-weight:700; background:#2563EB; color:#FFF;">1.0x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="1.25"
+            onclick="setAudioPlaybackRate(1.25)"
+            style="font-size:11px; padding:4px 9px; font-weight:700;">1.25x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="1.5"
+            onclick="setAudioPlaybackRate(1.5)" style="font-size:11px; padding:4px 9px; font-weight:700;">1.5x</button>
+          <button type="button" class="btn btn-secondary btn-playback-rate" data-rate="2.0"
+            onclick="setAudioPlaybackRate(2.0)" style="font-size:11px; padding:4px 9px; font-weight:700;">2.0x</button>
+        </div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <a id="modal-audio-download-btn" href="#" download class="btn btn-secondary"
+          style="display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:12px; text-decoration:none;">
+          <span>⬇</span> Download Audio (.wav)
+        </a>
+        <button type="button" class="btn btn-primary" onclick="closeAudioPlayerModal()"
+          style="font-size:12px; padding:8px 18px; font-weight:700;">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Add Contact Modal -->
+  <div id="modal-add-contact" class="modal-overlay" style="display:none; z-index:10000;"
+    onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-box" style="max-width:440px; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">➕ Add Contact to Caller CRM</h4>
+        <button onclick="document.getElementById('modal-add-contact').style.display='none'"
+          style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Full Name</label>
+        <input type="text" id="contact-full-name" class="form-control" placeholder="John Doe"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Phone Number</label>
+        <input type="text" id="contact-phone" class="form-control" placeholder="+254 712 345 678"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-family:monospace;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px; font-weight:700;">Organization / Client Site</label>
+        <input type="text" id="contact-org" class="form-control" placeholder="Westlands Mall Security"
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px;">
+      </div>
+
+      <div class="form-group" style="margin-bottom:18px;">
+        <label style="font-size:12px; font-weight:700;">Notes</label>
+        <textarea id="contact-notes" rows="2" class="form-control" placeholder="Key contact person..."
+          style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; resize:none;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary"
+          onclick="document.getElementById('modal-add-contact').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddContact()" style="background:#22C55E;">Save Contact</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.openAddNumberModal = function () {
+      document.getElementById('modal-add-virtual-number').style.display = 'flex';
+    };
+
+    window.openAddContactModal = function () {
+      document.getElementById('modal-add-contact').style.display = 'flex';
+    };
+
+    window.submitAddVirtualNumber = async function () {
+      const phone = document.getElementById('new-num-phone').value.trim();
+      const label = document.getElementById('new-num-label').value.trim();
+      const type = document.getElementById('new-num-type').value;
+      const queueId = parseInt(document.getElementById('new-num-queue').value);
+
+      if (!phone) {
+        if (typeof showToast === 'function') showToast('Please provide a phone number', 'warning');
+        return;
+      }
+
+      try {
+        await callCenterFetch('/call-center/numbers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone_number: phone,
+            friendly_name: label || phone,
+            provider: 'Twilio',
+            assigned_queue_id: queueId,
+            record_calls: true,
+            voicemail_enabled: true
+          })
+        });
+
+        document.getElementById('modal-add-virtual-number').style.display = 'none';
+        if (typeof showToast === 'function') showToast('Virtual number added to database', 'success');
+        if (typeof loadPhoneNumbers === 'function') loadPhoneNumbers();
+        if (typeof loadCallCenterOverview === 'function') loadCallCenterOverview();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Failed to add number: ' + (e.message || ''), 'danger');
+      }
+    };
+
+    window.submitAddContact = async function () {
+      const name = document.getElementById('contact-full-name').value.trim();
+      const phone = document.getElementById('contact-phone').value.trim();
+      const org = document.getElementById('contact-org').value.trim();
+      const notes = document.getElementById('contact-notes').value.trim();
+
+      if (!name || !phone) {
+        if (typeof showToast === 'function') showToast('Please enter both name and phone number', 'warning');
+        return;
+      }
+
+      try {
+        await callCenterFetch('/call-center/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: name,
+            phone_number: phone,
+            company_or_site: org,
+            notes: notes,
+            vip_level: 'STANDARD'
+          })
+        });
+
+        document.getElementById('modal-add-contact').style.display = 'none';
+        if (typeof showToast === 'function') showToast('Contact created successfully in database', 'success');
+        if (typeof loadCallerContacts === 'function') loadCallerContacts();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Error creating contact: ' + (e.message || ''), 'danger');
+      }
+    };
+  </script>
+</body>
+
+</html>
