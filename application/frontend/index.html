@@ -167,7 +167,7 @@
       <div class="sidebar-section-title">MENU</div>
       <li class="nav-item active" onclick="switchTab('dashboard')">📊 Dashboard</li>
       <li class="nav-item" id="nav-item-ai-assistant" onclick="switchTab('ai-assistant')"
-        style="display:flex; align-items:center; justify-content:space-between;">
+        style="display:none; align-items:center; justify-content:space-between;">
         <span>🤖 AI Assistant & Charts</span>
         <span class="badge"
           style="background:linear-gradient(135deg, #4F46E5, #7C3AED); color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">GEMINI</span>
@@ -370,8 +370,9 @@
           </div>
         </div>
 
-        <!-- Compact AI Quick-Access Banner (Opens Dedicated AI Assistant & Telemetry Charts Page) -->
-        <div class="dash-ai-quick-banner" onclick="switchTab('ai-assistant')"
+        <!-- Compact AI Quick-Access Banner (Opens Dedicated AI Assistant & Telemetry Charts Page - System Admin Only) -->
+        <div class="dash-ai-quick-banner" id="dash-ai-quick-banner" onclick="switchTab('ai-assistant')"
+          style="display:none;"
           title="Open Google Gemini AI Assistant & Live Performance Charts in Dedicated Page">
           <div class="dash-ai-banner-left">
             <div class="dash-ai-banner-icon">🤖</div>
@@ -11905,7 +11906,7 @@
        PERSISTENT FLOATING AI ASSISTANT WIDGET (Google Gemini Telemetry & Operations)
        Accessible from all screens; click to jump & query Gemini AI System Analyst
        ========================================================================== -->
-  <div id="ai-floating-widget-container" class="ai-floating-widget-container">
+  <div id="ai-floating-widget-container" class="ai-floating-widget-container" style="display:none;">
     <div id="ai-floating-widget" class="ai-floating-widget-btn" onclick="activateAIAssistantWidget()"
       title="Ask Gemini AI Assistant & View Performance Charts (Click to open, Drag to move)">
       <span class="ai-drag-grip" title="Drag to move">⋮⋮</span>

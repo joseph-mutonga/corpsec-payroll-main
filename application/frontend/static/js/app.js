@@ -730,6 +730,10 @@ function updateUserProfileDisplay(userData) {
   if (navAnon) {
     navAnon.style.display = isAdminUser ? 'flex' : 'none';
   }
+  const navAiAssistant = document.getElementById('nav-item-ai-assistant');
+  if (navAiAssistant) {
+    navAiAssistant.style.display = isAdminUser ? 'flex' : 'none';
+  }
   const navAiInsights = document.getElementById('nav-item-ai-insights');
   if (navAiInsights) {
     navAiInsights.style.display = isAdminUser ? 'flex' : 'none';
@@ -737,6 +741,14 @@ function updateUserProfileDisplay(userData) {
   const panelAiAssistant = document.getElementById('ai-assistant-panel');
   if (panelAiAssistant) {
     panelAiAssistant.style.display = isAdminUser ? 'block' : 'none';
+  }
+  const dashAiBanner = document.getElementById('dash-ai-quick-banner') || document.querySelector('.dash-ai-quick-banner');
+  if (dashAiBanner) {
+    dashAiBanner.style.display = isAdminUser ? 'flex' : 'none';
+  }
+  const floatingAiWidget = document.getElementById('ai-floating-widget-container');
+  if (floatingAiWidget) {
+    floatingAiWidget.style.display = isAdminUser ? 'block' : 'none';
   }
   const dashBtnAnon = document.getElementById('dash-btn-anon-reports');
   if (dashBtnAnon) {
@@ -780,7 +792,7 @@ function updateUserProfileDisplay(userData) {
 
   // Adjust for SUPERVISOR
   if (userData.role === 'SUPERVISOR') {
-    const adminOnlyTabs = ['payroll', 'payments', 'salary-advances', 'statutory', 'settings', 'audit', 'documents', 'staff', 'sites', 'shifts', 'invoices', 'clients', 'assets', 'company-history', 'expenses'];
+    const adminOnlyTabs = ['ai-assistant', 'payroll', 'payments', 'salary-advances', 'statutory', 'settings', 'audit', 'documents', 'staff', 'sites', 'shifts', 'invoices', 'clients', 'assets', 'company-history', 'expenses'];
     adminOnlyTabs.forEach(tab => {
       const navItem = document.querySelector(`.nav-item[onclick="switchTab('${tab}')"]`);
       if (navItem) navItem.style.display = 'none';
@@ -805,7 +817,7 @@ function updateUserProfileDisplay(userData) {
     if (lLbl) lLbl.innerText = 'My Team Pending Leave';
 
   } else if (userData.role === 'HR') {
-    const hrHiddenTabs = ['settings', 'audit', 'statutory', 'staff'];
+    const hrHiddenTabs = ['ai-assistant', 'settings', 'audit', 'statutory', 'staff'];
     hrHiddenTabs.forEach(tab => {
       const navItem = document.querySelector(`.nav-item[onclick="switchTab('${tab}')"]`);
       if (navItem) navItem.style.display = 'none';
@@ -884,6 +896,10 @@ function switchTab(tabId, updateHistory = true) {
   }
   if (user && user.role !== 'ADMIN' && user.role !== 'Admin' && user.role !== 'System Admin' && tabId === 'anonymous') {
     showToast('Access Denied: Anonymous Guard Reports are restricted exclusively to System Administrator.', 'danger');
+    tabId = 'dashboard';
+  }
+  if (user && user.role !== 'ADMIN' && user.role !== 'Admin' && user.role !== 'System Admin' && (tabId === 'ai-assistant' || tabId === 'ai-insights')) {
+    showToast('Access Denied: Google Gemini AI Assistant & Operational Charts are restricted exclusively to System Admin.', 'danger');
     tabId = 'dashboard';
   }
   const titles = {

@@ -53,7 +53,8 @@ def test_ai_insights_authentication_required(client):
 
 def test_ai_insights_non_admin_forbidden(client, db):
     """
-    Verifies that non-admin roles (e.g. GUARD) are strictly blocked with 403 Forbidden.
+    Verifies that non-admin roles (e.g. GUARD, SUPERVISOR, HR) are strictly blocked with 403 Forbidden.
+    The AI system is strictly restricted to System Administrator only.
     """
     _, guard_token = get_or_create_user(db, "guard_ai_test@corpsec.co.ke", UserRole.GUARD, "Guard User")
     response = client.post(
@@ -63,6 +64,31 @@ def test_ai_insights_non_admin_forbidden(client, db):
     )
     assert response.status_code == 403
     assert "Administrative privileges required" in response.json().get("detail", "")
+
+    _, sup_token = get_or_create_user(db, "sup_ai_test@corpsec.co.ke", UserRole.SUPERVISOR, "Supervisor User")
+    res_sup = client.post(
+        "/api/v1/admin/ai-insights",
+        headers={"Authorization": f"Bearer {sup_token}"},
+        json={"prompt": "Summarize overall system health today"}
+    )
+    assert res_sup.status_code == 403
+    assert "Administrative privileges required" in res_sup.json().get("detail", "")
+
+    _, hr_token = get_or_create_user(db, "hr_ai_test@corpsec.co.ke", UserRole.HR, "HR User")
+    res_hr = client.post(
+        "/api/v1/admin/ai-insights",
+        headers={"Authorization": f"Bearer {hr_token}"},
+        json={"prompt": "Summarize overall system health today"}
+    )
+    assert res_hr.status_code == 403
+    assert "Administrative privileges required" in res_hr.json().get("detail", "")
+
+    # Telemetry endpoint must also reject Supervisor and HR
+    res_tel = client.get(
+        "/api/v1/admin/ai-insights/telemetry",
+        headers={"Authorization": f"Bearer {sup_token}"}
+    )
+    assert res_tel.status_code == 403
 
 
 def test_ai_insights_admin_query_success(client, db):

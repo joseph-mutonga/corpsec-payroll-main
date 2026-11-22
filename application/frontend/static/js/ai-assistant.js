@@ -8,13 +8,33 @@
 (function () {
   'use strict';
 
+  function isSystemAdminUser() {
+    try {
+      const stored = localStorage.getItem('corpsec_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        return Boolean(u && (u.role === 'ADMIN' || u.role === 'Admin' || u.role === 'System Admin'));
+      }
+    } catch (e) {}
+    return false;
+  }
+
   window.SystemAIAssistant = {
     history: [],
     isLoading: false,
     isOpen: true,
 
     init() {
-      console.log('[SystemAIAssistant] Initializing AI Assistant...');
+      if (!isSystemAdminUser()) {
+        const floating = document.getElementById('ai-floating-widget-container');
+        if (floating) floating.style.display = 'none';
+        const banner = document.getElementById('dash-ai-quick-banner') || document.querySelector('.dash-ai-quick-banner');
+        if (banner) banner.style.display = 'none';
+        const nav = document.getElementById('nav-item-ai-assistant');
+        if (nav) nav.style.display = 'none';
+        return;
+      }
+      console.log('[SystemAIAssistant] Initializing AI Assistant for System Admin...');
       this.attachEventListeners();
       this.renderQuickStarterChips();
       if (typeof initDraggableAIWidget === 'function') {
@@ -201,6 +221,7 @@
     },
 
     async loadTelemetryCharts(forceRefresh = false) {
+      if (!isSystemAdminUser()) return;
       const refreshIcon = document.getElementById('ai-telemetry-refresh-icon');
       if (refreshIcon) {
         refreshIcon.style.display = 'inline-block';
@@ -452,6 +473,10 @@
     const container = document.getElementById('ai-floating-widget-container');
     const widgetBtn = document.getElementById('ai-floating-widget');
     if (!container || !widgetBtn) return;
+    if (!isSystemAdminUser()) {
+      container.style.display = 'none';
+      return;
+    }
     if (container.dataset.dragInitialized === 'true') return;
     container.dataset.dragInitialized = 'true';
 
@@ -598,7 +623,7 @@
   window.initDraggableAIWidget = initDraggableAIWidget;
 
   window.activateAIAssistantWidget = function () {
-    if (window.__aiWidgetJustDragged) return;
+    if (window.__aiWidgetJustDragged || !isSystemAdminUser()) return;
 
     // Switch to dedicated AI Assistant & Telemetry Charts page
     if (typeof switchTab === 'function') {
