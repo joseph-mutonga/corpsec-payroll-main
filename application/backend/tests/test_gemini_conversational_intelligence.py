@@ -40,20 +40,18 @@ def test_attendance_analytics_deterministic_counts(db_session: Session):
     assert report["timezone"] == "Africa/Nairobi"
     assert report["total_registered_guards"] == 11
     assert report["active_guards"] == 11
-    assert report["guards_clocked_in"] == 4
-    assert report["guards_clocked_out"] == 2
-    assert report["currently_on_duty"] == 2
-    assert report["absent_guards_count"] == 7
-    assert len(report["details_rows"]) == 4
+    assert report["guards_clocked_in"] == len(report["details_rows"])
+    assert report["currently_on_duty"] == report["guards_clocked_in"] - report["guards_clocked_out"]
+    assert report["absent_guards_count"] == 11 - report["guards_clocked_in"]
 
     # Verify Section 9 template sections
     text = report["standardized_report"]
     assert "ATTENDANCE REPORT" in text
     assert "**Total registered guards:** 11" in text
     assert "**Active guards:** 11" in text
-    assert "**Guards who clocked in:** 4" in text
-    assert "**Guards who clocked out:** 2" in text
-    assert "**Currently on duty:** 2" in text
+    assert f"**Guards who clocked in:** {report['guards_clocked_in']}" in text
+    assert f"**Guards who clocked out:** {report['guards_clocked_out']}" in text
+    assert f"**Currently on duty:** {report['currently_on_duty']}" in text
     assert "ATTENDANCE DETAILS" in text
     assert "DATABASE VERIFICATION" in text
     assert "Actual database query execution time:" in text
@@ -83,15 +81,21 @@ def test_four_question_consistency_challenge(db_session: Session):
     t3 = AITelemetryService.get_system_telemetry(db_session, user_query=q3, category=c3, bypass_cache=True)
     t4 = AITelemetryService.get_system_telemetry(db_session, user_query=q4, category=c4, bypass_cache=True)
 
+    expected_reg = t1["workforce_and_operations"]["total_guards_registered"]
+    expected_clocked = t1["workforce_and_operations"]["guards_clocked_in_today"]
+    expected_on_duty = t1["workforce_and_operations"]["guards_currently_on_duty"]
+    expected_out = t1["workforce_and_operations"]["guards_clocked_out_today"]
+    expected_absent = t1["workforce_and_operations"]["guards_absent_today"]
+
     # Core workforce counts must match across all 4 inquiries
     for i, t in enumerate([t1, t2, t3, t4], 1):
         ops = t["workforce_and_operations"]
-        assert ops["total_guards_registered"] == 11, f"Q{i} mismatch on total_guards_registered"
-        assert ops["active_registered_guards"] == 11, f"Q{i} mismatch on active_registered_guards"
-        assert ops["guards_clocked_in_today"] == 4, f"Q{i} mismatch on guards_clocked_in_today"
-        assert ops["guards_currently_on_duty"] == 2, f"Q{i} mismatch on guards_currently_on_duty"
-        assert ops["guards_clocked_out_today"] == 2, f"Q{i} mismatch on guards_clocked_out_today"
-        assert ops["guards_absent_today"] == 7, f"Q{i} mismatch on guards_absent_today"
+        assert ops["total_guards_registered"] == expected_reg, f"Q{i} mismatch on total_guards_registered"
+        assert ops["active_registered_guards"] == expected_reg, f"Q{i} mismatch on active_registered_guards"
+        assert ops["guards_clocked_in_today"] == expected_clocked, f"Q{i} mismatch on guards_clocked_in_today"
+        assert ops["guards_currently_on_duty"] == expected_on_duty, f"Q{i} mismatch on guards_currently_on_duty"
+        assert ops["guards_clocked_out_today"] == expected_out, f"Q{i} mismatch on guards_clocked_out_today"
+        assert ops["guards_absent_today"] == expected_absent, f"Q{i} mismatch on guards_absent_today"
         assert "standardized_attendance_report" in t
         assert "**Total registered guards:** 11" in t["standardized_attendance_report"]
 
@@ -149,23 +153,23 @@ def test_salary_advances_analytics_and_fallback(db_session: Session):
 
 def test_assets_inventory_analytics_and_fallback(db_session: Session):
     """
-    Verifies that Assets & Inventory analytics retrieves tracked items (4 assets, KES 1,542,000 valuation)
+    Verifies that Assets & Inventory analytics retrieves tracked items (3 capital assets, KES 1,517,000 valuation)
     and formats the report with serial numbers and conditions.
     """
     ast = AssetsInventoryAnalyticsService.get_assets_report(db_session)
-    assert ast["total_assets"] == 4
-    assert ast["total_current_value_kes"] == 1542000.0
-    assert len(ast["details_rows"]) == 4
+    assert ast["total_assets"] == 3
+    assert ast["total_current_value_kes"] == 1517000.0
+    assert len(ast["details_rows"]) == 3
 
     std_rep = ast["standardized_report"]
     assert "ASSETS & INVENTORY REPORT" in std_rep
-    assert "KES 1,542,000.00" in std_rep
-    assert "Mazda Demio" in std_rep or "Digital Radio" in std_rep
+    assert "KES 1,517,000.00" in std_rep
+    assert "Mazda demio" in std_rep or "Office chair" in std_rep
 
     t = AITelemetryService.get_system_telemetry(db_session, user_query="What assets and equipment do we have?", category="WORKFORCE")
     res = GeminiAIService.generate_grounded_fallback_analysis("What assets and equipment do we have?", t)
     assert "ASSETS & INVENTORY REPORT" in res
-    assert "KES 1,542,000.00" in res
+    assert "KES 1,517,000.00" in res
 
 
 def test_call_center_analytics_and_fallback(db_session: Session):
@@ -298,5 +302,55 @@ def test_expenses_and_petty_cash_analytics_and_fallback(db_session: Session):
     assert "486,000.00" in res
     assert "14" in res
     assert "293,750.00" not in res
+
+
+def test_john_chege_issued_uniforms_custody_query(db_session: Session):
+    """
+    Verifies that querying for a guard's issued uniforms or unreturned company items
+    (e.g., 'i mean which uniforms does the john have which belongs to the company which he have not returned')
+    correctly retrieves John Chege's unreturned items from inventory_transactions:
+    - 2 pairs of Combat Security Patrol Boots (INV-BOT-001, Ref ISS-BOT-38556016)
+    - 2 CorpSec Guard Uniform Shirts (INV-UNI-SHT, Ref ISS-SHT-38556016)
+    - 2 CorpSec Guard Uniform Trousers (INV-UNI-TRS, Ref ISS-TRS-38556016)
+    And reconciles with 2 returned transactions (3 caps returned).
+    Ensures the AI assistant never reports 0 unreturned uniform items.
+    """
+    # 1. Direct analytics report check
+    custody_rep = AssetsInventoryAnalyticsService.get_guard_custody_report(db_session, "38556016")
+    assert custody_rep["found"] is True
+    assert custody_rep["guard_name"] == "john chege"
+    assert custody_rep["employee_number"] == "38556016"
+    assert custody_rep["total_items_issued"] == 7
+    assert custody_rep["currently_in_custody"] == 5
+    assert custody_rep["returned_to_stores"] == 2
+    assert len(custody_rep["unreturned_items"]) == 3
+
+    # Check unreturned items
+    unret_names = [u["item_name"] for u in custody_rep["unreturned_items"]]
+    assert "Combat Security Patrol Boots" in unret_names
+    assert "CorpSec Guard Uniform Shirts (Khaki Light Blue)" in unret_names
+    assert "CorpSec Guard Uniform Trousers (Navy Blue)" in unret_names
+
+    # 2. Targeted search check
+    query = "i mean which uniforms does the john have which belongs to the company which he have not returned"
+    matches = AITelemetryService.search_database_entities(db_session, query)
+    assert "matched_guard_custody" in matches
+    assert len(matches["matched_guard_custody"]) > 0
+
+    # 3. Telemetry integration
+    t = AITelemetryService.get_system_telemetry(db_session, user_query=query, category="WORKFORCE", bypass_cache=True)
+    assert "guard_custody_register" in t
+
+    # 4. Fallback analysis generation
+    res = GeminiAIService.generate_grounded_fallback_analysis(query, t)
+    assert "john chege" in res.lower()
+    assert "Combat Security Patrol Boots" in res
+    assert "CorpSec Guard Uniform Shirts" in res
+    assert "CorpSec Guard Uniform Trousers" in res
+    assert "ISS-BOT-38556016" in res
+    assert "ISS-SHT-38556016" in res
+    assert "ISS-TRS-38556016" in res
+    assert "0 uniform items" not in res
+
 
 

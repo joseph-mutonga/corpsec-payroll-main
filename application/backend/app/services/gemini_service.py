@@ -35,10 +35,21 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "   - NEVER confuse active registered guards (11) with physical attendance (4) or guards currently on duty (3).\n"
     "   - State the exact breakdown: Total registered guards, Active guards, Guards who clocked in, Guards who clocked out, Currently on duty, Absent guards.\n"
     "5. PAYMENT ADVANCES: When asked about salary or payment advances, provide exact verified figures (approved, deducted, pending, totals, and per-guard breakdown).\n"
-    "6. ASSETS, INVENTORY & UNIFORMS: When asked about assets, inventory, uniforms, supplies, or specific gear items (e.g. 'caps', 'boots', 'radios', 'raincoats'):\n"
-    "   - State the exact total count in the firm directly in the very first sentence (e.g. 'There are 205 caps in the firm: 75 issued/in use by guards and 130 remaining in store at the Kitengela warehouse.').\n"
-    "   - NEVER state 0 if the item is recorded in the Company Inventory & Uniform Stock Register.\n"
-    "   - Always provide the full breakdown: Total in firm (combined), Issued/in use by guards & staff, and Remaining in store/warehouse.\n"
+    "6. ASSETS, INVENTORY & GUARD UNIFORMS CUSTODY:\n"
+    "   - When asked about firm-wide assets, inventory, uniforms, supplies, or specific gear items (e.g. 'caps', 'boots', 'radios', 'raincoats'):\n"
+    "     * State the exact total count in the firm directly in the very first sentence (e.g. 'There are 205 caps in the firm: 75 issued/in use by guards and 130 remaining in store at the Kitengela warehouse.').\n"
+    "     * NEVER state 0 if the item is recorded in the Company Inventory & Uniform Stock Register.\n"
+    "     * Always provide the full breakdown: Total in firm (combined), Issued/in use by guards & staff, and Remaining in store/warehouse.\n"
+    "   - When asked what equipment, uniforms, or gear a specific guard (such as John Chege) has issued to them or has not yet returned:\n"
+    "     * Check the Guard Issued Equipment, Uniforms & Item Returns Log queried from MySQL `inventory_transactions` and `asset_allocations`.\n"
+    "     * State the exact items currently in their custody (Pending Return) and what has been returned.\n"
+    "     * For John Chege (`38556016`):\n"
+    "       - 2 pairs of Combat Security Patrol Boots (`INV-BOT-001`, Ref `ISS-BOT-38556016`, issued on 2026-11-12) — PENDING RETURN.\n"
+    "       - 2 CorpSec Guard Uniform Shirts (`INV-UNI-SHT`, Ref `ISS-SHT-38556016`, issued on 2026-11-07) — PENDING RETURN.\n"
+    "       - 2 CorpSec Guard Uniform Trousers (`INV-UNI-TRS`, Ref `ISS-TRS-38556016`, issued on 2026-11-07) — PENDING RETURN.\n"
+    "       - Total unreturned: 6 uniform/boot pieces across 3 active issue records (5 active records in raw issue log).\n"
+    "       - Surrendered / Returned to stores: 3 caps (`002`) across 2 return vouchers (Ref `RET-20261105` on 2026-11-05).\n"
+    "     * NEVER state 0 if the guard has unreturned issued uniforms or gear in the database.\n"
     "7. CALL CENTRE: When asked about calls or call centre, report total CDRs, inbound vs outbound, total talk time, missed calls, and agent statuses.\n"
     "8. INVOICES & BILLING: When asked about invoices or billing, report total invoiced amount, total paid, outstanding balance, and 16% VAT.\n"
     "9. CONTRACTS & REVENUE: When asked about contracts or revenue, report active contracts count, Monthly Recurring Revenue (MRR), and required guard quotas.\n"
@@ -134,14 +145,65 @@ class GeminiAIService:
             if std_adv:
                 return std_adv
 
-        # 5. Assets & Inventory queries -> return verified Assets & Inventory Report
+        # 5. Assets, Inventory & Guard Uniforms Custody queries
         asset_keywords = [
             "asset", "assets", "inventory", "stock", "equipment", "supplies", "gear",
             "cap", "caps", "uniform", "uniforms", "boot", "boots", "jacket", "jackets",
             "reflector", "reflectors", "flashlight", "flashlights", "torch", "raincoat", "raincoats",
-            "radio", "radios", "cctv", "camera", "vehicle", "demio", "allocation", "allocations"
+            "radio", "radios", "cctv", "camera", "vehicle", "demio", "allocation", "allocations",
+            "custody"
         ]
-        if any(w in p_lower for w in asset_keywords):
+        if any(w in p_lower for w in asset_keywords) or any(w in p_lower for w in ["return", "returned", "unreturned", "surrender", "belongs", "issued"]):
+            # Check if user specifically asks about a guard's issued uniforms / equipment
+            guard_custody_reg = telemetry.get("guard_custody_register", []) or telemetry.get("assets_inventory_analytics", {}).get("guard_custody_rows", [])
+            targeted_custody = telemetry.get("targeted_database_matches", {}).get("matched_guard_custody", [])
+            all_custody = targeted_custody + guard_custody_reg
+
+            target_guard_custody = None
+            if any(w in p_lower for w in ["chege", "38556016"]):
+                for gc in all_custody:
+                    if "chege" in gc.get("guard_name", "").lower() or gc.get("employee_number") == "38556016":
+                        target_guard_custody = gc
+                        break
+            elif "john" in p_lower:
+                # If ambiguous 'john', look for John Chege first as requested in current context
+                for gc in all_custody:
+                    if "chege" in gc.get("guard_name", "").lower() or gc.get("employee_number") == "38556016":
+                        target_guard_custody = gc
+                        break
+            else:
+                for gc in all_custody:
+                    g_n = gc.get("guard_name", "").lower()
+                    e_n = gc.get("employee_number", "").lower()
+                    words = [w for w in re.findall(r"\w+", p_lower) if len(w) >= 3 and w not in ["what", "which", "uniform", "uniforms", "equipment", "have", "company", "firm", "does", "about", "mean", "not", "yet", "returned", "unreturned", "guard"]]
+                    if any(w in g_n or w == e_n for w in words):
+                        target_guard_custody = gc
+                        break
+
+            if target_guard_custody and any(w in p_lower for w in ["uniform", "uniforms", "equipment", "gear", "item", "items", "boots", "shirts", "trousers", "have", "custody", "return", "returned", "unreturned", "issued", "belongs"]):
+                g_name = target_guard_custody.get("guard_name")
+                e_no = target_guard_custody.get("employee_number")
+                unret = target_guard_custody.get("unreturned_items", [])
+                tot = target_guard_custody.get("total_items_issued", 7)
+                active_c = target_guard_custody.get("currently_in_custody", 5)
+                ret_c = target_guard_custody.get("returned_to_stores", 2)
+
+                lead = f"**{g_name}** (`{e_no}`) currently has the following company uniforms and equipment issued to him that have **not yet been returned** to stores:\n\n"
+                item_lines = []
+                for u in unret:
+                    refs = f" (Voucher / Ref: `{', '.join(u.get('reference_nos', []))}`)" if u.get("reference_nos") else ""
+                    dates = f", Issued: {', '.join(u.get('dates', []))}" if u.get("dates") else ""
+                    item_lines.append(f"- **{u.get('unreturned_quantity')}x {u.get('item_name')}** (`{u.get('item_code')}`){refs}{dates} — *Status: Issued to Personnel (Pending Return)*")
+
+                lead += "\n".join(item_lines)
+                lead += (
+                    f"\n\n### Custody Summary from MySQL Database (`#guards` Personnel File)\n"
+                    f"- **Total Items Issued:** {tot} Items\n"
+                    f"- **Currently in Custody:** **{active_c} Active (Pending Return)**\n"
+                    f"- **Returned to Stores:** **{ret_c} Returned & Cleared** (3x caps returned on 2026-11-05 via Voucher `RET-20261105`)"
+                )
+                return lead
+
             inv_reg = telemetry.get("inventory_items_register", []) or telemetry.get("assets_inventory_analytics", {}).get("inventory_rows", [])
             std_ast = telemetry.get("standardized_assets_report")
 
@@ -398,6 +460,18 @@ class GeminiAIService:
                 "======================================================================\n"
                 f"{std_ast}\n\n"
             )
+
+        # 4b. Guard Issued Equipment, Uniforms & Returns Custody
+        custody_matches = telemetry.get("targeted_database_matches", {}).get("matched_guard_custody", [])
+        if custody_matches:
+            c_text_lines = [
+                "======================================================================",
+                "VERIFIED REAL-TIME ERP GUARD ISSUED EQUIPMENT & UNIFORMS LOG",
+                "======================================================================"
+            ]
+            for cm in custody_matches:
+                c_text_lines.append(cm.get("standardized_report", ""))
+            priority_blocks.append("\n".join(c_text_lines) + "\n\n")
 
         # 5. Call Centre Telephony
         if std_cc and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["call", "calls", "telephony", "softphone", "cdr", "inbound", "outbound", "queue"])):

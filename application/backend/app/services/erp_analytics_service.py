@@ -579,6 +579,99 @@ class AssetsInventoryAnalyticsService:
             inv_table_lines.append("| — | No inventory items matched search | — | — | — | — | — | — | — |")
 
         formatted_inv_table = "\n".join(inv_table_lines)
+
+        # ------------------------------------------------------------------
+        # 3. GUARD PERSONNEL ISSUED EQUIPMENT & UNIFORMS CUSTODY
+        # ------------------------------------------------------------------
+        guards_all = db.query(Guard).all()
+        guard_custody_rows: List[Dict[str, Any]] = []
+        custody_table_lines = [
+            "| Guard Name | Emp Number | Total Issued Records | Currently in Custody | Returned | Unreturned Uniforms & Gear |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- |"
+        ]
+
+        for g in guards_all:
+            g_txs = db.query(InventoryTransaction).filter(InventoryTransaction.issued_to_guard_id == g.id).order_by(InventoryTransaction.id.asc()).all()
+            g_allocs = db.query(AssetAllocation).filter(AssetAllocation.guard_id == g.id).order_by(AssetAllocation.id.asc()).all()
+
+            if not g_txs and not g_allocs:
+                continue
+
+            active_records = [t for t in g_txs if t.transaction_type in ["ISSUED", "DISPATCH"]] + [a for a in g_allocs if a.status == "ACTIVE"]
+            returned_records = [t for t in g_txs if t.transaction_type == "RETURNED"] + [a for a in g_allocs if a.status == "RETURNED"]
+
+            item_map: Dict[str, Dict[str, Any]] = {}
+            for t in g_txs:
+                code = t.item.item_code if t.item else "Supply"
+                name = t.item.item_name if t.item else "Uniform Item"
+                cat = t.item.category if t.item else "UNIFORM"
+                if code not in item_map:
+                    item_map[code] = {
+                        "item_code": code,
+                        "item_name": name,
+                        "category": cat,
+                        "issued_qty": 0,
+                        "returned_qty": 0,
+                        "refs": [],
+                        "dates": []
+                    }
+                if t.transaction_type in ["ISSUED", "DISPATCH"]:
+                    item_map[code]["issued_qty"] += t.quantity
+                    if t.reference_no:
+                        item_map[code]["refs"].append(t.reference_no)
+                    if t.created_at:
+                        item_map[code]["dates"].append(str(t.created_at)[:10])
+                elif t.transaction_type == "RETURNED":
+                    item_map[code]["returned_qty"] += t.quantity
+
+            unreturned_list = []
+            for code, d in item_map.items():
+                net_unret = d["issued_qty"] - d["returned_qty"]
+                if net_unret > 0:
+                    unreturned_list.append({
+                        "item_code": code,
+                        "item_name": d["item_name"],
+                        "category": d["category"],
+                        "unreturned_quantity": net_unret,
+                        "issued_quantity": d["issued_qty"],
+                        "returned_quantity": d["returned_qty"],
+                        "reference_nos": list(set(d["refs"])),
+                        "dates": list(set(d["dates"]))
+                    })
+
+            for a in g_allocs:
+                if a.status == "ACTIVE":
+                    a_name = a.asset.name if a.asset else "Asset"
+                    a_tag = a.asset.asset_tag if a.asset else "N/A"
+                    unreturned_list.append({
+                        "item_code": a_tag,
+                        "item_name": a_name,
+                        "category": a.asset.category.name if a.asset and a.asset.category else "EQUIPMENT",
+                        "unreturned_quantity": 1,
+                        "issued_quantity": 1,
+                        "returned_quantity": 0,
+                        "reference_nos": [a_tag],
+                        "dates": [str(a.allocated_date)] if a.allocated_date else []
+                    })
+
+            unret_summary_str = ", ".join([f"{u['unreturned_quantity']}x {u['item_name']}" for u in unreturned_list]) or "None (Cleared)"
+
+            g_entry = {
+                "guard_id": g.id,
+                "employee_number": g.employee_number,
+                "guard_name": g.full_name,
+                "total_items_issued": len(g_txs) + len(g_allocs),
+                "currently_in_custody": len(active_records),
+                "returned_to_stores": len(returned_records),
+                "unreturned_items": unreturned_list,
+                "unreturned_summary": unret_summary_str
+            }
+            guard_custody_rows.append(g_entry)
+            custody_table_lines.append(
+                f"| **{g.full_name}** | `{g.employee_number}` | {len(g_txs) + len(g_allocs)} items | **{len(active_records)} Active (Pending Return)** | {len(returned_records)} Returned | {unret_summary_str} |"
+            )
+
+        formatted_custody_table = "\n".join(custody_table_lines)
         q_time_ms = round((time.perf_counter() - t0) * 1000, 2)
 
         standardized_report = (
@@ -598,9 +691,11 @@ class AssetsInventoryAnalyticsService:
             f"- **Under Maintenance/Repairs:** {status_counts.get('UNDER_MAINTENANCE', 0)} items\n\n"
             f"### FIXED ASSETS REGISTER\n"
             f"{formatted_table}\n\n"
+            f"#### 3. Guard Issued Equipment, Uniforms & Item Returns Log\n"
+            f"{formatted_custody_table}\n\n"
             f"### DATABASE VERIFICATION\n"
             f"- **Query Execution Time:** {q_time_ms:.2f} ms\n"
-            f"- **Verified Records:** {total_assets} capital assets and {len(inventory_items)} inventory supply items retrieved from MySQL `assets`, `inventory_items`, and `inventory_transactions`"
+            f"- **Verified Records:** {total_assets} capital assets, {len(inventory_items)} inventory supply items, and {len(guard_custody_rows)} guard custody profiles retrieved from MySQL `assets`, `inventory_items`, `asset_allocations`, and `inventory_transactions`"
         )
 
         return {
@@ -612,12 +707,138 @@ class AssetsInventoryAnalyticsService:
             "details_rows": details_rows,
             "inventory_items_count": len(inventory_items),
             "inventory_rows": inv_rows,
+            "guard_custody_rows": guard_custody_rows,
             "total_inventory_units_combined": total_inv_units_combined,
             "total_combined_units": total_inv_units_combined,
             "total_inventory_units_issued": total_inv_units_issued,
             "total_inventory_units_remaining": total_inv_units_remaining,
             "total_inventory_valuation_kes": float(total_inv_firm_valuation),
             "standardized_report": standardized_report
+        }
+
+    @classmethod
+    def get_guard_custody_report(cls, db: Session, guard_search: str) -> Dict[str, Any]:
+        """
+        Retrieves detailed custody and return logs for a specific guard by name or employee number.
+        """
+        q = guard_search.lower().strip()
+        matched_guard = db.query(Guard).filter(
+            or_(
+                Guard.full_name.ilike(f"%{q}%"),
+                Guard.employee_number.ilike(f"%{q}%")
+            )
+        ).first()
+
+        if not matched_guard:
+            return {"found": False, "message": f"No guard found matching '{guard_search}'"}
+
+        g_id = matched_guard.id
+        txs = db.query(InventoryTransaction).filter(InventoryTransaction.issued_to_guard_id == g_id).order_by(InventoryTransaction.id.desc()).all()
+        allocs = db.query(AssetAllocation).filter(AssetAllocation.guard_id == g_id).order_by(AssetAllocation.id.desc()).all()
+
+        active_txs = [t for t in txs if t.transaction_type in ["ISSUED", "DISPATCH"]]
+        returned_txs = [t for t in txs if t.transaction_type == "RETURNED"]
+        active_allocs = [a for a in allocs if a.status == "ACTIVE"]
+        returned_allocs = [a for a in allocs if a.status == "RETURNED"]
+
+        total_issued_records = len(active_txs) + len(active_allocs)
+        total_returned_records = len(returned_txs) + len(returned_allocs)
+
+        # Net unreturned items
+        item_map: Dict[str, Dict[str, Any]] = {}
+        for t in txs:
+            code = t.item.item_code if t.item else "Supply"
+            name = t.item.item_name if t.item else "Uniform Item"
+            cat = t.item.category if t.item else "UNIFORM"
+            if code not in item_map:
+                item_map[code] = {
+                    "item_code": code,
+                    "item_name": name,
+                    "category": cat,
+                    "issued_qty": 0,
+                    "returned_qty": 0,
+                    "refs": [],
+                    "dates": [],
+                    "notes": []
+                }
+            if t.transaction_type in ["ISSUED", "DISPATCH"]:
+                item_map[code]["issued_qty"] += t.quantity
+                if t.reference_no: item_map[code]["refs"].append(t.reference_no)
+                if t.created_at: item_map[code]["dates"].append(str(t.created_at)[:10])
+                if t.reason_notes: item_map[code]["notes"].append(t.reason_notes)
+            elif t.transaction_type == "RETURNED":
+                item_map[code]["returned_qty"] += t.quantity
+
+        unreturned_items = []
+        cleared_items = []
+        for code, d in item_map.items():
+            net = d["issued_qty"] - d["returned_qty"]
+            entry = {
+                "item_code": code,
+                "item_name": d["item_name"],
+                "category": d["category"],
+                "unreturned_quantity": max(0, net),
+                "issued_quantity": d["issued_qty"],
+                "returned_quantity": d["returned_qty"],
+                "reference_nos": list(set(d["refs"])),
+                "dates": list(set(d["dates"])),
+                "notes": "; ".join(d["notes"][:2])
+            }
+            if net > 0:
+                unreturned_items.append(entry)
+            else:
+                cleared_items.append(entry)
+
+        for a in allocs:
+            a_name = a.asset.name if a.asset else "Asset"
+            a_tag = a.asset.asset_tag if a.asset else "N/A"
+            entry = {
+                "item_code": a_tag,
+                "item_name": a_name,
+                "category": a.asset.category.name if a.asset and a.asset.category else "EQUIPMENT",
+                "unreturned_quantity": 1 if a.status == "ACTIVE" else 0,
+                "issued_quantity": 1,
+                "returned_quantity": 1 if a.status == "RETURNED" else 0,
+                "reference_nos": [a_tag],
+                "dates": [str(a.allocated_date)] if a.allocated_date else [],
+                "notes": a.notes or ""
+            }
+            if a.status == "ACTIVE":
+                unreturned_items.append(entry)
+            else:
+                cleared_items.append(entry)
+
+        lines = [
+            f"### GUARD ISSUED EQUIPMENT, UNIFORMS & ITEM RETURNS LOG: {matched_guard.full_name} (`{matched_guard.employee_number}`)\n",
+            f"- **TOTAL ITEMS ISSUED:** {total_issued_records + total_returned_records} Items",
+            f"- **CURRENTLY IN CUSTODY (PENDING RETURN):** **{total_issued_records} Active (Pending Return)**",
+            f"- **RETURNED TO STORES:** {total_returned_records} Returned & Cleared\n",
+            "#### UNRETURNED ITEMS IN CUSTODY:"
+        ]
+        if unreturned_items:
+            for u in unreturned_items:
+                refs_str = f" (Voucher / Ref: `{', '.join(u['reference_nos'])}`)" if u["reference_nos"] else ""
+                dates_str = f", Issued: {', '.join(u['dates'])}" if u["dates"] else ""
+                lines.append(f"- **{u['unreturned_quantity']}x {u['item_name']}** (`{u['item_code']}`){refs_str}{dates_str}")
+        else:
+            lines.append("- *No unreturned uniforms or equipment. All issued items cleared and returned to stores.*")
+
+        if cleared_items:
+            lines.append("\n#### SURRENDERED / RETURNED ITEMS:")
+            for c in cleared_items:
+                lines.append(f"- **{c['returned_quantity']}x {c['item_name']}** (`{c['item_code']}`) — *Surrendered & Restocked in Store*")
+
+        return {
+            "found": True,
+            "guard_id": matched_guard.id,
+            "employee_number": matched_guard.employee_number,
+            "guard_name": matched_guard.full_name,
+            "total_items_issued": total_issued_records + total_returned_records,
+            "currently_in_custody": total_issued_records,
+            "returned_to_stores": total_returned_records,
+            "unreturned_items": unreturned_items,
+            "cleared_items": cleared_items,
+            "standardized_report": "\n".join(lines)
         }
 
 

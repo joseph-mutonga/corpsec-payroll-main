@@ -364,7 +364,8 @@ class AITelemetryService:
             "matched_contracts": [],
             "matched_calls": [],
             "matched_leave_requests": [],
-            "matched_expenses": []
+            "matched_expenses": [],
+            "matched_guard_custody": []
         }
 
         # 1. Guards search
@@ -593,6 +594,19 @@ class AITelemetryService:
                     "receipt_number": exp.receipt_number,
                     "status": exp.status
                 })
+
+        # 12. Guard Issued Equipment, Uniforms & Item Custody search
+        custody_tokens = {"uniform", "uniforms", "equipment", "gear", "custody", "issued", "return", "returned", "surrender", "boot", "boots", "shirt", "shirts", "trouser", "trousers"}
+        has_custody_intent = any(t in custody_tokens for t in tokens)
+
+        guards = db.query(Guard).all()
+        for g in guards:
+            g_str = f"{g.full_name} {g.employee_number}".lower()
+            name_matches = any(t in g_str for t in tokens)
+            if name_matches or (has_custody_intent and len(results["matched_guard_custody"]) < 5):
+                rep = AssetsInventoryAnalyticsService.get_guard_custody_report(db, g.employee_number)
+                if rep and rep.get("found") and rep.get("total_items_issued", 0) > 0:
+                    results["matched_guard_custody"].append(rep)
 
         return results
 
@@ -1199,6 +1213,7 @@ class AITelemetryService:
             "salary_advances_register": adv_report.get("details_rows", []),
             "assets_inventory_register": ast_report.get("details_rows", []),
             "inventory_items_register": ast_report.get("inventory_rows", []),
+            "guard_custody_register": ast_report.get("guard_custody_rows", []),
             "call_center_logs_register": cc_report.get("recent_calls", []),
             "site_invoices_register": inv_report.get("details_rows", []),
             "client_contracts_register": ctr_report.get("details_rows", []),
