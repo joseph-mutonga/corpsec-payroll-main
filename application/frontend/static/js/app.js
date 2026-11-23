@@ -15167,6 +15167,19 @@ async function initWhatsAppChat() {
     waPollTimer = null;
   }
 
+  const waContainer = document.querySelector('.wa-container');
+  if (waContainer) {
+    waContainer.scrollLeft = 0;
+    if (!waContainer._scrollLockAttached) {
+      waContainer.addEventListener('scroll', () => {
+        if (waContainer.scrollLeft !== 0) waContainer.scrollLeft = 0;
+      });
+      waContainer._scrollLockAttached = true;
+    }
+  }
+  const contentContainer = document.querySelector('.content-container');
+  if (contentContainer) contentContainer.scrollLeft = 0;
+
   const container = document.getElementById('wa-contact-list');
   if (container) {
     container.innerHTML = `
@@ -15473,9 +15486,23 @@ function selectWhatsAppChat(contactId) {
     }
   }
 
+  const container = document.querySelector('.wa-container');
+  if (container) {
+    container.classList.add('chat-active');
+    container.scrollLeft = 0;
+  }
+
   renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
   loadWhatsAppActiveMessages();
 }
+
+window.closeWhatsAppMobileChat = function () {
+  const container = document.querySelector('.wa-container');
+  if (container) {
+    container.classList.remove('chat-active');
+    container.scrollLeft = 0;
+  }
+};
 
 window.callActiveContactPhone = function () {
   if (waActiveContact && waActiveContact.phone) {
@@ -15560,8 +15587,10 @@ window.handlePinnedBarClick = function () {
   const targetId = window.waActivePinnedId;
   if (targetId) {
     const el = document.getElementById(`wa-msg-${targetId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const messagesContainer = document.getElementById('wa-messages-body');
+    if (el && messagesContainer) {
+      const targetTop = el.offsetTop - messagesContainer.offsetTop - 60;
+      messagesContainer.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
       el.classList.remove('wa-bubble-highlight');
       void el.offsetWidth;
       el.classList.add('wa-bubble-highlight');
@@ -15807,6 +15836,8 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
     if (!isBackgroundPoll || wasNearBottom) {
       container.scrollTop = container.scrollHeight;
     }
+    const waWrap = document.querySelector('.wa-container');
+    if (waWrap && waWrap.scrollLeft !== 0) waWrap.scrollLeft = 0;
 
   } catch (err) {
     console.error('loadWhatsAppActiveMessages error:', err);

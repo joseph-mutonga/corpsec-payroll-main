@@ -2561,25 +2561,33 @@
         <style>
           .wa-container {
             display: flex;
+            width: 100%;
+            max-width: 100%;
             height: calc(100vh - 130px);
             min-height: 600px;
             background-color: #111b21;
             border-radius: 12px;
-            overflow: hidden;
+            overflow: hidden !important;
+            overflow-x: hidden !important;
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
             border: 1px solid #222e35;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             color: #e9edef;
+            box-sizing: border-box;
           }
 
           .wa-sidebar {
-            width: 360px;
-            min-width: 300px;
-            max-width: 400px;
+            width: 320px;
+            min-width: 260px;
+            max-width: 360px;
+            flex: 0 0 320px;
             border-right: 1px solid #222e35;
             display: flex;
             flex-direction: column;
             background-color: #111b21;
+            height: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
           }
 
           .wa-sidebar-header {
@@ -2818,11 +2826,16 @@
           }
 
           .wa-main {
-            flex: 1;
+            flex: 1 1 0%;
+            min-width: 0 !important;
+            max-width: 100%;
             display: flex;
             flex-direction: column;
             background-color: #0b141a;
             position: relative;
+            height: 100%;
+            overflow: hidden !important;
+            box-sizing: border-box;
           }
 
           .wa-main-header {
@@ -2833,17 +2846,26 @@
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid #222e35;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            flex-shrink: 0;
           }
 
           .wa-chat-target {
             display: flex;
             align-items: center;
             gap: 12px;
+            min-width: 0;
+            flex: 1 1 0%;
+            overflow: hidden;
           }
 
           .wa-doodle-body {
-            flex: 1;
-            overflow-y: auto;
+            flex: 1 1 0%;
+            min-width: 0;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
             padding: 16px 24px;
             display: flex;
             flex-direction: column;
@@ -2851,6 +2873,7 @@
             background-color: #0b141a;
             background-image: radial-gradient(#222e35 0.75px, transparent 0.75px);
             background-size: 20px 20px;
+            box-sizing: border-box;
           }
 
           .wa-date-pill {
@@ -3256,6 +3279,10 @@
             transition: background 0.15s ease;
             z-index: 10;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            min-width: 0 !important;
+            max-width: 100%;
+            box-sizing: border-box;
+            flex-shrink: 0;
           }
 
           .wa-pinned-bar:hover {
@@ -3266,8 +3293,9 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            min-width: 0;
-            flex: 1;
+            min-width: 0 !important;
+            flex: 1 1 0%;
+            overflow: hidden;
           }
 
           .wa-pinned-pin-icon {
@@ -3299,14 +3327,16 @@
           .wa-pinned-info {
             display: flex;
             flex-direction: column;
-            min-width: 0;
-            flex: 1;
+            min-width: 0 !important;
+            flex: 1 1 0%;
+            overflow: hidden;
           }
 
           .wa-pinned-header-line {
             display: flex;
             align-items: center;
             gap: 6px;
+            min-width: 0;
           }
 
           .wa-pinned-title {
@@ -3315,6 +3345,7 @@
             color: #00a884;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            white-space: nowrap;
           }
 
           .wa-pinned-count-badge {
@@ -3325,11 +3356,13 @@
             padding: 1px 6px;
             border-radius: 10px;
             line-height: 1.3;
+            flex-shrink: 0;
           }
 
           .wa-pinned-hint {
             font-size: 11px;
             color: #8696a0;
+            white-space: nowrap;
           }
 
           .wa-pinned-snippet {
@@ -3339,6 +3372,45 @@
             overflow: hidden;
             text-overflow: ellipsis;
             margin-top: 2px;
+            min-width: 0 !important;
+            max-width: 100%;
+            display: block;
+          }
+
+          /* Responsive Breakpoints for Team Operations Chat */
+          @media (max-width: 900px) {
+            .wa-sidebar {
+              width: 270px;
+              min-width: 240px;
+              flex: 0 0 270px;
+            }
+          }
+
+          @media (max-width: 680px) {
+            .wa-container {
+              position: relative;
+            }
+            .wa-sidebar {
+              width: 100% !important;
+              min-width: 100% !important;
+              flex: 1 1 100% !important;
+              display: flex;
+            }
+            .wa-main {
+              width: 100% !important;
+              min-width: 100% !important;
+              flex: 1 1 100% !important;
+              display: none;
+            }
+            .wa-container.chat-active .wa-sidebar {
+              display: none !important;
+            }
+            .wa-container.chat-active .wa-main {
+              display: flex !important;
+            }
+            #wa-mobile-back-btn {
+              display: inline-flex !important;
+            }
           }
 
           .wa-pinned-actions {
@@ -3488,6 +3560,7 @@
             <!-- Active Chat Header -->
             <div class="wa-main-header">
               <div class="wa-chat-target">
+                <button type="button" id="wa-mobile-back-btn" class="wa-icon-btn" style="display:none; margin-right:4px;" onclick="closeWhatsAppMobileChat()" title="Back to Chats Directory">←</button>
                 <div class="wa-contact-avatar" id="wa-active-avatar">👥</div>
                 <div>
                   <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team
