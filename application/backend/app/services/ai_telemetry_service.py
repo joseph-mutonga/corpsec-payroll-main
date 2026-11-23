@@ -29,7 +29,7 @@ from application.backend.app.models.expense import Expense, PettyCashTransaction
 from application.backend.app.models.client_contract import ClientContract, Client
 from application.backend.app.models.call_center import CallLog, PhoneNumber, CallQueue, AgentStatus
 from application.backend.app.models.salary_advance import SalaryAdvance
-from application.backend.app.models.asset import Asset, AssetCategory, AssetAllocation
+from application.backend.app.models.asset import Asset, AssetCategory, AssetAllocation, InventoryItem, InventoryTransaction
 from application.backend.app.models.leave import LeaveRequest
 from application.backend.app.services.erp_analytics_service import (
     AttendanceAnalyticsService,
@@ -155,13 +155,16 @@ def classify_user_query(prompt: Optional[str]) -> str:
     if any(h in p for h in host_terms) and not any(w in p for w in business_entities):
         return QuestionCategory.SIMPLE
 
-    # 3. Security Workforce & Attendance Operations (check before generic payroll if attendance mentioned)
+    # 3. Security Workforce, Attendance & Inventory Operations
     workforce_terms = [
         "guard", "guards", "supervisor", "supervisors", "shift", "shifts",
         "roster", "attendance", "clock in", "clock-in", "clock out", "clock-out",
         "duty", "on duty", "who is on duty", "deployment", "station",
         "client site", "site", "sites", "absent", "absence", "leave",
-        "present", "attended", "who attended", "guards present"
+        "present", "attended", "who attended", "guards present",
+        "cap", "caps", "uniform", "uniforms", "boot", "boots", "jacket", "jackets",
+        "reflector", "reflectors", "flashlight", "flashlights", "torch", "raincoat", "raincoats",
+        "stock", "inventory", "supplies", "asset", "assets", "equipment", "radio", "radios", "gear"
     ]
     if any(w in p for w in workforce_terms):
         return QuestionCategory.WORKFORCE
@@ -354,6 +357,7 @@ class AITelemetryService:
             "matched_incidents": [],
             "matched_salary_advances": [],
             "matched_assets": [],
+            "matched_inventory": [],
             "matched_invoices": [],
             "matched_contracts": [],
             "matched_calls": [],
@@ -472,6 +476,41 @@ class AITelemetryService:
                     "status": ast.status,
                     "assigned_to": g_name or st_name or "Unassigned",
                     "location": ast.location_branch or "Head Office"
+                })
+
+        # 6b. Company Inventory & Uniform Stock search (caps, boots, uniforms, raincoats, etc.)
+        inv_items = db.query(InventoryItem).all()
+        for it in inv_items:
+            txs = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == it.id).all()
+            issued_qty = sum(t.quantity for t in txs if t.transaction_type in ["ISSUED", "DISPATCH"])
+            returned_qty = sum(t.quantity for t in txs if t.transaction_type == "RETURNED")
+            net_issued = max(0, issued_qty - returned_qty)
+            remaining_stock = max(0, it.current_stock)
+            total_combined = remaining_stock + net_issued
+            unit_cost = float(it.unit_cost or 0.0)
+
+            it_str = f"{it.item_code} {it.item_name} {it.category} {it.description or ''} {it.storage_location}".lower()
+            token_matches = any(t in it_str for t in tokens)
+            # Match singular/plural like cap/caps, boot/boots, uniform/uniforms
+            if not token_matches:
+                if any(t in ["cap", "caps"] for t in tokens) and "cap" in it.item_name.lower():
+                    token_matches = True
+                elif any(t in ["boot", "boots"] for t in tokens) and "boot" in it.item_name.lower():
+                    token_matches = True
+                elif any(t in ["uniform", "uniforms"] for t in tokens) and "uniform" in it.item_name.lower():
+                    token_matches = True
+
+            if token_matches:
+                results["matched_inventory"].append({
+                    "item_code": it.item_code,
+                    "item_name": it.item_name,
+                    "category": it.category,
+                    "total_in_firm": total_combined,
+                    "issued_in_use": net_issued,
+                    "remaining_in_store": remaining_stock,
+                    "unit_cost_kes": unit_cost,
+                    "total_valuation_kes": round(total_combined * unit_cost, 2),
+                    "storage_location": it.storage_location or "Main Warehouse"
                 })
 
         # 7. Invoices search
@@ -1125,6 +1164,7 @@ class AITelemetryService:
             "attendance_details_table": att_report.get("details_rows", []),
             "salary_advances_register": adv_report.get("details_rows", []),
             "assets_inventory_register": ast_report.get("details_rows", []),
+            "inventory_items_register": ast_report.get("inventory_rows", []),
             "call_center_logs_register": cc_report.get("recent_calls", []),
             "site_invoices_register": inv_report.get("details_rows", []),
             "client_contracts_register": ctr_report.get("details_rows", []),

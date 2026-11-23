@@ -13,7 +13,7 @@ from application.backend.app.models.attendance import Attendance, OvertimeClaim
 from application.backend.app.models.roster import RosterAssignment
 from application.backend.app.models.payroll import PayrollPeriod, PayrollRecord
 from application.backend.app.models.salary_advance import SalaryAdvance
-from application.backend.app.models.asset import Asset, AssetCategory, AssetAllocation
+from application.backend.app.models.asset import Asset, AssetCategory, AssetAllocation, InventoryItem, InventoryTransaction
 from application.backend.app.models.call_center import CallLog, PhoneNumber, CallQueue, AgentStatus
 from application.backend.app.models.invoice import SiteInvoice, InvoiceItem
 from application.backend.app.models.client_contract import ClientContract, Client
@@ -55,7 +55,18 @@ class AttendanceAnalyticsService:
         currently-on-duty, and absent guards.
         """
         t0 = time.perf_counter()
-        report_date = target_date or cls.get_current_date_eat()
+        today_eat = cls.get_current_date_eat()
+        if target_date is not None:
+            report_date = target_date
+        else:
+            # Check if attendance records exist for today
+            has_today = db.query(Attendance.id).filter(Attendance.shift_date == today_eat).first() is not None
+            if has_today:
+                report_date = today_eat
+            else:
+                # If no punches logged yet for today, fall back to the most recent active operational shift date
+                latest_shift_date = db.query(func.max(Attendance.shift_date)).scalar()
+                report_date = latest_shift_date or today_eat
         report_date_str = report_date.strftime("%d %B %Y")
         reporting_ts = cls.get_current_timestamp_eat()
 
@@ -430,8 +441,8 @@ class SalaryAdvancesAnalyticsService:
 
 class AssetsInventoryAnalyticsService:
     """
-    Dedicated analytics engine for security assets, hardware, uniforms, and vehicles inventory.
-    Queries MySQL `assets`, `asset_categories`, and `asset_allocations`.
+    Dedicated analytics engine for security assets, hardware, uniforms, and supplies inventory.
+    Queries MySQL `assets`, `asset_categories`, `inventory_items`, and `inventory_transactions`.
     """
 
     @classmethod
@@ -498,21 +509,98 @@ class AssetsInventoryAnalyticsService:
             table_lines.append("| — | No assets matched search | — | — | — | — | — |")
 
         formatted_table = "\n".join(table_lines)
+
+        # ------------------------------------------------------------------
+        # INVENTORY & UNIFORM ITEMS (caps, boots, uniforms, raincoats, etc.)
+        # ------------------------------------------------------------------
+        inventory_items = db.query(InventoryItem).order_by(InventoryItem.id.asc()).all()
+        inv_rows: List[Dict[str, Any]] = []
+
+        total_inv_units_combined = 0
+        total_inv_units_issued = 0
+        total_inv_units_remaining = 0
+        total_inv_firm_valuation = Decimal("0.0")
+
+        for it in inventory_items:
+            txs = db.query(InventoryTransaction).filter(InventoryTransaction.item_id == it.id).all()
+            issued_qty = sum(t.quantity for t in txs if t.transaction_type in ["ISSUED", "DISPATCH"])
+            returned_qty = sum(t.quantity for t in txs if t.transaction_type == "RETURNED")
+            net_issued = max(0, issued_qty - returned_qty)
+            remaining_stock = max(0, it.current_stock)
+            total_combined = remaining_stock + net_issued
+
+            unit_cost = float(it.unit_cost or 0.0)
+            total_val = round(total_combined * unit_cost, 2)
+            issued_val = round(net_issued * unit_cost, 2)
+            remaining_val = round(remaining_stock * unit_cost, 2)
+
+            total_inv_units_combined += total_combined
+            total_inv_units_issued += net_issued
+            total_inv_units_remaining += remaining_stock
+            total_inv_firm_valuation += Decimal(str(total_val))
+
+            inv_row = {
+                "id": it.id,
+                "item_code": it.item_code,
+                "item_name": it.item_name,
+                "category": it.category,
+                "unit_of_measure": it.unit_of_measure,
+                "total_combined_stock": total_combined,
+                "issued_stock": net_issued,
+                "remaining_stock": remaining_stock,
+                "unit_cost_kes": unit_cost,
+                "total_firm_valuation_kes": total_val,
+                "issued_valuation_kes": issued_val,
+                "remaining_valuation_kes": remaining_val,
+                "storage_location": it.storage_location or "Main Warehouse"
+            }
+            if search:
+                q_clean = search.lower()
+                if (q_clean in it.item_name.lower() or 
+                    q_clean in it.item_code.lower() or 
+                    q_clean in (it.category or "").lower() or 
+                    (q_clean in ["cap", "caps"] and "cap" in it.item_name.lower()) or
+                    (q_clean in ["boot", "boots"] and "boot" in it.item_name.lower()) or
+                    (q_clean in ["uniform", "uniforms"] and "uniform" in it.item_name.lower())):
+                    inv_rows.append(inv_row)
+            else:
+                inv_rows.append(inv_row)
+
+        inv_table_lines = [
+            "| SKU / Code | Item Name & Details | Category | Total in Firm | Issued / In Use | Remaining in Store | Storage Location | Unit Cost | Total Value |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+        ]
+        if inv_rows:
+            for ir in inv_rows:
+                inv_table_lines.append(
+                    f"| `{ir['item_code']}` | **{ir['item_name']}** | {ir['category']} | **{ir['total_combined_stock']} COMBINED** | **{ir['issued_stock']}** | **{ir['remaining_stock']} in Store** | {ir['storage_location']} | KES {ir['unit_cost_kes']:,.2f} | KES {ir['total_firm_valuation_kes']:,.2f} |"
+                )
+        else:
+            inv_table_lines.append("| — | No inventory items matched search | — | — | — | — | — | — | — |")
+
+        formatted_inv_table = "\n".join(inv_table_lines)
         q_time_ms = round((time.perf_counter() - t0) * 1000, 2)
 
         standardized_report = (
             f"### ASSETS & INVENTORY REPORT\n"
             f"**Audit Date:** {AttendanceAnalyticsService.get_current_timestamp_eat()}\n\n"
+            f"#### 1. Company Uniforms, Gear & Stock Supplies Inventory\n"
+            f"- **Total Inventory Item Types:** {len(inventory_items)} distinct items\n"
+            f"- **Total Combined Stock in Firm:** {total_inv_units_combined:,} units ({total_inv_units_issued:,} issued in use | {total_inv_units_remaining:,} remaining in store/warehouse)\n"
+            f"- **Total Uniform & Stock Valuation:** `KES {float(total_inv_firm_valuation):,.2f}`\n\n"
+            f"### COMPANY INVENTORY & UNIFORM STOCK REGISTER\n"
+            f"{formatted_inv_table}\n\n"
+            f"#### 2. Capital Fixed Assets Register (Hardware, Radios & Vehicles)\n"
             f"- **Total Registered Assets:** {total_assets} items\n"
-            f"- **Total Inventory Book Value:** `KES {float(total_current_value):,.2f}` (Initial Cost: `KES {float(total_purchase_cost):,.2f}`)\n"
+            f"- **Total Fixed Assets Book Value:** `KES {float(total_current_value):,.2f}` (Initial Cost: `KES {float(total_purchase_cost):,.2f}`)\n"
             f"- **Allocated Equipment:** {status_counts.get('ALLOCATED', 0)} items\n"
             f"- **Available in Stores:** {status_counts.get('AVAILABLE', 0)} items\n"
             f"- **Under Maintenance/Repairs:** {status_counts.get('UNDER_MAINTENANCE', 0)} items\n\n"
-            f"### ASSETS REGISTER & INVENTORY DETAILS\n"
+            f"### FIXED ASSETS REGISTER\n"
             f"{formatted_table}\n\n"
             f"### DATABASE VERIFICATION\n"
             f"- **Query Execution Time:** {q_time_ms:.2f} ms\n"
-            f"- **Verified Records:** {total_assets} assets retrieved from MySQL `assets` and `asset_categories`"
+            f"- **Verified Records:** {total_assets} capital assets and {len(inventory_items)} inventory supply items retrieved from MySQL `assets`, `inventory_items`, and `inventory_transactions`"
         )
 
         return {
@@ -522,6 +610,13 @@ class AssetsInventoryAnalyticsService:
             "total_current_value_kes": float(total_current_value),
             "status_counts": status_counts,
             "details_rows": details_rows,
+            "inventory_items_count": len(inventory_items),
+            "inventory_rows": inv_rows,
+            "total_inventory_units_combined": total_inv_units_combined,
+            "total_combined_units": total_inv_units_combined,
+            "total_inventory_units_issued": total_inv_units_issued,
+            "total_inventory_units_remaining": total_inv_units_remaining,
+            "total_inventory_valuation_kes": float(total_inv_firm_valuation),
             "standardized_report": standardized_report
         }
 

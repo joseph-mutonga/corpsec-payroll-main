@@ -18,7 +18,7 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "SYSTEM DATA ACCESS:\n"
     "You have full, direct, live access to all business subsystems in the MySQL database:\n"
     "- Payment Advances (salary advances, approved/deducted amounts, payment methods: M-Pesa, Cash, Bank, approval status).\n"
-    "- Assets & Inventory (equipment, communications radios, patrol vehicles, valuation, status: Allocated vs Available, assigned guards and sites).\n"
+    "- Assets & Inventory (firm equipment, communications radios, patrol vehicles, uniforms, caps, boots, raincoats, reflectors, flashlights, supplies, and warehouse store stocks).\n"
     "- Call Centre & Telephony (live call logs/CDRs, inbound/outbound calls, talk time, completed vs missed calls, phone numbers, agent availability status).\n"
     "- Client Sites & Invoices (invoices, billing totals, paid vs outstanding balances, 16% VAT, itemized guard charges, site details).\n"
     "- Client Contracts & MRR (active contracts, contracted guard quotas, monthly recurring revenue, client relationships).\n"
@@ -35,7 +35,10 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "   - NEVER confuse active registered guards (11) with physical attendance (4) or guards currently on duty (3).\n"
     "   - State the exact breakdown: Total registered guards, Active guards, Guards who clocked in, Guards who clocked out, Currently on duty, Absent guards.\n"
     "5. PAYMENT ADVANCES: When asked about salary or payment advances, provide exact verified figures (approved, deducted, pending, totals, and per-guard breakdown).\n"
-    "6. ASSETS & INVENTORY: When asked about assets or inventory, provide exact counts, valuation in KES, condition, and allocation status.\n"
+    "6. ASSETS, INVENTORY & UNIFORMS: When asked about assets, inventory, uniforms, supplies, or specific gear items (e.g. 'caps', 'boots', 'radios', 'raincoats'):\n"
+    "   - State the exact total count in the firm directly in the very first sentence (e.g. 'There are 205 caps in the firm: 75 issued/in use by guards and 130 remaining in store at the Kitengela warehouse.').\n"
+    "   - NEVER state 0 if the item is recorded in the Company Inventory & Uniform Stock Register.\n"
+    "   - Always provide the full breakdown: Total in firm (combined), Issued/in use by guards & staff, and Remaining in store/warehouse.\n"
     "7. CALL CENTRE: When asked about calls or call centre, report total CDRs, inbound vs outbound, total talk time, missed calls, and agent statuses.\n"
     "8. INVOICES & BILLING: When asked about invoices or billing, report total invoiced amount, total paid, outstanding balance, and 16% VAT.\n"
     "9. CONTRACTS & REVENUE: When asked about contracts or revenue, report active contracts count, Monthly Recurring Revenue (MRR), and required guard quotas.\n"
@@ -124,9 +127,47 @@ class GeminiAIService:
                 return std_adv
 
         # 5. Assets & Inventory queries -> return verified Assets & Inventory Report
-        asset_keywords = ["asset", "assets", "inventory", "equipment", "radio", "radios", "cctv", "camera", "vehicle", "demio", "allocation", "allocations"]
+        asset_keywords = [
+            "asset", "assets", "inventory", "stock", "equipment", "supplies", "gear",
+            "cap", "caps", "uniform", "uniforms", "boot", "boots", "jacket", "jackets",
+            "reflector", "reflectors", "flashlight", "flashlights", "torch", "raincoat", "raincoats",
+            "radio", "radios", "cctv", "camera", "vehicle", "demio", "allocation", "allocations"
+        ]
         if any(w in p_lower for w in asset_keywords):
+            inv_reg = telemetry.get("inventory_items_register", []) or telemetry.get("assets_inventory_analytics", {}).get("inventory_rows", [])
             std_ast = telemetry.get("standardized_assets_report")
+
+            # Check if user specifically asks about an inventory item (e.g. caps, boots, uniforms)
+            matched_item = None
+            for it in inv_reg:
+                it_name = it.get("item_name", "").lower()
+                it_code = it.get("item_code", "").lower()
+                if (it_name in p_lower or 
+                    it_code in p_lower or
+                    (it_name == "caps" and any(w in p_lower for w in ["cap", "caps"])) or
+                    (it_name == "combat security patrol boots" and any(w in p_lower for w in ["boot", "boots"])) or
+                    ("uniform" in it_name and "uniform" in p_lower)):
+                    matched_item = it
+                    break
+
+            if matched_item:
+                tot = matched_item.get("total_combined_stock", 0)
+                iss = matched_item.get("issued_stock", 0)
+                rem = matched_item.get("remaining_stock", 0)
+                loc = matched_item.get("storage_location", "Warehouse")
+                cost = matched_item.get("unit_cost_kes", 0.0)
+                val = matched_item.get("total_firm_valuation_kes", 0.0)
+                name = matched_item.get("item_name")
+                code = matched_item.get("item_code")
+                lead = (
+                    f"There are **{tot} {name}** in the firm in total (**{iss} issued / in use** by guards & staff, and **{rem} remaining in store** at {loc}).\n\n"
+                    f"- **SKU / Code:** `{code}`\n"
+                    f"- **Category:** {matched_item.get('category')}\n"
+                    f"- **Unit Cost:** KES {cost:,.2f}\n"
+                    f"- **Total Inventory Valuation:** KES {val:,.2f}\n\n"
+                )
+                return lead + (std_ast or "")
+
             if std_ast:
                 return std_ast
 
@@ -340,7 +381,7 @@ class GeminiAIService:
             )
 
         # 4. Assets & Inventory
-        if std_ast and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["asset", "assets", "inventory", "equipment", "radio", "vehicle", "allocation"])):
+        if std_ast and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["asset", "assets", "inventory", "stock", "equipment", "supplies", "gear", "uniform", "uniforms", "cap", "caps", "boot", "boots", "jacket", "reflector", "flashlight", "raincoat", "radio", "vehicle", "allocation"])):
             priority_blocks.append(
                 "======================================================================\n"
                 "VERIFIED REAL-TIME ERP ASSETS & INVENTORY REPORT\n"

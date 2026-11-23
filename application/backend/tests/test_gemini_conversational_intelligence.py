@@ -229,3 +229,30 @@ def test_contracts_analytics_and_fallback(db_session: Session):
     res = GeminiAIService.generate_grounded_fallback_analysis("What is our client contracts MRR and guard quotas?", t)
     assert "CLIENT CONTRACTS & REVENUE REPORT" in res
     assert "KES 350,000.00" in res
+
+
+def test_caps_and_uniforms_inventory_query(db_session: Session):
+    """
+    Verifies that querying for uniforms, caps, boots, and gear retrieves the exact
+    inventory item counts from inventory_items and inventory_transactions.
+    Specifically checks:
+    - Code 002 (caps): 205 total (75 issued / in use, 130 remaining in store).
+    """
+    ast = AssetsInventoryAnalyticsService.get_assets_report(db_session)
+    assert ast["inventory_items_count"] == 13
+    assert ast["total_combined_units"] > 0
+    assert "caps" in ast["standardized_report"].lower()
+    assert "205 COMBINED" in ast["standardized_report"] or "205" in ast["standardized_report"]
+
+    t = AITelemetryService.get_system_telemetry(
+        db_session,
+        user_query="how many caps in the firm",
+        category="WORKFORCE"
+    )
+    assert "inventory_items_register" in t
+    res = GeminiAIService.generate_grounded_fallback_analysis("how many caps in the firm", t)
+    assert "205" in res
+    assert "caps" in res.lower()
+    assert "75" in res
+    assert "130" in res
+
