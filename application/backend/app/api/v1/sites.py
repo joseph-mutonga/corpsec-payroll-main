@@ -27,11 +27,27 @@ def _format_site(site: Site) -> dict:
     if getattr(site, "super_guard", None):
         sup_guard_name = f"{site.super_guard.full_name} ({site.super_guard.employee_number})"
 
+    client_id = None
+    client_code = None
+    try:
+        from sqlalchemy.orm import object_session
+        s = object_session(site)
+        if s and site.client_name:
+            from application.backend.app.models.client_contract import Client
+            clt = s.query(Client).filter(Client.name == site.client_name).first()
+            if clt:
+                client_id = clt.id
+                client_code = clt.client_code
+    except Exception:
+        pass
+
     return {
         "id": site.id,
         "site_name": site.site_name,
         "location": site.location,
         "client_name": site.client_name,
+        "client_id": client_id,
+        "client_code": client_code,
         "region_id": site.region_id,
         "region_name": site.region.name if getattr(site, "region", None) else None,
         "supervisor_id": site.supervisor_id,
@@ -81,10 +97,27 @@ def create_client_site(
         if sg_guard:
             sg_guard.is_super_guard = True
 
+    from application.backend.app.models.client_contract import Client
+    resolved_client_name = payload.client_name
+    if payload.client_id:
+        clt = db.query(Client).filter(Client.id == payload.client_id).first()
+        if clt:
+            resolved_client_name = clt.name
+    elif payload.client_name:
+        clt = db.query(Client).filter(Client.name == payload.client_name).first()
+        if clt:
+            resolved_client_name = clt.name
+
+    if not resolved_client_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A client company must be selected or provided from Clients & Contracts."
+        )
+
     site = Site(
         site_name=payload.site_name,
         location=payload.location,
-        client_name=payload.client_name,
+        client_name=resolved_client_name,
         region_id=payload.region_id,
         supervisor_id=payload.supervisor_id,
         super_guard_id=payload.super_guard_id,
@@ -180,6 +213,19 @@ def update_site_rates(
         region = db.query(Region).filter(Region.id == update_data["region_id"]).first()
         if not region:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Region #{update_data['region_id']} not found")
+
+    if "client_id" in update_data and update_data["client_id"]:
+        from application.backend.app.models.client_contract import Client
+        clt = db.query(Client).filter(Client.id == update_data["client_id"]).first()
+        if clt:
+            site.client_name = clt.name
+    elif "client_name" in update_data and update_data["client_name"]:
+        from application.backend.app.models.client_contract import Client
+        clt = db.query(Client).filter(Client.name == update_data["client_name"]).first()
+        if clt:
+            site.client_name = clt.name
+        else:
+            site.client_name = update_data["client_name"]
 
     old_supervisor_id = site.supervisor_id
     new_supervisor_id = update_data.get("supervisor_id") if "supervisor_id" in update_data else old_supervisor_id

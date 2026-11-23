@@ -2527,7 +2527,7 @@ async function loadSites() {
           tr.innerHTML = `
             <td><b>${s.site_name}</b></td>
             <td>${regName}</td>
-            <td>${s.client_name}</td>
+            <td>${s.client_code ? `<span class="badge" style="background:#EEF2FF; color:#4F46E5; font-size:10px; margin-right:4px;">${escapeHtml(s.client_code)}</span>` : ''}${escapeHtml(s.client_name)}</td>
             <td>${s.location}</td>
             <td>${supBadge}</td>
             <td>${basicSal}</td>
@@ -4731,62 +4731,7 @@ window.closeExportReturnsModal = closeExportReturnsModal;
 
 /* Add Guard / Site / Bulk Salary / Anomaly Scan Handlers */
 // Note: openAddGuardModal and handleAddGuardSubmit are defined with full auto-increment support at line 5955+
-
-function openAddSiteModal() {
-  const modal = document.getElementById('modal-add-site');
-  if (modal) modal.style.display = 'flex';
-}
-function closeAddSiteModal() {
-  const modal = document.getElementById('modal-add-site');
-  if (modal) modal.style.display = 'none';
-}
-async function handleAddSiteSubmit(e) {
-  e.preventDefault();
-  const submitBtn = e.target.querySelector('button[type="submit"]');
-  const originalText = submitBtn ? submitBtn.innerText : '';
-  if (submitBtn) {
-    submitBtn.innerText = '⏳ Creating Site...';
-    submitBtn.disabled = true;
-  }
-
-  const siteName = document.getElementById('new-site-name')?.value?.trim() || '';
-  const clientName = document.getElementById('new-site-client')?.value?.trim() || '';
-  const location = document.getElementById('new-site-location')?.value?.trim() || '';
-  const dailyRate = parseFloat(document.getElementById('new-site-rate')?.value || '1200');
-
-  try {
-    const res = await apiFetch('/sites', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        site_name: siteName,
-        client_name: clientName,
-        location: location,
-        daily_rate: dailyRate,
-        night_allowance: 200.0,
-        transport_allowance: 150.0,
-        housing_allowance: 300.0
-      })
-    });
-
-    if (res.ok) {
-      const newSite = await res.json();
-      showToast(`Client Site '${newSite.site_name}' created successfully!`, 'success');
-      closeAddSiteModal();
-      loadSites();
-    } else {
-      const errData = await res.json();
-      showToast('Failed to create site: ' + (errData.detail || 'Error'), 'danger');
-    }
-  } catch (err) {
-    showToast('Error creating site: ' + err.message, 'danger');
-  } finally {
-    if (submitBtn) {
-      submitBtn.innerText = originalText;
-      submitBtn.disabled = false;
-    }
-  }
-}
+// Note: openAddSiteModal, closeAddSiteModal, and handleAddSiteSubmit are defined with Clients & Contracts dropdown integration at line 6250+
 
 function openBulkSalaryModal() {
   const modal = document.getElementById('modal-bulk-salary');
@@ -4823,6 +4768,8 @@ async function runPrePayrollAnomalyScan() {
 window.openAddGuardModal = openAddGuardModal;
 window.closeAddGuardModal = closeAddGuardModal;
 window.handleAddGuardSubmit = handleAddGuardSubmit;
+window.loadClientsForSiteDropdown = loadClientsForSiteDropdown;
+window.handleNewSiteClientChange = handleNewSiteClientChange;
 window.openAddSiteModal = openAddSiteModal;
 window.closeAddSiteModal = closeAddSiteModal;
 window.handleAddSiteSubmit = handleAddSiteSubmit;
@@ -6254,8 +6201,58 @@ async function loadRegions() {
   }
 }
 
+// --- Client Company Retrieval from Clients & Contracts for Sites ---
+async function loadClientsForSiteDropdown(selectElId, selectedClientName = '') {
+  const sel = document.getElementById(selectElId);
+  if (!sel) return;
+
+  try {
+    if (!cachedClients || cachedClients.length === 0) {
+      const res = await apiFetch('/clients');
+      if (res.ok) {
+        cachedClients = await res.json();
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load clients for site dropdown:', err);
+  }
+
+  const clients = Array.isArray(cachedClients) ? cachedClients : [];
+  if (clients.length === 0) {
+    sel.innerHTML = '<option value="">⚠️ No clients found — Register in Clients & Contracts first</option>';
+    return;
+  }
+
+  let optionsHtml = '<option value="">-- Select Client Organization from Clients & Contracts --</option>';
+  let foundSelected = false;
+
+  clients.forEach(c => {
+    const isSel = selectedClientName && (c.name.trim().toLowerCase() === selectedClientName.trim().toLowerCase());
+    if (isSel) foundSelected = true;
+    optionsHtml += `<option value="${escapeHtml(c.name)}" ${isSel ? 'selected' : ''}>🏢 ${escapeHtml(c.name)} (${escapeHtml(c.client_code || 'CLT')})</option>`;
+  });
+
+  if (selectedClientName && !foundSelected) {
+    optionsHtml += `<option value="${escapeHtml(selectedClientName)}" selected>🏢 ${escapeHtml(selectedClientName)} (Legacy / Custom Name)</option>`;
+  }
+
+  sel.innerHTML = optionsHtml;
+}
+
+function handleNewSiteClientChange(e) {
+  const selectedName = e.target.value;
+  if (!selectedName || !cachedClients) return;
+  const client = cachedClients.find(c => c.name.toLowerCase() === selectedName.toLowerCase());
+  if (client) {
+    const locInput = document.getElementById('new-site-location');
+    if (locInput && !locInput.value.trim()) {
+      locInput.value = client.physical_address || client.city || '';
+    }
+  }
+}
+
 // --- Site Management Updates & Edit Functionality ---
-async function openAddSiteModal() {
+async function openAddSiteModal(presetClientName = '') {
   await loadRegions();
   try {
     if (!supervisorsCache || supervisorsCache.length === 0) {
@@ -6277,6 +6274,9 @@ async function openAddSiteModal() {
     sgSelect.innerHTML = '<option value="">No Super Guard (Unassigned)</option>' +
       guards.map(g => `<option value="${g.id}">🛡️ ${g.full_name} (${g.employee_number})</option>`).join('');
   }
+
+  // Retrieve client companies directly from Clients & Contracts module
+  await loadClientsForSiteDropdown('new-site-client', presetClientName);
 
   const modal = document.getElementById('modal-add-site');
   if (modal) modal.style.display = 'flex';
@@ -6361,7 +6361,7 @@ async function openEditSiteModal(siteId) {
     // Populate Fields
     document.getElementById('edit-site-id').value = site.id;
     document.getElementById('edit-site-name').value = site.site_name || '';
-    document.getElementById('edit-site-client').value = site.client_name || '';
+    await loadClientsForSiteDropdown('edit-site-client', site.client_name || '');
     document.getElementById('edit-site-location').value = site.location || '';
     document.getElementById('edit-site-basic-salary').value = site.basic_salary || 15000;
     document.getElementById('edit-site-daily-rate').value = site.daily_rate || 1200;
@@ -10547,6 +10547,7 @@ async function viewClientProfile(clientId) {
     if (!res.ok) throw new Error(data.detail || 'Failed to load profile');
 
     const client = data.client;
+    window.currentViewingClientName = client.name;
     document.getElementById('cp-name').innerText = client.name;
     document.getElementById('cp-badge-type').innerText = client.client_type;
     document.getElementById('cp-subinfo').innerText = `ID: ${client.client_code} | PIN: ${client.tax_pin || 'N/A'}`;

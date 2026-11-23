@@ -6998,10 +6998,14 @@
             </select>
           </div>
           <div>
-            <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Client Company
-              Name</label>
-            <input type="text" id="new-site-client" class="form-control" required
-              placeholder="e.g. Karen Commercial Ltd">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="font-size:12px; font-weight:700; color:#334155;">Client Company Organization *</label>
+              <a href="javascript:void(0)" onclick="closeAddSiteModal(); openRegisterClientModal();" style="font-size:11px; color:#4F46E5; text-decoration:none; font-weight:600;">+ Register Client</a>
+            </div>
+            <select id="new-site-client" class="form-control" required style="width:100%;" onchange="handleNewSiteClientChange(event)">
+              <option value="">Loading client companies from Clients & Contracts...</option>
+            </select>
+            <small style="color:#64748B; font-size:11px; margin-top:2px; display:block;">Retrieved from Clients & Contracts registry to ensure site is attached to the client company.</small>
           </div>
           <div>
             <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Location</label>
@@ -8351,10 +8355,13 @@
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
             <div>
-              <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Client
-                Company Name *</label>
-              <input type="text" id="edit-site-client" class="form-control" required
-                placeholder="e.g. Karen Commercial Ltd">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label style="font-size:12px; font-weight:700; color:#334155;">Client Company Organization *</label>
+                <a href="javascript:void(0)" onclick="closeEditSiteModal(); openRegisterClientModal();" style="font-size:11px; color:#4F46E5; text-decoration:none; font-weight:600;">+ Register Client</a>
+              </div>
+              <select id="edit-site-client" class="form-control" required style="width:100%;">
+                <option value="">Loading client companies from Clients & Contracts...</option>
+              </select>
             </div>
             <div>
               <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Location
@@ -9621,8 +9628,10 @@
 
         <!-- Linked Client Sites Section -->
         <div style="margin-bottom:20px;">
-          <h4 style="font-size:14px; font-weight:800; color:#0F172A; margin:0 0 10px 0;">📍 Client Sites & Deployed
-            Posts</h4>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h4 style="font-size:14px; font-weight:800; color:#0F172A; margin:0;">📍 Client Sites & Deployed Posts</h4>
+            <button type="button" class="btn btn-sm btn-primary" style="font-size:11px; padding:3px 10px;" onclick="closeClientProfileModal(); openAddSiteModal(window.currentViewingClientName || '')">+ Attach New Site</button>
+          </div>
           <div style="border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
             <table style="width:100%; border-collapse:collapse; font-size:12px;">
               <thead style="background:#F8FAFC; border-bottom:1px solid #E2E8F0;">

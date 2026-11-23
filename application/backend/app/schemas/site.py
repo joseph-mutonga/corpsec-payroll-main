@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field, ConfigDict
 class SiteCreate(BaseModel):
     site_name: str = Field(..., min_length=2)
     location: str
-    client_name: str
+    client_name: Optional[str] = None
+    client_id: Optional[int] = None
     region_id: Optional[int] = None
     supervisor_id: Optional[int] = None
     super_guard_id: Optional[int] = None
@@ -24,6 +25,7 @@ class SiteUpdate(BaseModel):
     site_name: Optional[str] = None
     location: Optional[str] = None
     client_name: Optional[str] = None
+    client_id: Optional[int] = None
     region_id: Optional[int] = None
     supervisor_id: Optional[int] = None
     super_guard_id: Optional[int] = None
@@ -63,6 +65,8 @@ class SiteResponse(BaseModel):
     site_name: str
     location: str
     client_name: str
+    client_id: Optional[int] = None
+    client_code: Optional[str] = None
     region_id: Optional[int] = None
     region_name: Optional[str] = None
     supervisor_id: Optional[int] = None
