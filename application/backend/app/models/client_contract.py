@@ -62,6 +62,8 @@ class ClientContract(Base):
     contract_manager_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     special_terms = Column(Text, nullable=True)
     document_url = Column(String(255), nullable=True)
+    document_name = Column(String(255), nullable=True)
+    document_size = Column(Integer, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)

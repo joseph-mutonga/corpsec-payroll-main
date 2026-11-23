@@ -10368,6 +10368,25 @@ function renderClientsTable(clients) {
         <td>${escapeHtml(c.city || 'Nairobi')}</td>
         <td style="text-align:center;"><span class="badge" style="background:#EFF6FF; color:#2563EB;">${c.active_contracts_count || 0}</span></td>
         <td style="text-align:center;">${badge}</td>
+        <td style="text-align:center; white-space:nowrap;">
+          ${c.document_url ? `
+            <div style="display:inline-flex; align-items:center; gap:3px;">
+              <button type="button" class="btn btn-sm" style="background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0; font-size:11px; padding:3px 8px; border-radius:6px; cursor:pointer;" onclick="openContractDocumentModal('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}', '${escapeHtml(c.title)}', '${escapeHtml(c.client_name || '')}', '${escapeHtml(c.document_url)}', '${escapeHtml(c.document_name || '')}')">
+                📄 View PDF
+              </button>
+              <a href="${c.document_url}?download=true${authToken ? `&token=${encodeURIComponent(authToken)}` : ''}" class="btn btn-sm" style="background:#F1F5F9; color:#475569; border:1px solid #CBD5E1; font-size:11px; padding:3px 6px; border-radius:6px; text-decoration:none;" title="Download PDF proof" download>
+                ⬇️
+              </a>
+              <button type="button" class="btn btn-sm" style="background:transparent; color:#64748B; border:none; font-size:11px; padding:3px 4px; cursor:pointer;" title="Upload replacement PDF" onclick="triggerContractUpload('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}')">
+                🔄
+              </button>
+            </div>
+          ` : `
+            <button type="button" class="btn btn-sm" style="background:#FFFBEB; color:#B45309; border:1px dashed #FCD34D; font-size:11px; padding:3px 8px; border-radius:6px; cursor:pointer;" onclick="triggerContractUpload('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}')">
+              📤 Upload PDF
+            </button>
+          `}
+        </td>
         <td style="text-align:right; white-space:nowrap;">
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="viewClientProfile('${c.id}')">👤 Profile</button>
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditClientModal('${c.id}')">✏️ Edit</button>
@@ -10414,6 +10433,25 @@ function renderContractsTable(contracts) {
         <td style="text-align:center; font-weight:700;">${c.guards_required || 0}</td>
         <td style="text-align:center;"><span class="badge" style="background:#F8FAFC; border:1px solid #CBD5E1;">v${c.version || 1}</span></td>
         <td style="text-align:center;">${badge}</td>
+        <td style="text-align:center; white-space:nowrap;">
+          ${c.document_url ? `
+            <div style="display:inline-flex; align-items:center; gap:3px;">
+              <button type="button" class="btn btn-sm" style="background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0; font-size:11px; padding:3px 8px; border-radius:6px; cursor:pointer;" onclick="openContractDocumentModal('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}', '${escapeHtml(c.title)}', '${escapeHtml(c.client_name || '')}', '${escapeHtml(c.document_url)}', '${escapeHtml(c.document_name || '')}')">
+                📄 View PDF
+              </button>
+              <a href="${c.document_url}?download=true${authToken ? `&token=${encodeURIComponent(authToken)}` : ''}" class="btn btn-sm" style="background:#F1F5F9; color:#475569; border:1px solid #CBD5E1; font-size:11px; padding:3px 6px; border-radius:6px; text-decoration:none;" title="Download PDF proof" download>
+                ⬇️
+              </a>
+              <button type="button" class="btn btn-sm" style="background:transparent; color:#64748B; border:none; font-size:11px; padding:3px 4px; cursor:pointer;" title="Upload replacement PDF" onclick="triggerContractUpload('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}')">
+                🔄
+              </button>
+            </div>
+          ` : `
+            <button type="button" class="btn btn-sm" style="background:#FFFBEB; color:#B45309; border:1px dashed #FCD34D; font-size:11px; padding:3px 8px; border-radius:6px; cursor:pointer;" onclick="triggerContractUpload('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}')">
+              📤 Upload PDF
+            </button>
+          `}
+        </td>
         <td style="text-align:right; white-space:nowrap;">
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditContractModal('${c.id}')">✏️ Edit</button>
           ${c.status !== 'RENEWED' ? `<button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openRenewContractModal('${c.id}')">🔄 Renew</button>` : '<span style="font-size:11px; color:#64748B; margin-right:4px;">Superseded</span>'}
@@ -10532,16 +10570,32 @@ async function viewClientProfile(clientId) {
     const cBody = document.getElementById('cp-contracts-body');
     if (cBody) {
       if (!data.contracts || data.contracts.length === 0) {
-        cBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:16px; color:#94A3B8;">No contracts registered for this client.</td></tr>';
+        cBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:16px; color:#94A3B8;">No contracts registered for this client.</td></tr>';
       } else {
         cBody.innerHTML = data.contracts.map(c => `
           <tr>
-            <td><strong>${escapeHtml(c.contract_reference)}</strong><div style="font-size:11px; color:#64748B;">${escapeHtml(c.title)}</div></td>
+            <td><strong>${escapeHtml(c.contract_reference || c.contract_ref)}</strong><div style="font-size:11px; color:#64748B;">${escapeHtml(c.title)}</div></td>
             <td>${c.start_date} to ${c.end_date}</td>
             <td style="text-align:right; font-weight:700;">KES ${(Number(c.monthly_service_charge) || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
             <td style="text-align:center;">${c.guards_required || 0}</td>
             <td style="text-align:center;">v${c.version || 1}</td>
             <td style="text-align:center;"><span class="badge">${c.status}</span></td>
+            <td style="text-align:center; white-space:nowrap;">
+              ${c.document_url ? `
+                <div style="display:inline-flex; align-items:center; gap:2px;">
+                  <button type="button" class="btn btn-sm" style="background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0; font-size:10px; padding:2px 7px; border-radius:4px; cursor:pointer;" onclick="openContractDocumentModal('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}', '${escapeHtml(c.title)}', '${escapeHtml(client.name || '')}', '${escapeHtml(c.document_url)}', '${escapeHtml(c.document_name || '')}')">
+                    📄 View PDF
+                  </button>
+                  <a href="${c.document_url}?download=true${authToken ? `&token=${encodeURIComponent(authToken)}` : ''}" class="btn btn-sm" style="background:#F1F5F9; color:#475569; border:1px solid #CBD5E1; font-size:10px; padding:2px 5px; border-radius:4px; text-decoration:none;" title="Download PDF proof" download>
+                    ⬇️
+                  </a>
+                </div>
+              ` : `
+                <button type="button" class="btn btn-sm" style="background:#FFFBEB; color:#B45309; border:1px dashed #FCD34D; font-size:10px; padding:2px 7px; border-radius:4px; cursor:pointer;" onclick="triggerContractUpload('${c.id}', '${escapeHtml(c.contract_reference || c.contract_ref)}')">
+                  📤 Upload PDF
+                </button>
+              `}
+            </td>
             <td style="text-align:right;">
               ${c.status !== 'RENEWED' ? `<button class="btn btn-secondary" style="font-size:10px; padding:2px 6px;" onclick="closeClientProfileModal(); openRenewContractModal('${c.id}');">Renew</button>` : ''}
             </td>
@@ -10633,6 +10687,22 @@ async function handleCreateContractSubmit(e) {
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed to create contract');
+
+    const fileInput = document.getElementById('contract-create-document');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        await fetch(`${API_BASE}/clients/contracts/${data.id}/upload-document`, {
+          method: 'POST',
+          headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+          body: formData
+        });
+      } catch (uploadErr) {
+        console.warn('Contract document proof upload failed:', uploadErr);
+      }
+    }
 
     showToast('Contract SLA created successfully!', 'success');
     closeCreateContractModal();
@@ -11608,6 +11678,32 @@ function openEditContractModal(contractId) {
   document.getElementById('contract-edit-status').value = ctr.status || 'ACTIVE';
   document.getElementById('contract-edit-conditions').value = ctr.special_terms_and_conditions || '';
 
+  const statusEl = document.getElementById('contract-edit-doc-status');
+  const fileInput = document.getElementById('contract-edit-document');
+  if (fileInput) fileInput.value = '';
+  if (statusEl) {
+    if (ctr.document_url) {
+      statusEl.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; background:#F0FDF4; border:1px solid #86EFAC; padding:6px 10px; border-radius:6px; color:#166534;">
+          <span style="font-weight:600; display:flex; align-items:center; gap:6px;">
+            📄 ${escapeHtml(ctr.document_name || 'Signed_Contract.pdf')}
+            ${ctr.document_size ? `<small style="color:#15803D;">(${(ctr.document_size / 1024).toFixed(1)} KB)</small>` : ''}
+          </span>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn btn-sm" style="background:#DCFCE7; color:#15803D; border:none; padding:2px 8px; font-size:11px; cursor:pointer;" onclick="openContractDocumentModal('${ctr.id}', '${escapeHtml(ctr.contract_reference || '')}', '${escapeHtml(ctr.title || '')}', '${escapeHtml(ctr.client_name || '')}', '${ctr.document_url}', '${escapeHtml(ctr.document_name || '')}')">Preview</button>
+            <a href="${ctr.document_url}?download=true${authToken ? '&token=' + encodeURIComponent(authToken) : ''}" target="_blank" download class="btn btn-sm" style="background:#E2E8F0; color:#334155; border:none; padding:2px 8px; font-size:11px; text-decoration:none;">Download</a>
+          </div>
+        </div>
+      `;
+    } else {
+      statusEl.innerHTML = `
+        <div style="background:#FFFBEB; border:1px dashed #FCD34D; padding:6px 10px; border-radius:6px; color:#B45309;">
+          ⚠️ No signed contract PDF proof uploaded yet. Select a PDF file below to attach it.
+        </div>
+      `;
+    }
+  }
+
   const m = document.getElementById('modal-edit-contract');
   if (m) m.style.display = 'flex';
 }
@@ -11648,6 +11744,22 @@ async function handleEditContractSubmit(e) {
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed to update contract');
+
+    const fileInput = document.getElementById('contract-edit-document');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        await fetch(`${API_BASE}/clients/contracts/${contractId}/upload-document`, {
+          method: 'POST',
+          headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+          body: formData
+        });
+      } catch (uploadErr) {
+        console.warn('Contract document proof upload failed:', uploadErr);
+      }
+    }
 
     showToast('Contract SLA updated successfully!', 'success');
     closeEditContractModal();
@@ -12001,6 +12113,84 @@ window.openEditContractModal = openEditContractModal;
 window.closeEditContractModal = closeEditContractModal;
 window.handleEditContractSubmit = handleEditContractSubmit;
 window.deleteContract = deleteContract;
+
+// --- Contract PDF Proof Helpers ---
+window.currentUploadingContractId = null;
+window.currentUploadingContractRef = null;
+
+function triggerContractUpload(contractId, contractRef) {
+  window.currentUploadingContractId = contractId;
+  window.currentUploadingContractRef = contractRef;
+  const input = document.getElementById('contract-pdf-quick-upload');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+async function handleContractQuickFileSelected(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file || !window.currentUploadingContractId) return;
+  const contractId = window.currentUploadingContractId;
+  const contractRef = window.currentUploadingContractRef || `Contract #${contractId}`;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    showToast(`Uploading PDF proof for ${contractRef}...`, 'info');
+    const res = await fetch(`${API_BASE}/clients/contracts/${contractId}/upload-document`, {
+      method: 'POST',
+      headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+      body: formData
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Upload failed');
+    }
+    showToast(`Contract proof PDF uploaded successfully for ${contractRef}! 📄`, 'success');
+    loadClients();
+    if (typeof currentViewingClientId !== 'undefined' && currentViewingClientId) {
+      viewClientProfile(currentViewingClientId);
+    }
+  } catch (err) {
+    showToast('Failed to upload contract proof: ' + err.message, 'danger');
+  }
+}
+
+function openContractDocumentModal(id, ref, title, clientName, url, filename) {
+  const modal = document.getElementById('modal-contract-document-viewer');
+  const iframe = document.getElementById('contract-doc-modal-iframe');
+  const titleEl = document.getElementById('contract-doc-modal-title');
+  const subEl = document.getElementById('contract-doc-modal-sub');
+  const dlBtn = document.getElementById('contract-doc-modal-download-btn');
+  if (!modal) return;
+
+  const authSuffix = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+  const fullUrl = `${url}?t=${Date.now()}${authSuffix}`;
+
+  if (iframe) iframe.src = fullUrl;
+  if (titleEl) titleEl.innerText = title || 'Contract Proof Document';
+  if (subEl) subEl.innerText = `Ref: ${ref || ('CTR-' + id)} • ${clientName || 'Client'} • ${filename || 'Signed PDF'}`;
+  if (dlBtn) {
+    dlBtn.href = `${url}?download=true${authSuffix}`;
+    dlBtn.setAttribute('download', filename || `Contract_${ref || id}_Proof.pdf`);
+  }
+  modal.style.display = 'flex';
+}
+
+function closeContractDocumentModal() {
+  const modal = document.getElementById('modal-contract-document-viewer');
+  const iframe = document.getElementById('contract-doc-modal-iframe');
+  if (iframe) iframe.src = 'about:blank';
+  if (modal) modal.style.display = 'none';
+}
+
+window.triggerContractUpload = triggerContractUpload;
+window.handleContractQuickFileSelected = handleContractQuickFileSelected;
+window.openContractDocumentModal = openContractDocumentModal;
+window.closeContractDocumentModal = closeContractDocumentModal;
+
 
 window.openEditAssetModal = openEditAssetModal;
 window.closeEditAssetModal = closeEditAssetModal;

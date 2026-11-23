@@ -135,6 +135,8 @@ class ClientContractBase(BaseModel):
     status: str = "ACTIVE"  # DRAFT, PENDING_APPROVAL, ACTIVE, EXPIRING_SOON, EXPIRED, RENEWED, SUSPENDED, TERMINATED
     special_terms: Optional[str] = None
     document_url: Optional[str] = None
+    document_name: Optional[str] = None
+    document_size: Optional[int] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -170,6 +172,8 @@ class ClientContractUpdate(BaseModel):
     status: Optional[str] = None
     special_terms: Optional[str] = None
     document_url: Optional[str] = None
+    document_name: Optional[str] = None
+    document_size: Optional[int] = None
 
     @model_validator(mode="before")
     @classmethod

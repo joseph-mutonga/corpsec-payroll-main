@@ -1,9 +1,12 @@
 import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import os
+import mimetypes
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin_or_hr
+from application.backend.app.api.deps import get_db, require_admin_or_hr, get_current_user
 from application.backend.app.models.user import User
 from application.backend.app.models.site import Site
 from application.backend.app.models.guard import Guard
@@ -17,6 +20,9 @@ from application.backend.app.schemas.client_contract import (
 )
 
 router = APIRouter(prefix="/clients", tags=["Clients & Contract Management"])
+
+CONTRACTS_UPLOAD_DIR = os.path.join(os.getcwd(), "uploads", "client_contracts")
+os.makedirs(CONTRACTS_UPLOAD_DIR, exist_ok=True)
 
 
 def generate_next_client_code(db: Session) -> str:
@@ -330,6 +336,8 @@ def create_client_contract(payload: ClientContractCreate, db: Session = Depends(
         status=payload.status.upper(),
         special_terms=payload.special_terms,
         document_url=payload.document_url,
+        document_name=payload.document_name,
+        document_size=payload.document_size,
         contract_manager_user_id=current_user.id
     )
     db.add(ctr)
@@ -476,4 +484,120 @@ def delete_contract(contract_id: int, db: Session = Depends(get_db), current_use
     db.delete(ctr)
     db.commit()
     return {"message": f"Contract {ref} deleted successfully"}
+
+
+@router.post("/contracts/{contract_id}/upload-document", response_model=ClientContractResponse)
+async def upload_contract_document(
+    contract_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """
+    Upload signed contract SLA proof (PDF, DOCX, scan) for a contract.
+    Persisted to uploads/client_contracts/ and accessible in client profile.
+    """
+    ctr = db.query(ClientContract).filter(ClientContract.id == contract_id).first()
+    if not ctr:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="A valid file must be uploaded")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"]:
+        raise HTTPException(status_code=400, detail="Only PDF and image/document files are accepted for contract proof.")
+
+    now_ts = int(datetime.datetime.now().timestamp())
+    safe_filename = "".join(c for c in file.filename if c.isalnum() or c in "._- ")
+    stored_filename = f"CTR_{ctr.id}_{now_ts}_{safe_filename}"
+    file_path = os.path.join(CONTRACTS_UPLOAD_DIR, stored_filename)
+
+    content = await file.read()
+    with open(file_path, "wb") as buffer:
+        buffer.write(content)
+
+    ctr.document_url = f"/api/v1/clients/contracts/{contract_id}/document"
+    ctr.document_name = file.filename
+    ctr.document_size = len(content)
+    ctr.updated_at = datetime.datetime.now()
+    db.commit()
+    db.refresh(ctr)
+
+    try:
+        db.add(AuditLog(
+            user_id=current_user.id,
+            action="UPLOAD_CONTRACT_DOCUMENT",
+            details=f"Uploaded contract proof '{file.filename}' ({len(content)} bytes) for {ctr.contract_ref}"
+        ))
+        db.commit()
+    except Exception:
+        pass
+
+    res = ClientContractResponse.model_validate(ctr)
+    res.client_name = ctr.client.name if ctr.client else None
+    return res
+
+
+@router.get("/contracts/{contract_id}/document")
+def get_contract_document(
+    contract_id: int,
+    download: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Serves the contract proof PDF securely for inline viewing or download.
+    """
+    ctr = db.query(ClientContract).filter(ClientContract.id == contract_id).first()
+    if not ctr:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    matching_files = [f for f in os.listdir(CONTRACTS_UPLOAD_DIR) if f.startswith(f"CTR_{ctr.id}_")]
+    if not matching_files:
+        raise HTTPException(status_code=404, detail="Contract document file not found on server")
+
+    file_name = sorted(matching_files)[-1]
+    file_path = os.path.join(CONTRACTS_UPLOAD_DIR, file_name)
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        mime_type = "application/pdf" if file_path.lower().endswith(".pdf") else "application/octet-stream"
+
+    download_name = ctr.document_name or file_name
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        path=file_path,
+        media_type=mime_type,
+        filename=download_name,
+        headers={"Content-Disposition": f'{disposition}; filename="{download_name}"'}
+    )
+
+
+@router.delete("/contracts/{contract_id}/document")
+def delete_contract_document(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_hr)
+):
+    """
+    Deletes the uploaded contract proof document.
+    """
+    ctr = db.query(ClientContract).filter(ClientContract.id == contract_id).first()
+    if not ctr:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    matching_files = [f for f in os.listdir(CONTRACTS_UPLOAD_DIR) if f.startswith(f"CTR_{ctr.id}_")]
+    for f in matching_files:
+        try:
+            os.remove(os.path.join(CONTRACTS_UPLOAD_DIR, f))
+        except Exception:
+            pass
+
+    ctr.document_url = None
+    ctr.document_name = None
+    ctr.document_size = None
+    ctr.updated_at = datetime.datetime.now()
+    db.commit()
+    return {"status": "success", "message": "Contract document proof removed successfully"}
+
 
