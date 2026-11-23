@@ -158,7 +158,28 @@ def classify_user_query(prompt: Optional[str]) -> str:
     if any(h in p for h in host_terms) and not any(w in p for w in business_entities):
         return QuestionCategory.SIMPLE
 
-    # 3. Security Workforce, Attendance & Inventory Operations
+    # 3. Payroll & Statutory Deductions (Checked before workforce so "guard salary" or "guard overtime" routes to payroll)
+    payroll_terms = [
+        "payroll", "salary", "salaries", "pay", "payslip", "advance", "advances",
+        "nssf", "shif", "nhif", "housing levy", "levy", "tax", "paye", "relief",
+        "personal relief", "deduction", "deductions", "gross pay", "net pay",
+        "disbursement", "remittance", "statutory", "allowance", "overtime pay",
+        "overtime", "basic salary", "effective salary", "salary advance"
+    ]
+    if any(w in p for w in payroll_terms) or bool(re.search(r"\bot\b", p)):
+        return QuestionCategory.PAYROLL
+
+    # 4. Management, Commercial Financials, Invoices, Contracts, Expenses & Petty Cash (Checked before workforce so "site invoices" routes to management)
+    mgmt_terms = [
+        "mrr", "revenue", "monthly recurring revenue", "contract", "contracts",
+        "client", "clients", "invoice", "invoices", "billing", "profit",
+        "expense", "expenses", "petty cash", "expenditure", "spending", "outflow",
+        "float balance", "director", "commercial", "turnover"
+    ]
+    if any(w in p for w in mgmt_terms):
+        return QuestionCategory.MANAGEMENT
+
+    # 5. Security Workforce, Attendance & Inventory Operations
     workforce_terms = [
         "guard", "guards", "supervisor", "supervisors", "shift", "shifts",
         "roster", "attendance", "clock in", "clock-in", "clock out", "clock-out",
@@ -172,27 +193,6 @@ def classify_user_query(prompt: Optional[str]) -> str:
     ]
     if any(w in p for w in workforce_terms):
         return QuestionCategory.WORKFORCE
-
-    # 4. Management, Commercial Financials, Expenses & Petty Cash
-    mgmt_terms = [
-        "mrr", "revenue", "monthly recurring revenue", "contract", "contracts",
-        "client", "clients", "invoice", "invoices", "billing", "profit",
-        "expense", "expenses", "petty cash", "expenditure", "spending", "outflow",
-        "float balance", "director", "commercial", "turnover"
-    ]
-    if any(w in p for w in mgmt_terms):
-        return QuestionCategory.MANAGEMENT
-
-    # 5. Payroll & Statutory Deductions
-    payroll_terms = [
-        "payroll", "salary", "salaries", "pay", "payslip", "advance", "advances",
-        "nssf", "shif", "nhif", "housing levy", "levy", "tax", "paye", "relief",
-        "personal relief", "deduction", "deductions", "gross pay", "net pay",
-        "disbursement", "remittance", "statutory", "allowance", "overtime pay",
-        "overtime", "basic salary", "effective salary", "salary advance"
-    ]
-    if any(w in p for w in payroll_terms) or bool(re.search(r"\bot\b", p)):
-        return QuestionCategory.PAYROLL
 
     # 6. Default to Complex Analytical
     return QuestionCategory.COMPLEX
