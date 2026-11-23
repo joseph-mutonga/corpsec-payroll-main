@@ -538,52 +538,126 @@
         return `<div class="ai-alert ai-alert-tip"><span class="ai-alert-icon">💡</span><div>${clean}</div></div>`;
       });
 
-      // 3. Fenced Code Blocks (```lang ... ```)
+      // 3. Fenced Code Blocks (```lang ... ```) - extract early to preserve code
+      const codeBlocks = [];
       md = md.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
-        return `<pre class="ai-code-block"><code>${code.trim()}</code></pre>`;
+        const placeholder = `%%AI_CODE_BLOCK_${codeBlocks.length}%%`;
+        codeBlocks.push(`<pre class="ai-code-block"><code>${code.trim()}</code></pre>`);
+        return placeholder;
       });
 
-      // 4. Inline code (`code`)
+      // 4. Pre-process Table formatting & un-wrap backticks around table rows
+      md = md.replace(/^`+(\|[^\n]+)`+$/gm, '$1');
+      md = md.replace(/`(\|[^\n`]+\|)`/g, '$1');
+      md = md.replace(/^`+\s*(\|.*\|)\s*`+$/gm, '$1');
+
+      // 5. Section Titles Normalization (e.g. LLM omitted `###` prefix)
+      md = md.replace(/^([A-Z][A-Z0-9\s&/—–():-]{3,40})$/gm, (match, title) => {
+        const t = title.trim();
+        if (/^(ATTENDANCE REPORT|ATTENDANCE DETAILS|DATABASE VERIFICATION|OVERTIME RECONCILIATION|SALARY ADVANCES REPORT|PAYMENT ADVANCES REPORT|EXPENSES REPORT|ASSETS & INVENTORY REPORT|CLIENT INVOICES REPORT|CALL CENTRE REPORT)$/i.test(t)) {
+          return `### ${t}`;
+        }
+        return match;
+      });
+
+      // 6. Convert unpiped multi-column table headers (spaces/tabs separated) followed by pipe row
+      md = md.replace(/^([A-Za-z0-9][A-Za-z0-9 \t()\/#_-]{2,}?(?: {2,}|\t)[A-Za-z0-9 \t()\/#_-]+)[ \t]*\r?\n+[ \t]*(\|[^\n]+\|)/gm, (match, headerLine, firstPipe) => {
+        const cols = headerLine.split(/ {2,}|\t/).map(c => c.trim()).filter(Boolean);
+        if (cols.length >= 2) {
+          const pipeHeader = '| ' + cols.join(' | ') + ' |';
+          const pipeDelim = '| ' + cols.map(() => ':---').join(' | ') + ' |';
+          return `${pipeHeader}\n${pipeDelim}\n${firstPipe}`;
+        }
+        return match;
+      });
+
+      // 7. Markdown Tables (Parsed BEFORE inline code backticks)
+      const isDelimiterRow = (line) => /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(line.trim());
+      const cleanRowCells = (line) => {
+        let s = line.trim();
+        if (s.startsWith('|')) s = s.substring(1);
+        if (s.endsWith('|')) s = s.substring(0, s.length - 1);
+        return s.split('|').map(c => c.trim());
+      };
+
+      const formatTableCell = (cellText, isHeader = false) => {
+        let c = cellText.trim();
+        if (isHeader) {
+          return `<th>${c}</th>`;
+        }
+        // Auto-badge known statuses
+        const cleanStatus = c.replace(/<\/?[^>]+(>|$)/g, '').replace(/[*_`]/g, '').trim();
+        if (/^(on duty|present|active)$/i.test(cleanStatus)) {
+          c = `<span class="ai-badge ai-badge-success">🟢 ${cleanStatus}</span>`;
+        } else if (/^(clocked out|cleared|restocked)$/i.test(cleanStatus)) {
+          c = `<span class="ai-badge ai-badge-neutral">⚪ ${cleanStatus}</span>`;
+        } else if (/^(absent|late|unresolved|exceeded|pending return)$/i.test(cleanStatus)) {
+          c = `<span class="ai-badge ai-badge-warning">🟡 ${cleanStatus}</span>`;
+        } else if (/^(paid|approved)$/i.test(cleanStatus)) {
+          c = `<span class="ai-badge ai-badge-success">✅ ${cleanStatus}</span>`;
+        }
+        return `<td>${c}</td>`;
+      };
+
+      // Match consecutive lines containing pipe characters
+      md = md.replace(/((?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$))+)/gm, (tableBlock) => {
+        const lines = tableBlock.trim().split('\n').map(l => l.trim()).filter(l => l.startsWith('|') && l.endsWith('|'));
+        if (lines.length === 0) return tableBlock;
+
+        let headers = [];
+        let dataLines = [];
+
+        if (lines.length >= 2 && isDelimiterRow(lines[1])) {
+          headers = cleanRowCells(lines[0]);
+          dataLines = lines.slice(2);
+        } else if (lines.length >= 1) {
+          headers = cleanRowCells(lines[0]);
+          dataLines = lines.slice(1);
+        }
+
+        const thHtml = headers.map(h => formatTableCell(h, true)).join('');
+        const tbodyHtml = dataLines.map(rowLine => {
+          if (isDelimiterRow(rowLine)) return '';
+          const cells = cleanRowCells(rowLine);
+          return `<tr>${cells.map(c => formatTableCell(c, false)).join('')}</tr>`;
+        }).filter(Boolean).join('');
+
+        return `<div class="ai-table-wrap"><table class="ai-table"><thead><tr>${thHtml}</tr></thead><tbody>${tbodyHtml}</tbody></table></div>\n`;
+      });
+
+      // 8. Inline code (`code`)
       md = md.replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
 
-      // 5. Headings: ####, ###, ##
+      // 9. Headings: ####, ###, ##
       md = md.replace(/^#### (.*$)/gim, '<h5 class="ai-md-h5">$1</h5>');
       md = md.replace(/^### (.*$)/gim, '<h4 class="ai-md-h4">$1</h4>');
       md = md.replace(/^## (.*$)/gim, '<h3 class="ai-md-h3">$1</h3>');
 
-      // 6. Bold & Italics
+      // 10. Bold & Italics
       md = md.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       md = md.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-      // 7. Markdown Tables
-      md = md.replace(/((?:\|[^\n]+\|\r?\n)+)/g, (tableBlock) => {
-        const lines = tableBlock.trim().split('\n').filter(l => l.trim().startsWith('|'));
-        if (lines.length < 2) return tableBlock;
-
-        const headers = lines[0].split('|').slice(1, -1).map(c => `<th>${c.trim()}</th>`).join('');
-        const rows = lines.slice(2).map(row => {
-          const cells = row.split('|').slice(1, -1).map(c => `<td>${c.trim()}</td>`).join('');
-          return `<tr>${cells}</tr>`;
-        }).join('');
-
-        return `<div class="ai-table-wrap"><table class="ai-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>`;
-      });
-
-      // 8. Bullet points & Lists
+      // 11. Bullet points & Lists
+      md = md.replace(/^[ \t]*[•●▪⁃][ \t]+(.*)$/gm, '<li class="ai-bullet-item">$1</li>');
       md = md.replace(/^\s*[-*]\s+(.*)$/gim, '<li class="ai-bullet-item">$1</li>');
       md = md.replace(/((?:<li class="ai-bullet-item">.*<\/li>\s*)+)/g, '<ul class="ai-bullet-list">$1</ul>');
 
-      // 9. Horizontal rules
+      // 12. Horizontal rules
       md = md.replace(/^---$/gm, '<hr class="ai-hr">');
 
-      // 10. Paragraphs & Line breaks
+      // 13. Paragraphs & Line breaks
       md = md.replace(/\n{2,}/g, '</p><p class="ai-p">');
       md = `<p class="ai-p">${md}</p>`;
 
-      // Clean empty paragraph wrappers
+      // Clean empty paragraph wrappers & tags
       md = md.replace(/<p class="ai-p">\s*<\/p>/g, '');
       md = md.replace(/<p class="ai-p">\s*(<(?:h3|h4|h5|div|pre|table|ul|hr)[^>]*>)/g, '$1');
       md = md.replace(/(<\/(?:h3|h4|h5|div|pre|table|ul|hr)>)\s*<\/p>/g, '$1');
+
+      // 14. Restore Fenced Code Blocks
+      codeBlocks.forEach((codeHtml, idx) => {
+        md = md.replace(`%%AI_CODE_BLOCK_${idx}%%`, codeHtml);
+      });
 
       return md;
     }

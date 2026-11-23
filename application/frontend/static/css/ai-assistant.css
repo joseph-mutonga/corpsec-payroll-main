@@ -323,34 +323,84 @@
 
 .ai-table-wrap {
   overflow-x: auto;
-  margin: 10px 0;
-  border-radius: 8px;
+  margin: 12px 0;
+  border-radius: 10px;
   border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .ai-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .ai-table th {
-  background: #F1F5F9;
-  color: #0F172A;
+  background: #F8FAFC;
+  color: #334155;
   font-weight: 700;
-  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 14px;
   text-align: left;
-  border-bottom: 1px solid #CBD5E1;
+  border-bottom: 2px solid #E2E8F0;
+  white-space: nowrap;
 }
 
 .ai-table td {
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid #F1F5F9;
-  color: #334155;
+  color: #1E293B;
+  vertical-align: middle;
+}
+
+.ai-table tr:last-child td {
+  border-bottom: none;
 }
 
 .ai-table tr:hover td {
   background: #F8FAFC;
+}
+
+/* AI Status Badges inside Tables & Content */
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.ai-badge-success {
+  background: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #BBF7D0;
+}
+
+.ai-badge-warning {
+  background: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+.ai-badge-danger {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+}
+
+.ai-badge-neutral {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #E2E8F0;
 }
 
 .ai-hr {
