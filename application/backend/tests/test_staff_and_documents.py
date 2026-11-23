@@ -277,3 +277,159 @@ def test_secure_company_documents_lifecycle(client):
     # 6. Verify deleted
     down_after_del = client.get(f"/api/v1/documents/{doc_id}/download", headers=admin_headers)
     assert down_after_del.status_code == 404
+
+
+def test_staff_suspension_and_pdf_dossier_lifecycle(client):
+    admin_headers = get_admin_headers(client)
+
+    # 1. Create a dedicated staff member for testing
+    test_email = "alex.hr.test@corpsec.co.ke"
+    payload = {
+        "email": test_email,
+        "full_name": "Alex Omondi",
+        "phone": "0711998877",
+        "role": "HR",
+        "password": "Password123!"
+    }
+    create_resp = client.post("/api/v1/staff", json=payload, headers=admin_headers)
+    if create_resp.status_code == 400 and "already exists" in create_resp.text:
+        # Fetch existing
+        all_staff = client.get("/api/v1/staff", headers=admin_headers).json()
+        staff_user = next(s for s in all_staff if s["email"] == test_email)
+        staff_id = staff_user["id"]
+        # Ensure active initially
+        client.patch(f"/api/v1/staff/{staff_id}/status", json={"status": "ACTIVE"}, headers=admin_headers)
+    else:
+        assert create_resp.status_code == 201, create_resp.text
+        staff_id = create_resp.json()["id"]
+
+    # 2. Verify staff is initially in ACTIVE list, not in SUSPENDED list
+    active_resp = client.get("/api/v1/staff?status_filter=ACTIVE", headers=admin_headers)
+    assert active_resp.status_code == 200
+    active_ids = [s["id"] for s in active_resp.json()]
+    assert staff_id in active_ids
+
+    susp_resp = client.get("/api/v1/staff?status_filter=SUSPENDED", headers=admin_headers)
+    assert susp_resp.status_code == 200
+    susp_ids = [s["id"] for s in susp_resp.json()]
+    assert staff_id not in susp_ids
+
+    # 3. Suspend the staff member
+    suspend_patch = client.patch(
+        f"/api/v1/staff/{staff_id}/status",
+        json={"status": "SUSPENDED"},
+        headers=admin_headers
+    )
+    assert suspend_patch.status_code == 200
+    assert suspend_patch.json()["status"] == "SUSPENDED"
+
+    # 4. Verify staff member has moved to Suspended section and is excluded from Active section
+    active_resp2 = client.get("/api/v1/staff?status_filter=ACTIVE", headers=admin_headers)
+    active_ids2 = [s["id"] for s in active_resp2.json()]
+    assert staff_id not in active_ids2, "Suspended staff member must not appear in active staff list"
+
+    susp_resp2 = client.get("/api/v1/staff?status_filter=SUSPENDED", headers=admin_headers)
+    susp_ids2 = [s["id"] for s in susp_resp2.json()]
+    assert staff_id in susp_ids2, "Suspended staff member must appear in suspended staff list"
+
+    # 5. Test PDF upload validation - Non-PDF files must be strictly rejected
+    invalid_txt = b"This is a text document, not a PDF."
+    non_pdf_file = {"file": ("alex_cv.txt", io.BytesIO(invalid_txt), "text/plain")}
+    non_pdf_data = {"document_type": "CV / Resume", "title": "Alex CV Text"}
+    fail_resp1 = client.post(
+        f"/api/v1/staff/{staff_id}/documents",
+        data=non_pdf_data,
+        files=non_pdf_file,
+        headers=admin_headers
+    )
+    assert fail_resp1.status_code == 400
+    assert "Only PDF documents" in fail_resp1.json()["detail"]
+
+    # 6. Test PDF upload validation - Fake PDF without %PDF- magic signature
+    fake_pdf = b"Plain content without PDF header signature"
+    fake_pdf_file = {"file": ("fake_degree.pdf", io.BytesIO(fake_pdf), "application/pdf")}
+    fail_resp2 = client.post(
+        f"/api/v1/staff/{staff_id}/documents",
+        data={"document_type": "Academic Certificate", "title": "Fake Degree"},
+        files=fake_pdf_file,
+        headers=admin_headers
+    )
+    assert fail_resp2.status_code == 400
+    assert "PDF header signature" in fail_resp2.json()["detail"]
+
+    # 7. Upload genuine CV (PDF)
+    cv_bytes = b"%PDF-1.5 Mock Curriculum Vitae for Alex Omondi - HR Specialist CorpSec 2026"
+    cv_file = {"file": ("alex_omondi_cv_2026.pdf", io.BytesIO(cv_bytes), "application/pdf")}
+    cv_data = {"document_type": "CV / Resume", "title": "Alex Omondi Official CV 2026"}
+    upload_cv_resp = client.post(
+        f"/api/v1/staff/{staff_id}/documents",
+        data=cv_data,
+        files=cv_file,
+        headers=admin_headers
+    )
+    assert upload_cv_resp.status_code == 201, upload_cv_resp.text
+    cv_doc = upload_cv_resp.json()
+    assert cv_doc["document_type"] == "CV / Resume"
+    assert cv_doc["title"] == "Alex Omondi Official CV 2026"
+    assert cv_doc["filename"] == "alex_omondi_cv_2026.pdf"
+    assert cv_doc["file_size_bytes"] == len(cv_bytes)
+    assert cv_doc["mime_type"] == "application/pdf"
+    cv_doc_id = cv_doc["id"]
+
+    # 8. Upload genuine Academic Certificate (PDF)
+    degree_bytes = b"%PDF-1.4 Bachelor of Human Resource Management Certificate - University of Nairobi 2024"
+    degree_file = {"file": ("bachelor_hrm_degree.pdf", io.BytesIO(degree_bytes), "application/pdf")}
+    degree_data = {"document_type": "Academic Certificate", "title": "Bachelor of HR Management Degree Certificate"}
+    upload_deg_resp = client.post(
+        f"/api/v1/staff/{staff_id}/documents",
+        data=degree_data,
+        files=degree_file,
+        headers=admin_headers
+    )
+    assert upload_deg_resp.status_code == 201, upload_deg_resp.text
+    deg_doc = upload_deg_resp.json()
+    assert deg_doc["document_type"] == "Academic Certificate"
+    deg_doc_id = deg_doc["id"]
+
+    # 9. List documents for this staff member
+    list_docs_resp = client.get(f"/api/v1/staff/{staff_id}/documents", headers=admin_headers)
+    assert list_docs_resp.status_code == 200
+    docs_list = list_docs_resp.json()
+    assert len(docs_list) >= 2
+    doc_ids = [d["id"] for d in docs_list]
+    assert cv_doc_id in doc_ids
+    assert deg_doc_id in doc_ids
+
+    # 10. Download / preview PDF document
+    down_resp = client.get(f"/api/v1/staff/{staff_id}/documents/{cv_doc_id}/download", headers=admin_headers)
+    assert down_resp.status_code == 200
+    assert down_resp.content == cv_bytes
+    assert "application/pdf" in down_resp.headers.get("content-type", "")
+
+    # 11. Delete one document
+    del_doc_resp = client.delete(f"/api/v1/staff/{staff_id}/documents/{deg_doc_id}", headers=admin_headers)
+    assert del_doc_resp.status_code == 200
+    assert "successfully deleted" in del_doc_resp.json()["message"]
+
+    # Verify deleted from list
+    list_docs_after = client.get(f"/api/v1/staff/{staff_id}/documents", headers=admin_headers).json()
+    assert not any(d["id"] == deg_doc_id for d in list_docs_after)
+    assert any(d["id"] == cv_doc_id for d in list_docs_after)
+
+    # 12. Reinstate staff member to active
+    reinstate_resp = client.patch(
+        f"/api/v1/staff/{staff_id}/status",
+        json={"status": "ACTIVE"},
+        headers=admin_headers
+    )
+    assert reinstate_resp.status_code == 200
+    assert reinstate_resp.json()["status"] == "ACTIVE"
+
+    # 13. Permanently delete staff member as requested ("he or she is not the staff anymore and we have to delete their information")
+    del_staff_resp = client.delete(f"/api/v1/staff/{staff_id}", headers=admin_headers)
+    assert del_staff_resp.status_code == 200
+    assert "successfully removed" in del_staff_resp.json()["message"]
+
+    # Verify staff member no longer exists
+    get_del = client.get(f"/api/v1/staff/{staff_id}", headers=admin_headers)
+    assert get_del.status_code == 404

@@ -4664,10 +4664,10 @@
         </div>
 
         <!-- Metric KPI Cards -->
-        <div class="metrics-grid" style="margin-bottom:24px;">
+        <div class="metrics-grid" style="margin-bottom:24px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
           <div class="metric-card metric-cyan">
             <div class="metric-header">
-              <div class="metric-label">Total Corporate Staff</div>
+              <div class="metric-label">Active Corporate Staff</div>
               <div class="metric-icon-bubble">👥</div>
             </div>
             <div class="metric-value" id="staff-metric-total">0</div>
@@ -4696,6 +4696,14 @@
             </div>
             <div class="metric-value" id="staff-metric-admins">0</div>
             <div class="metric-footer"><span class="metric-trend trend-up">Full Privilege</span></div>
+          </div>
+          <div class="metric-card metric-orange" style="border-top:3px solid #F59E0B;">
+            <div class="metric-header">
+              <div class="metric-label">Suspended & Exited</div>
+              <div class="metric-icon-bubble">⏸️</div>
+            </div>
+            <div class="metric-value" id="staff-metric-suspended" style="color:#D97706;">0</div>
+            <div class="metric-footer"><span class="metric-trend" style="color:#92400E;">Offboarded / Suspended</span></div>
           </div>
         </div>
 
@@ -4770,12 +4778,31 @@
           </div>
         </div>
 
-        <div class="table-container">
+        <!-- Sub-navigation Tabs: Active Corporate Staff vs Suspended & Exited Staff -->
+        <div style="display:flex; gap:10px; margin-bottom:16px; border-bottom:2px solid #E2E8F0; padding-bottom:10px;">
+          <button id="tab-btn-active-staff" class="btn btn-primary"
+            style="padding:8px 18px; font-weight:700; border-radius:8px; display:flex; align-items:center; gap:8px;"
+            onclick="switchStaffSubTab('active')">
+            <span>👥 Active Corporate Staff</span>
+            <span class="badge" id="badge-active-staff-count"
+              style="background:#FFFFFF; color:#2563EB; font-weight:800; padding:2px 8px; border-radius:12px; font-size:11px;">0</span>
+          </button>
+          <button id="tab-btn-suspended-staff" class="btn btn-secondary"
+            style="padding:8px 18px; font-weight:700; border-radius:8px; display:flex; align-items:center; gap:8px;"
+            onclick="switchStaffSubTab('suspended')">
+            <span>⏸️ Suspended &amp; Exited Staff</span>
+            <span class="badge" id="badge-suspended-staff-count"
+              style="background:#FEF3C7; color:#92400E; font-weight:800; padding:2px 8px; border-radius:12px; font-size:11px;">0</span>
+          </button>
+        </div>
+
+        <!-- Section 1: Active Corporate Staff Directory -->
+        <div id="staff-active-section" class="table-container">
           <div
             style="padding:16px 20px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <button id="staff-filter-all" class="btn btn-primary" style="padding:6px 12px; font-size:12px;"
-                onclick="filterStaffList('ALL')">All Staff (<span id="staff-count-all">0</span>)</button>
+                onclick="filterStaffList('ALL')">All Active (<span id="staff-count-all">0</span>)</button>
               <button id="staff-filter-hr" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
                 onclick="filterStaffList('HR')">HR Officers (<span id="staff-count-hr">0</span>)</button>
               <button id="staff-filter-supervisor" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
@@ -4786,8 +4813,8 @@
             </div>
             <div style="display:flex; gap:10px; align-items:center;">
               <input type="text" id="staff-search-input" class="form-control"
-                placeholder="Search staff by name, email, role..."
-                style="max-width:240px; font-size:12px; padding:6px 12px;" oninput="handleStaffSearch()">
+                placeholder="Search active staff by name, email, role..."
+                style="max-width:260px; font-size:12px; padding:6px 12px;" oninput="handleStaffSearch()">
             </div>
           </div>
           <div style="overflow-x:auto;">
@@ -4796,7 +4823,7 @@
                 <tr>
                   <th>Staff Member</th>
                   <th>Contact Details</th>
-                  <th>Role & Permissions</th>
+                  <th>Role &amp; Permissions</th>
                   <th>Status</th>
                   <th>Created Date</th>
                   <th>Last Updated</th>
@@ -4805,8 +4832,57 @@
               </thead>
               <tbody id="staff-table-body">
                 <tr>
-                  <td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading corporate staff
+                  <td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading active corporate staff
                     directory...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 2: Suspended & Exited Staff Management -->
+        <div id="staff-suspended-section" class="table-container" style="display:none;">
+          <!-- Suspended Management Guidance Banner -->
+          <div style="background:#FFFBEB; border-bottom:1px solid #FDE68A; padding:14px 20px; display:flex; align-items:center; gap:12px;">
+            <span style="font-size:22px;">⚠️</span>
+            <div style="font-size:12px; color:#92400E; line-height:1.5;">
+              <strong>Suspended &amp; Exited Personnel Management:</strong> This section handles staff members who have been suspended, offboarded, or have left work and are no longer active corporate staff. From here, you can inspect their personnel file (verified CVs, academic credentials, company property, and advances), reinstate them back to active duty, or permanently purge/delete their account and data.
+            </div>
+          </div>
+          <div
+            style="padding:16px 20px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <button id="staff-suspended-filter-all" class="btn btn-primary" style="padding:6px 12px; font-size:12px;"
+                onclick="filterSuspendedStaffList('ALL')">All Suspended (<span id="staff-suspended-count-all">0</span>)</button>
+              <button id="staff-suspended-filter-hr" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
+                onclick="filterSuspendedStaffList('HR')">Suspended HR (<span id="staff-suspended-count-hr">0</span>)</button>
+              <button id="staff-suspended-filter-supervisor" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
+                onclick="filterSuspendedStaffList('SUPERVISOR')">Suspended Supervisors (<span id="staff-suspended-count-supervisor">0</span>)</button>
+              <button id="staff-suspended-filter-admin" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
+                onclick="filterSuspendedStaffList('ADMIN')">Suspended Admins (<span id="staff-suspended-count-admin">0</span>)</button>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <input type="text" id="staff-suspended-search-input" class="form-control"
+                placeholder="Search suspended staff..."
+                style="max-width:260px; font-size:12px; padding:6px 12px;" oninput="handleSuspendedStaffSearch()">
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Staff Member</th>
+                  <th>Contact Details</th>
+                  <th>Role &amp; Permissions</th>
+                  <th>Status</th>
+                  <th>Created Date</th>
+                  <th>Suspension Date</th>
+                  <th>Lifecycle Actions</th>
+                </tr>
+              </thead>
+              <tbody id="staff-suspended-table-body">
+                <tr>
+                  <td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No suspended staff members found.</td>
                 </tr>
               </tbody>
             </table>
@@ -10496,6 +10572,73 @@
           <div style="font-size:11px; font-weight:700; color:#64748B;">ITEMS IN CUSTODY</div>
           <div id="staff-file-items-count" style="font-size:14px; font-weight:800; color:#0D7682; margin-top:2px;">0
             Items</div>
+        </div>
+      </div>
+
+      <!-- SECTION: Staff Dossier: CV & Academic Documents (PDF Only) -->
+      <div style="border:1px solid #CBD5E1; border-radius:12px; padding:20px; background:#FFFFFF; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📑 Staff Dossier: CV &amp; Academic Documents (PDF Only)</h4>
+              <span class="badge" style="background:#EFF6FF; color:#1E40AF; font-size:10px; font-weight:800; border:1px solid #BFDBFE;">STRICTLY PDF</span>
+            </div>
+            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Upload and securely store this staff member's Curriculum Vitae (CV), academic certificates, degree transcripts, and professional qualifications in PDF format.</p>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px; padding:6px 14px;" id="btn-toggle-staff-doc-form" onclick="toggleStaffDocUploadForm()">+ Upload PDF Document</button>
+        </div>
+
+        <!-- Document Upload Form (Collapsible) -->
+        <div id="staff-doc-upload-box" style="display:none; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:16px;">
+          <form id="form-upload-staff-doc" onsubmit="handleStaffDocUpload(event)" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:flex-end;">
+            <div>
+              <label style="display:block; font-size:11px; font-weight:700; color:#475569; margin-bottom:4px;">Document Type *</label>
+              <select id="staff-doc-type" class="form-control" style="font-size:12px; padding:6px 10px; width:100%;" required>
+                <option value="CV / Resume">CV / Resume</option>
+                <option value="Academic Certificate">Academic Certificate (Degree / Diploma)</option>
+                <option value="KCSE / School Certificate">KCSE / High School Certificate</option>
+                <option value="Professional Certification">Professional Certification</option>
+                <option value="National ID / Passport">National ID / Passport Copy</option>
+                <option value="Other Qualification">Other Credential / Qualification</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:700; color:#475569; margin-bottom:4px;">Document Title / Qualification *</label>
+              <input type="text" id="staff-doc-title" class="form-control" placeholder="e.g. Bachelor of Criminology & Security Studies" style="font-size:12px; padding:6px 10px; width:100%;" required>
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:700; color:#475569; margin-bottom:4px;">PDF File (Strictly .pdf) *</label>
+              <input type="file" id="staff-doc-file" class="form-control" accept=".pdf,application/pdf" style="font-size:12px; padding:5px 8px; width:100%;" required>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="submit" class="btn btn-primary" id="btn-submit-staff-doc" style="font-size:12px; padding:7px 16px;">💾 Upload PDF</button>
+              <button type="button" class="btn btn-secondary" style="font-size:12px; padding:7px 12px;" onclick="toggleStaffDocUploadForm()">Cancel</button>
+            </div>
+          </form>
+          <div style="font-size:11px; color:#64748B; margin-top:8px;">
+            ℹ️ <em>Only PDF files (.pdf) are accepted. Stored inside the staff member's official digital personnel file.</em>
+          </div>
+        </div>
+
+        <!-- Uploaded Documents Table -->
+        <div class="table-responsive">
+          <table class="data-table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>DOCUMENT TYPE</th>
+                <th>DOCUMENT TITLE &amp; FILENAME</th>
+                <th>FILE SIZE</th>
+                <th>DATE UPLOADED</th>
+                <th>RECORDED BY</th>
+                <th style="text-align:right;">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="staff-documents-table-body">
+              <tr>
+                <td colspan="6" style="text-align:center; padding:18px; color:#64748B;">No PDF documents uploaded yet.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

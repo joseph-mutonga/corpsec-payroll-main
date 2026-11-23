@@ -7825,12 +7825,40 @@ window.closeViewDocumentModal = closeViewDocumentModal;
    ========================================================================== */
 
 let allStaffMembers = [];
+let currentStaffSubTab = 'active'; // 'active' or 'suspended'
 let currentStaffRoleFilter = 'ALL';
 let staffSearchQuery = '';
+let currentSuspendedStaffRoleFilter = 'ALL';
+let suspendedStaffSearchQuery = '';
+
+function switchStaffSubTab(tab) {
+  currentStaffSubTab = tab;
+  const btnActive = document.getElementById('tab-btn-active-staff');
+  const btnSusp = document.getElementById('tab-btn-suspended-staff');
+  const secActive = document.getElementById('staff-active-section');
+  const secSusp = document.getElementById('staff-suspended-section');
+
+  if (tab === 'active') {
+    if (btnActive) { btnActive.className = 'btn btn-primary'; }
+    if (btnSusp) { btnSusp.className = 'btn btn-secondary'; }
+    if (secActive) secActive.style.display = 'block';
+    if (secSusp) secSusp.style.display = 'none';
+  } else {
+    if (btnActive) { btnActive.className = 'btn btn-secondary'; }
+    if (btnSusp) { btnSusp.className = 'btn btn-primary'; }
+    if (secActive) secActive.style.display = 'none';
+    if (secSusp) secSusp.style.display = 'block';
+  }
+
+  renderStaffTable();
+  renderSuspendedStaffTable();
+}
 
 async function loadStaffMembers() {
   const tbody = document.getElementById('staff-table-body');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading staff directory...</td></tr>';
+  const suspTbody = document.getElementById('staff-suspended-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading active staff directory...</td></tr>';
+  if (suspTbody) suspTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading suspended staff directory...</td></tr>';
 
   loadStaffMonitoringOverview();
 
@@ -7839,34 +7867,61 @@ async function loadStaffMembers() {
     if (!res.ok) throw new Error('Failed to load staff list');
     allStaffMembers = await res.json();
 
-    const totalCount = allStaffMembers.length;
-    const hrCount = allStaffMembers.filter(s => s.role === 'HR').length;
-    const supCount = allStaffMembers.filter(s => s.role === 'SUPERVISOR').length;
-    const adminCount = allStaffMembers.filter(s => s.role === 'ADMIN').length;
+    const activeStaff = allStaffMembers.filter(s => s.status !== 'SUSPENDED');
+    const suspendedStaff = allStaffMembers.filter(s => s.status === 'SUSPENDED');
 
+    const totalActiveCount = activeStaff.length;
+    const hrCount = activeStaff.filter(s => s.role === 'HR').length;
+    const supCount = activeStaff.filter(s => s.role === 'SUPERVISOR').length;
+    const adminCount = activeStaff.filter(s => s.role === 'ADMIN').length;
+    const suspendedCount = suspendedStaff.length;
+
+    // Metric KPI Cards
     const mTotal = document.getElementById('staff-metric-total');
     const mHr = document.getElementById('staff-metric-hr');
     const mSup = document.getElementById('staff-metric-supervisors');
     const mAdmin = document.getElementById('staff-metric-admins');
+    const mSusp = document.getElementById('staff-metric-suspended');
 
-    if (mTotal) mTotal.innerText = totalCount;
+    if (mTotal) mTotal.innerText = totalActiveCount;
     if (mHr) mHr.innerText = hrCount;
     if (mSup) mSup.innerText = supCount;
     if (mAdmin) mAdmin.innerText = adminCount;
+    if (mSusp) mSusp.innerText = suspendedCount;
 
+    // Sub-tab Header Badges
+    const bActive = document.getElementById('badge-active-staff-count');
+    const bSusp = document.getElementById('badge-suspended-staff-count');
+    if (bActive) bActive.innerText = totalActiveCount;
+    if (bSusp) bSusp.innerText = suspendedCount;
+
+    // Filter Button Counts (Active)
     const cAll = document.getElementById('staff-count-all');
     const cHr = document.getElementById('staff-count-hr');
     const cSup = document.getElementById('staff-count-supervisor');
     const cAdmin = document.getElementById('staff-count-admin');
 
-    if (cAll) cAll.innerText = totalCount;
+    if (cAll) cAll.innerText = totalActiveCount;
     if (cHr) cHr.innerText = hrCount;
     if (cSup) cSup.innerText = supCount;
     if (cAdmin) cAdmin.innerText = adminCount;
 
+    // Filter Button Counts (Suspended)
+    const suspAll = document.getElementById('staff-suspended-count-all');
+    const suspHr = document.getElementById('staff-suspended-count-hr');
+    const suspSup = document.getElementById('staff-suspended-count-supervisor');
+    const suspAdmin = document.getElementById('staff-suspended-count-admin');
+
+    if (suspAll) suspAll.innerText = suspendedCount;
+    if (suspHr) suspHr.innerText = suspendedStaff.filter(s => s.role === 'HR').length;
+    if (suspSup) suspSup.innerText = suspendedStaff.filter(s => s.role === 'SUPERVISOR').length;
+    if (suspAdmin) suspAdmin.innerText = suspendedStaff.filter(s => s.role === 'ADMIN').length;
+
     renderStaffTable();
+    renderSuspendedStaffTable();
   } catch (e) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#EF4444;">Error loading staff: ${e.message}</td></tr>`;
+    if (suspTbody) suspTbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#EF4444;">Error loading suspended staff: ${e.message}</td></tr>`;
   }
 }
 
@@ -7897,7 +7952,9 @@ function renderStaffTable() {
 
   tbody.innerHTML = '';
 
-  let filtered = allStaffMembers;
+  // Strictly filter active staff only (status !== 'SUSPENDED')
+  let filtered = (allStaffMembers || []).filter(s => s.status !== 'SUSPENDED');
+
   if (currentStaffRoleFilter !== 'ALL') {
     filtered = filtered.filter(s => s.role === currentStaffRoleFilter);
   }
@@ -7913,7 +7970,7 @@ function renderStaffTable() {
   }
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px 16px; color:#64748B;"><div style="font-size:24px; margin-bottom:8px;">👥</div>No corporate staff members found for this filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px 16px; color:#64748B;"><div style="font-size:24px; margin-bottom:8px;">👥</div>No active corporate staff members found for this filter.</td></tr>';
     return;
   }
 
@@ -7929,27 +7986,118 @@ function renderStaffTable() {
       roleBadge = '<span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">👨‍💼 Field Supervisor</span>';
     }
 
-    const isSuspended = staff.status === 'SUSPENDED';
-    const statusBadge = isSuspended ?
-      '<span class="badge badge-warning" style="background:#FEF3C7; color:#92400E;">Suspended</span>' :
-      '<span class="badge badge-active" style="background:#DCFCE7; color:#166534;">Active</span>';
-
+    const statusBadge = '<span class="badge badge-active" style="background:#DCFCE7; color:#166534; font-weight:700;">🟢 Active</span>';
     const dateFormatted = staff.created_at ? new Date(staff.created_at).toLocaleDateString() : '—';
+    const lastLoginFormatted = staff.last_login ? new Date(staff.last_login).toLocaleString() : '—';
 
     tr.innerHTML = `
-      <td><strong style="color:#0F172A;">${staff.full_name || staff.email.split('@')[0]}</strong></td>
+      <td><strong style="color:#0F172A;">${escapeHtml(staff.full_name || staff.email.split('@')[0])}</strong></td>
+      <td style="font-size:12px; color:#334155;"><strong>${escapeHtml(staff.email)}</strong><br><span style="color:#64748B;">${escapeHtml(staff.phone || '—')}</span></td>
       <td>${roleBadge}</td>
-      <td style="font-size:12px; color:#334155;"><strong>${staff.email}</strong></td>
-      <td style="font-size:12px; color:#64748B;">${staff.phone}</td>
       <td>${statusBadge}</td>
       <td style="font-size:12px; color:#64748B;">${dateFormatted}</td>
+      <td style="font-size:12px; color:#64748B;">${lastLoginFormatted}</td>
       <td>
         <div style="display:flex; gap:6px;">
-          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; font-weight:700;" onclick="openStaffFileModal(${staff.id})" title="View Staff Personnel File & Custody">📁 File</button>
-          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="toggleStaffAccountStatus(${staff.id}, '${staff.status}')" title="${isSuspended ? 'Reactivate staff account' : 'Suspend staff account'}">
-            ${isSuspended ? '✅ Activate' : '⏸️ Suspend'}
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; font-weight:700;" onclick="openStaffFileModal(${staff.id})" title="View Staff Personnel File, CV & Documents">📁 File</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;" onclick="toggleStaffAccountStatus(${staff.id}, '${staff.status}', '${escapeHtml(staff.full_name || staff.email)}')" title="Suspend staff account and move to Suspended & Exited section">
+            ⏸️ Suspend
           </button>
-          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteStaffAccountRecord(${staff.id}, '${staff.email}')" title="Delete staff account">🗑️</button>
+          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteStaffAccountRecord(${staff.id}, '${escapeHtml(staff.email)}')" title="Delete staff account">🗑️</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterSuspendedStaffList(role) {
+  currentSuspendedStaffRoleFilter = role;
+  const btnAll = document.getElementById('staff-suspended-filter-all');
+  const btnHr = document.getElementById('staff-suspended-filter-hr');
+  const btnSup = document.getElementById('staff-suspended-filter-supervisor');
+  const btnAdmin = document.getElementById('staff-suspended-filter-admin');
+
+  if (btnAll) btnAll.className = role === 'ALL' ? 'btn btn-primary' : 'btn btn-secondary';
+  if (btnHr) btnHr.className = role === 'HR' ? 'btn btn-primary' : 'btn btn-secondary';
+  if (btnSup) btnSup.className = role === 'SUPERVISOR' ? 'btn btn-primary' : 'btn btn-secondary';
+  if (btnAdmin) btnAdmin.className = role === 'ADMIN' ? 'btn btn-primary' : 'btn btn-secondary';
+
+  renderSuspendedStaffTable();
+}
+
+function handleSuspendedStaffSearch() {
+  const input = document.getElementById('staff-suspended-search-input');
+  suspendedStaffSearchQuery = input ? input.value.trim().toLowerCase() : '';
+  renderSuspendedStaffTable();
+}
+
+function renderSuspendedStaffTable() {
+  const tbody = document.getElementById('staff-suspended-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  // Filter strictly suspended staff (status === 'SUSPENDED')
+  let filtered = (allStaffMembers || []).filter(s => s.status === 'SUSPENDED');
+
+  if (currentSuspendedStaffRoleFilter !== 'ALL') {
+    filtered = filtered.filter(s => s.role === currentSuspendedStaffRoleFilter);
+  }
+
+  if (suspendedStaffSearchQuery) {
+    filtered = filtered.filter(s => {
+      const name = (s.full_name || '').toLowerCase();
+      const email = (s.email || '').toLowerCase();
+      const phone = (s.phone || '').toLowerCase();
+      const role = (s.role || '').toLowerCase();
+      return name.includes(suspendedStaffSearchQuery) || email.includes(suspendedStaffSearchQuery) || phone.includes(suspendedStaffSearchQuery) || role.includes(suspendedStaffSearchQuery);
+    });
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px 16px; color:#64748B;"><div style="font-size:24px; margin-bottom:8px;">✅</div>No suspended or exited staff members. All registered staff accounts are active.</td></tr>';
+    return;
+  }
+
+  filtered.forEach(staff => {
+    const tr = document.createElement('tr');
+    tr.style.background = '#FFFDF5';
+
+    let roleBadge = '';
+    if (staff.role === 'ADMIN') {
+      roleBadge = '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">⚙️ System Admin</span>';
+    } else if (staff.role === 'HR') {
+      roleBadge = '<span class="badge" style="background:#E0F2FE; color:#0369A1; font-weight:700;">💼 HR Manager</span>';
+    } else {
+      roleBadge = '<span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">👨‍💼 Field Supervisor</span>';
+    }
+
+    const statusBadge = '<span class="badge badge-warning" style="background:#FEF3C7; color:#92400E; font-weight:700; border:1px solid #FDE68A;">⏸️ Suspended / Exited</span>';
+    const dateFormatted = staff.created_at ? new Date(staff.created_at).toLocaleDateString() : '—';
+    const lastLoginFormatted = staff.last_login ? new Date(staff.last_login).toLocaleString() : '—';
+
+    tr.innerHTML = `
+      <td>
+        <strong style="color:#0F172A;">${escapeHtml(staff.full_name || staff.email.split('@')[0])}</strong>
+        <div style="font-size:11px; color:#92400E; font-weight:600;">Staff ID: #${staff.id} (Suspended)</div>
+      </td>
+      <td style="font-size:12px; color:#334155;"><strong>${escapeHtml(staff.email)}</strong><br><span style="color:#64748B;">${escapeHtml(staff.phone || '—')}</span></td>
+      <td>${roleBadge}</td>
+      <td>${statusBadge}</td>
+      <td style="font-size:12px; color:#64748B;">${dateFormatted}</td>
+      <td style="font-size:12px; color:#64748B;">${lastLoginFormatted}</td>
+      <td>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; font-weight:700;" onclick="openStaffFileModal(${staff.id})" title="Inspect Personnel File, CV, Academic Credentials, Property & Advances">
+            📁 Personnel File
+          </button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#ECFDF5; color:#059669; border:1px solid #A7F3D0; font-weight:700;" onclick="toggleStaffAccountStatus(${staff.id}, '${staff.status}', '${escapeHtml(staff.full_name || staff.email)}')" title="Reinstate staff member to active corporate staff">
+            ✅ Reinstate
+          </button>
+          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none; font-weight:700;" onclick="deleteStaffAccountRecord(${staff.id}, '${escapeHtml(staff.email)}')" title="Permanently delete staff account and information from system">
+            🗑️ Delete Information
+          </button>
         </div>
       </td>
     `;
@@ -7999,8 +8147,16 @@ async function handleAddStaffSubmit(event) {
   }
 }
 
-async function toggleStaffAccountStatus(userId, currentStatus) {
-  const newStatus = currentStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+async function toggleStaffAccountStatus(userId, currentStatus, staffName = 'this staff member') {
+  const isCurrentlySuspended = currentStatus === 'SUSPENDED';
+  const newStatus = isCurrentlySuspended ? 'ACTIVE' : 'SUSPENDED';
+
+  const confirmMsg = isCurrentlySuspended
+    ? `Reinstate ${staffName} back to active corporate duty? They will be moved back to the Active Staff directory.`
+    : `Are you sure you want to suspend ${staffName}? They will be moved to the Suspended & Exited Staff section.`;
+
+  if (!confirm(confirmMsg)) return;
+
   try {
     const res = await apiFetch(`/staff/${userId}/status`, {
       method: 'PATCH',
@@ -8009,23 +8165,31 @@ async function toggleStaffAccountStatus(userId, currentStatus) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed to update status');
-    showToast(`Account status updated to ${newStatus}`, 'success');
-    loadStaffMembers();
+
+    if (newStatus === 'SUSPENDED') {
+      showToast(`⏸️ ${staffName} has been suspended and moved to the Suspended & Exited Staff section.`, 'warning');
+      switchStaffSubTab('suspended');
+    } else {
+      showToast(`✅ ${staffName} has been reinstated and returned to Active Corporate Staff.`, 'success');
+      switchStaffSubTab('active');
+    }
+
+    await loadStaffMembers();
   } catch (e) {
     showToast(e.message, 'danger');
   }
 }
 
 async function deleteStaffAccountRecord(userId, email) {
-  if (!confirm(`Are you sure you want to permanently delete staff account ${email}?`)) {
+  if (!confirm(`Are you sure you want to permanently delete staff account ${email} and all associated records? This cannot be undone.`)) {
     return;
   }
   try {
     const res = await apiFetch(`/staff/${userId}`, { method: 'DELETE' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Failed to delete');
-    showToast(data.message || 'Staff account deleted successfully.', 'success');
-    loadStaffMembers();
+    showToast(data.message || 'Staff information deleted successfully from the system.', 'success');
+    await loadStaffMembers();
   } catch (e) {
     showToast(e.message, 'danger');
   }
@@ -8077,6 +8241,10 @@ async function loadStaffMonitoringOverview() {
   }
 }
 
+window.switchStaffSubTab = switchStaffSubTab;
+window.filterSuspendedStaffList = filterSuspendedStaffList;
+window.handleSuspendedStaffSearch = handleSuspendedStaffSearch;
+window.renderSuspendedStaffTable = renderSuspendedStaffTable;
 window.loadStaffMembers = loadStaffMembers;
 window.filterStaffList = filterStaffList;
 window.handleStaffSearch = handleStaffSearch;
@@ -12392,12 +12560,170 @@ async function handleAwardItemSubmit(event) {
 }
 
 // --- Staff Personnel File Modal ---
+let currentStaffFileUserId = null;
+
+function toggleStaffDocUploadForm() {
+  const box = document.getElementById('staff-doc-upload-box');
+  const btn = document.getElementById('btn-toggle-staff-doc-form');
+  if (!box) return;
+  const isHidden = box.style.display === 'none' || !box.style.display;
+  box.style.display = isHidden ? 'block' : 'none';
+  if (btn) btn.innerText = isHidden ? '✕ Close Upload Form' : '+ Upload PDF Document';
+}
+
+async function loadStaffDocuments(staffId) {
+  const tbody = document.getElementById('staff-documents-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#64748B;">Loading personnel documents...</td></tr>';
+
+  try {
+    const res = await apiFetch(`/staff/${staffId}/documents`);
+    if (!res.ok) throw new Error('Failed to load documents');
+    const docs = await res.json();
+
+    if (!docs || !docs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:22px; color:#64748B;"><div style="font-size:20px; margin-bottom:4px;">📄</div>No official PDF documents or CVs recorded for this staff member yet. Use the upload button above to add PDF documents.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = docs.map(doc => {
+      let sizeFmt = '—';
+      if (doc.file_size_bytes) {
+        if (doc.file_size_bytes < 1024 * 1024) {
+          sizeFmt = (doc.file_size_bytes / 1024).toFixed(1) + ' KB';
+        } else {
+          sizeFmt = (doc.file_size_bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+      }
+
+      let typeBadge = '';
+      if (doc.document_type.includes('CV')) {
+        typeBadge = '<span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">📑 ' + escapeHtml(doc.document_type) + '</span>';
+      } else if (doc.document_type.includes('Academic') || doc.document_type.includes('Degree')) {
+        typeBadge = '<span class="badge" style="background:#ECFDF5; color:#047857; font-weight:700;">🎓 ' + escapeHtml(doc.document_type) + '</span>';
+      } else if (doc.document_type.includes('ID') || doc.document_type.includes('Passport')) {
+        typeBadge = '<span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">🪪 ' + escapeHtml(doc.document_type) + '</span>';
+      } else {
+        typeBadge = '<span class="badge" style="background:#F1F5F9; color:#334155; font-weight:700;">📜 ' + escapeHtml(doc.document_type) + '</span>';
+      }
+
+      const dateFmt = doc.created_at ? new Date(doc.created_at).toLocaleString() : '—';
+      const uploader = doc.uploaded_by_name || 'System Admin';
+
+      return `
+        <tr>
+          <td>${typeBadge}</td>
+          <td>
+            <strong style="color:#0F172A;">${escapeHtml(doc.title)}</strong>
+            <div style="font-size:11px; color:#64748B;">Filename: ${escapeHtml(doc.filename)}</div>
+          </td>
+          <td style="font-size:12px; font-weight:600; color:#334155;">${sizeFmt}</td>
+          <td style="font-size:12px; color:#64748B;">${dateFmt}</td>
+          <td style="font-size:12px; color:#334155;">${escapeHtml(uploader)}</td>
+          <td style="text-align:right;">
+            <div style="display:inline-flex; gap:6px;">
+              <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; font-weight:700;" onclick="viewOrDownloadStaffDoc(${doc.user_id}, ${doc.id})" title="View / Download PDF Document">
+                👁️ View PDF
+              </button>
+              <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteStaffDocRecord(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title)}')" title="Delete Document">
+                🗑️
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:18px; color:#EF4444;">Error loading documents: ${err.message}</td></tr>`;
+  }
+}
+
+function viewOrDownloadStaffDoc(userId, docId) {
+  const url = `/api/v1/staff/${userId}/documents/${docId}/download`;
+  window.open(url, '_blank');
+}
+
+async function handleStaffDocUpload(event) {
+  event.preventDefault();
+  if (!currentStaffFileUserId) {
+    showToast('No active staff member selected.', 'danger');
+    return;
+  }
+
+  const typeEl = document.getElementById('staff-doc-type');
+  const titleEl = document.getElementById('staff-doc-title');
+  const fileEl = document.getElementById('staff-doc-file');
+  const btn = document.getElementById('btn-submit-staff-doc');
+
+  if (!fileEl.files || !fileEl.files[0]) {
+    showToast('Please select a PDF document to upload.', 'warning');
+    return;
+  }
+
+  const file = fileEl.files[0];
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Strictly PDF files (.pdf) are permitted for CV & academic documents.', 'danger');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('document_type', typeEl ? typeEl.value : 'Academic Certificate');
+  formData.append('title', titleEl ? titleEl.value.trim() : file.name);
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Uploading...';
+  }
+
+  try {
+    const res = await apiFetch(`/staff/${currentStaffFileUserId}/documents`, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+    showToast(`✅ PDF Document '${data.title}' saved to personnel file!`, 'success');
+    document.getElementById('form-upload-staff-doc').reset();
+    toggleStaffDocUploadForm();
+    await loadStaffDocuments(currentStaffFileUserId);
+  } catch (err) {
+    showToast('Upload error: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '💾 Upload PDF';
+    }
+  }
+}
+
+async function deleteStaffDocRecord(userId, docId, title) {
+  if (!confirm(`Are you sure you want to permanently delete document '${title}'? This cannot be undone.`)) {
+    return;
+  }
+  try {
+    const res = await apiFetch(`/staff/${userId}/documents/${docId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Delete failed');
+
+    showToast(`🗑️ ${data.message || 'Document deleted successfully.'}`, 'success');
+    await loadStaffDocuments(userId);
+  } catch (err) {
+    showToast('Delete error: ' + err.message, 'danger');
+  }
+}
+
 async function openStaffFileModal(staffId) {
   const curUser = JSON.parse(localStorage.getItem('corpsec_user') || '{}');
   if (curUser.role !== 'ADMIN') {
     alert('Access restricted: Staff personnel files are confidential and visible only to the System Administrator.');
     return;
   }
+
+  currentStaffFileUserId = staffId;
 
   let staff = (allStaffMembers || []).find(s => s.id === staffId);
   if (!staff) {
@@ -12436,6 +12762,9 @@ async function openStaffFileModal(staffId) {
     const initial = (staff.full_name || staff.email || 'S')[0].toUpperCase();
     if (sAvatar) sAvatar.innerText = initial;
   }
+
+  // Load verified PDF documents (CV and Academic credentials)
+  loadStaffDocuments(staffId);
 
   const tbody = document.getElementById('staff-custody-table-body');
   if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading custody & awards records...</td></tr>';
@@ -12644,6 +12973,12 @@ async function openStaffFileModal(staffId) {
 function closeStaffFileModal() {
   const modal = document.getElementById('modal-staff-file');
   if (modal) modal.style.display = 'none';
+  const box = document.getElementById('staff-doc-upload-box');
+  if (box) box.style.display = 'none';
+  const btn = document.getElementById('btn-toggle-staff-doc-form');
+  if (btn) btn.innerText = '+ Upload PDF Document';
+  const form = document.getElementById('form-upload-staff-doc');
+  if (form) form.reset();
 }
 
 // Global exports
@@ -12660,6 +12995,11 @@ window.toggleAwardIssuanceType = toggleAwardIssuanceType;
 window.handleAwardItemSubmit = handleAwardItemSubmit;
 window.openStaffFileModal = openStaffFileModal;
 window.closeStaffFileModal = closeStaffFileModal;
+window.toggleStaffDocUploadForm = toggleStaffDocUploadForm;
+window.loadStaffDocuments = loadStaffDocuments;
+window.viewOrDownloadStaffDoc = viewOrDownloadStaffDoc;
+window.handleStaffDocUpload = handleStaffDocUpload;
+window.deleteStaffDocRecord = deleteStaffDocRecord;
 
 
 // ===================================================================

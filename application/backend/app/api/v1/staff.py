@@ -1,6 +1,11 @@
+import os
+import shutil
+import uuid
+import re
 from datetime import datetime, timedelta, date
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.orm import Session
 
@@ -9,8 +14,12 @@ from application.backend.app.core.security import get_password_hash
 from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.user_session import UserSession
+from application.backend.app.models.staff_document import StaffDocument
 
 router = APIRouter(prefix="/staff", tags=["Staff & HR Management"])
+
+STAFF_DOCS_DIR = os.path.join(os.getcwd(), "uploads", "staff_documents")
+os.makedirs(STAFF_DOCS_DIR, exist_ok=True)
 
 
 class StaffCreateRequest(BaseModel):
@@ -38,13 +47,31 @@ class StaffResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StaffDocumentResponse(BaseModel):
+    id: int
+    user_id: int
+    document_type: str
+    title: str
+    filename: str
+    file_path: str
+    file_size_bytes: Optional[int] = None
+    mime_type: str
+    uploaded_by_id: Optional[int] = None
+    uploaded_by_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 @router.get("", response_model=List[StaffResponse])
 def list_staff_members(
     role_filter: Optional[str] = None,
+    status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
-    """List all corporate staff members (HR, Supervisors, Administrators)."""
+    """List all corporate staff members (HR, Supervisors, Administrators) with optional status filtering."""
     staff_roles = [UserRole.ADMIN.value, UserRole.HR.value, UserRole.SUPERVISOR.value]
     query = db.query(User).filter(User.role.in_(staff_roles))
 
@@ -52,6 +79,13 @@ def list_staff_members(
         rf = role_filter.upper().strip()
         if rf in staff_roles:
             query = query.filter(User.role == rf)
+
+    if status_filter:
+        sf = status_filter.upper().strip()
+        if sf == "ACTIVE":
+            query = query.filter(User.status == UserStatus.ACTIVE.value)
+        elif sf in ["SUSPENDED", "INACTIVE"]:
+            query = query.filter(User.status.in_([UserStatus.SUSPENDED.value, UserStatus.INACTIVE.value]))
 
     return query.order_by(User.id.desc()).all()
 
@@ -193,6 +227,23 @@ def delete_staff_member(
 
     target_email = staff_user.email
     target_role = staff_user.role
+
+    # Clean up any stored staff documents from disk and database
+    staff_docs = db.query(StaffDocument).filter(StaffDocument.user_id == user_id).all()
+    for doc in staff_docs:
+        if os.path.exists(doc.file_path):
+            try:
+                os.remove(doc.file_path)
+            except Exception:
+                pass
+        db.delete(doc)
+
+    user_doc_dir = os.path.join(STAFF_DOCS_DIR, str(user_id))
+    if os.path.exists(user_doc_dir):
+        try:
+            shutil.rmtree(user_doc_dir)
+        except Exception:
+            pass
 
     db.delete(staff_user)
 
@@ -441,4 +492,198 @@ def get_staff_activity(
             "role": l.role
         })
     return out
+
+
+# ==================== STAFF DOSSIER: CV & ACADEMIC DOCUMENTS (PDF ONLY) ====================
+
+@router.post("/{user_id}/documents", response_model=StaffDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_staff_document(
+    user_id: int,
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+    title: str = Form(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    Upload and store official staff documents (CV/Resume, Academic Certificates, Credentials).
+    Strictly accepts PDF (.pdf) documents only.
+    """
+    staff_user = db.query(User).filter(User.id == user_id).first()
+    if not staff_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
+
+    raw_filename = file.filename or "staff_document.pdf"
+    if not raw_filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Only PDF documents (.pdf) are permitted for staff CV and academic credentials."
+        )
+
+    clean_title = title.strip()
+    if not clean_title:
+        clean_title = os.path.splitext(raw_filename)[0]
+
+    clean_type = document_type.strip() if document_type and document_type.strip() else "Academic Certificate"
+
+    # User-specific directory
+    user_doc_dir = os.path.join(STAFF_DOCS_DIR, str(user_id))
+    os.makedirs(user_doc_dir, exist_ok=True)
+
+    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', os.path.basename(raw_filename))
+    unique_filename = f"{uuid.uuid4().hex[:10]}_{safe_name}"
+    dest_path = os.path.join(user_doc_dir, unique_filename)
+
+    file_bytes = await file.read()
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+
+    # Validate PDF magic header (%PDF-)
+    if not file_bytes.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file content. The file does not have a valid PDF header signature."
+        )
+
+    with open(dest_path, "wb") as f:
+        f.write(file_bytes)
+
+    doc_record = StaffDocument(
+        user_id=user_id,
+        document_type=clean_type,
+        title=clean_title,
+        filename=raw_filename,
+        file_path=dest_path,
+        file_size_bytes=len(file_bytes),
+        mime_type="application/pdf",
+        uploaded_by_id=admin.id,
+        created_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(doc_record)
+
+    audit = AuditLog(
+        user_id=admin.id,
+        user_name=admin.email,
+        role=admin.role,
+        action="UPLOAD_STAFF_DOCUMENT",
+        target_entity="StaffDocument",
+        target_id=str(user_id),
+        reason=f"Uploaded {clean_type} '{clean_title}' ({raw_filename}) for staff {staff_user.email}"
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(doc_record)
+
+    return StaffDocumentResponse(
+        id=doc_record.id,
+        user_id=doc_record.user_id,
+        document_type=doc_record.document_type,
+        title=doc_record.title,
+        filename=doc_record.filename,
+        file_path=doc_record.file_path,
+        file_size_bytes=doc_record.file_size_bytes,
+        mime_type=doc_record.mime_type,
+        uploaded_by_id=doc_record.uploaded_by_id,
+        uploaded_by_name=admin.full_name or admin.email,
+        created_at=doc_record.created_at,
+        updated_at=doc_record.updated_at
+    )
+
+
+@router.get("/{user_id}/documents", response_model=List[StaffDocumentResponse])
+def list_staff_documents(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """List all verified PDF documents (CV, academic certificates) for a staff member."""
+    staff_user = db.query(User).filter(User.id == user_id).first()
+    if not staff_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
+
+    docs = db.query(StaffDocument).filter(StaffDocument.user_id == user_id).order_by(StaffDocument.id.desc()).all()
+    results = []
+    for d in docs:
+        uploader_name = None
+        if d.uploaded_by:
+            uploader_name = d.uploaded_by.full_name or d.uploaded_by.email
+        results.append(StaffDocumentResponse(
+            id=d.id,
+            user_id=d.user_id,
+            document_type=d.document_type,
+            title=d.title,
+            filename=d.filename,
+            file_path=d.file_path,
+            file_size_bytes=d.file_size_bytes,
+            mime_type=d.mime_type,
+            uploaded_by_id=d.uploaded_by_id,
+            uploaded_by_name=uploader_name,
+            created_at=d.created_at,
+            updated_at=d.updated_at
+        ))
+    return results
+
+
+@router.get("/{user_id}/documents/{doc_id}/download")
+def download_staff_document(
+    user_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Preview or download a verified staff PDF document."""
+    doc = db.query(StaffDocument).filter(StaffDocument.id == doc_id, StaffDocument.user_id == user_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff document not found.")
+
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document file does not exist on disk.")
+
+    return FileResponse(
+        doc.file_path,
+        media_type="application/pdf",
+        filename=doc.filename,
+        content_disposition_type="inline"
+    )
+
+
+@router.delete("/{user_id}/documents/{doc_id}", status_code=status.HTTP_200_OK)
+def delete_staff_document(
+    user_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Delete a staff PDF document record and remove the stored file."""
+    doc = db.query(StaffDocument).filter(StaffDocument.id == doc_id, StaffDocument.user_id == user_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff document not found.")
+
+    staff_user = db.query(User).filter(User.id == user_id).first()
+    doc_title = doc.title
+    doc_filename = doc.filename
+    file_path = doc.file_path
+
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
+
+    db.delete(doc)
+
+    audit = AuditLog(
+        user_id=admin.id,
+        user_name=admin.email,
+        role=admin.role,
+        action="DELETE_STAFF_DOCUMENT",
+        target_entity="StaffDocument",
+        target_id=str(doc_id),
+        reason=f"Deleted document '{doc_title}' ({doc_filename}) for staff {staff_user.email if staff_user else user_id}"
+    )
+    db.add(audit)
+    db.commit()
+
+    return {"message": f"Document '{doc_title}' successfully deleted."}
 
