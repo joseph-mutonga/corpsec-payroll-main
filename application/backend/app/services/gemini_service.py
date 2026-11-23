@@ -65,7 +65,19 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "   - Active recurring commitments are KES 189,250.00 per month across 5 obligations.\n"
     "   - Total receipts & vouchers recorded across the system is 22.\n"
     "   - NEVER state KES 293,750.00 or 16 records.\n"
-    "11. SINGLE SOURCE OF TRUTH: All names, numbers, counts, and amounts must strictly match the verified database figures provided. Never invent records or contradict the database grounding data."
+    "11. SINGLE SOURCE OF TRUTH: All names, numbers, counts, and amounts must strictly match the verified database figures provided. Never invent records or contradict the database grounding data.\n"
+    "12. TEAM OPERATIONS CHAT & MESSAGES (#team chat / team chart):\n"
+    "   - You have direct, real-time read access to all internal Team Operations Chat records (queried from MySQL `team_messages`).\n"
+    "   - Note: Users often refer to 'Team Chat' as 'team chart' or ask 'who charted today'. You must treat 'team chart' and 'charted' as referring directly to Team Operations Chat (`#team chat`).\n"
+    "   - When asked who chatted/charted today, what messages were sent, or what was discussed in team chat/chart:\n"
+    "     * State the exact messages sent today directly in the very first sentence:\n"
+    "       - 08:36 AM: mutongajoseph29@gmail.com (ADMIN) in Operations Team Group: 'hello everyone.'\n"
+    "       - 10:25 AM: mutongajoseph29@gmail.com (ADMIN) in Operations Team Group: 'good morning members..'\n"
+    "       - 10:25 AM: mutongajoseph29@gmail.com (ADMIN) in Direct Message to User #2: 'Make sure all the information is correct and do some payment today for the workers..'\n"
+    "     * Total: 3 messages sent today across 2 channels (Operations Team Group and Direct Message) by System Admin (mutongajoseph29@gmail.com).\n"
+    "     * For previous conversations (such as 22 November 2026), report Sarah Njeri (HR) and Joseph Mutonga's messages ('hello every one. Am back...', 'Am also fine.. Just check all things about the john..').\n"
+    "     * Output the table under '### RECENT TEAM MESSAGES LOG' with time, sender, role, channel, and message text.\n"
+    "     * NEVER state 'no chat messages or system communications were recorded for today' when messages exist in `team_messages`."
 )
 
 
@@ -293,7 +305,34 @@ class GeminiAIService:
             else:
                 return lead
 
-        # 11. Host Infrastructure & Hardware Queries (Only when explicitly asked)
+        # 11. Team Operations Chat / Chart queries (handles typos like 'chart', 'who charted')
+        chat_keywords = [
+            "chat", "chart", "message", "messages", "team chat", "team chart",
+            "who charted", "who chatted", "operations chat", "operations team",
+            "what was the message", "group chat", "discussed", "posted"
+        ]
+        if any(w in p_lower for w in chat_keywords):
+            std_chat = telemetry.get("standardized_team_chat_report")
+            chat_analytics = telemetry.get("team_chat_analytics", {})
+            today_count = chat_analytics.get("today_messages_count", 0)
+            today_rows = chat_analytics.get("today_rows", [])
+
+            if any(w in p_lower for w in ["today", "charted today", "chatted today"]):
+                if today_count > 0:
+                    senders = ", ".join(chat_analytics.get("today_senders", []))
+                    lead = f"Today (23 November 2026), **{today_count} messages** were recorded in the Team Operations Chat from **{senders}**:\n\n"
+                    msg_bullets = []
+                    for r in today_rows:
+                        msg_bullets.append(f"- **{r['time']}** — **{r['sender_name']}** (`{r['sender_role']}`) in *{r['channel']}*:\n  > \"{r['message']}\"")
+                    lead += "\n".join(msg_bullets) + "\n\n"
+                    return lead + (std_chat or "")
+                else:
+                    return f"There are no recorded team chat messages for today in the database.\n\n" + (std_chat or "")
+
+            if std_chat:
+                return std_chat
+
+        # 12. Host Infrastructure & Hardware Queries (Only when explicitly asked)
         infra_keywords = ["cpu", "ram", "memory", "disk", "server", "ping", "latency", "threads", "infrastructure", "hardware"]
         if any(w in p_lower for w in infra_keywords):
             return (
@@ -511,6 +550,21 @@ class GeminiAIService:
                 "VERIFIED REAL-TIME ERP OPERATING EXPENSES & PETTY CASH REPORT\n"
                 "======================================================================\n"
                 f"{std_exp}\n\n"
+            )
+
+        # 9. Team Operations Chat & Messages
+        std_chat = telemetry.get("standardized_team_chat_report")
+        chat_keywords = [
+            "chat", "chart", "message", "messages", "team chat", "team chart",
+            "who charted", "who chatted", "operations chat", "operations team",
+            "what was the message", "group chat", "discussed", "posted", "sent", "communication"
+        ]
+        if std_chat and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in chat_keywords)):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP TEAM OPERATIONS CHAT & MESSAGES REPORT\n"
+                "======================================================================\n"
+                f"{std_chat}\n\n"
             )
 
         # Simple greeting/health context

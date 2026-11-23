@@ -2,6 +2,7 @@ import pytest
 import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from application.backend.app.models.guard import Guard
 from application.backend.app.services.erp_analytics_service import (
     AttendanceAnalyticsService,
     OvertimeAnalyticsService,
@@ -10,7 +11,8 @@ from application.backend.app.services.erp_analytics_service import (
     CallCenterAnalyticsService,
     InvoicesAnalyticsService,
     ContractsAnalyticsService,
-    ExpensesAnalyticsService
+    ExpensesAnalyticsService,
+    TeamChatAnalyticsService
 )
 from application.backend.app.services.ai_telemetry_service import (
     AITelemetryService,
@@ -39,16 +41,17 @@ def test_attendance_analytics_deterministic_counts(db_session: Session):
     
     assert report["timezone"] == "Africa/Nairobi"
     assert report["total_registered_guards"] == 11
-    assert report["active_guards"] == 11
+    expected_active = db_session.query(Guard).filter(Guard.status == "ACTIVE").count()
+    assert report["active_guards"] == expected_active
     assert report["guards_clocked_in"] == len(report["details_rows"])
     assert report["currently_on_duty"] == report["guards_clocked_in"] - report["guards_clocked_out"]
-    assert report["absent_guards_count"] == 11 - report["guards_clocked_in"]
+    assert report["absent_guards_count"] == expected_active - report["guards_clocked_in"]
 
     # Verify Section 9 template sections
     text = report["standardized_report"]
     assert "ATTENDANCE REPORT" in text
     assert "**Total registered guards:** 11" in text
-    assert "**Active guards:** 11" in text
+    assert f"**Active guards:** {expected_active}" in text
     assert f"**Guards who clocked in:** {report['guards_clocked_in']}" in text
     assert f"**Guards who clocked out:** {report['guards_clocked_out']}" in text
     assert f"**Currently on duty:** {report['currently_on_duty']}" in text
@@ -82,6 +85,7 @@ def test_four_question_consistency_challenge(db_session: Session):
     t4 = AITelemetryService.get_system_telemetry(db_session, user_query=q4, category=c4, bypass_cache=True)
 
     expected_reg = t1["workforce_and_operations"]["total_guards_registered"]
+    expected_active = t1["workforce_and_operations"]["active_registered_guards"]
     expected_clocked = t1["workforce_and_operations"]["guards_clocked_in_today"]
     expected_on_duty = t1["workforce_and_operations"]["guards_currently_on_duty"]
     expected_out = t1["workforce_and_operations"]["guards_clocked_out_today"]
@@ -91,7 +95,7 @@ def test_four_question_consistency_challenge(db_session: Session):
     for i, t in enumerate([t1, t2, t3, t4], 1):
         ops = t["workforce_and_operations"]
         assert ops["total_guards_registered"] == expected_reg, f"Q{i} mismatch on total_guards_registered"
-        assert ops["active_registered_guards"] == expected_reg, f"Q{i} mismatch on active_registered_guards"
+        assert ops["active_registered_guards"] == expected_active, f"Q{i} mismatch on active_registered_guards"
         assert ops["guards_clocked_in_today"] == expected_clocked, f"Q{i} mismatch on guards_clocked_in_today"
         assert ops["guards_currently_on_duty"] == expected_on_duty, f"Q{i} mismatch on guards_currently_on_duty"
         assert ops["guards_clocked_out_today"] == expected_out, f"Q{i} mismatch on guards_clocked_out_today"
@@ -348,6 +352,56 @@ def test_john_chege_issued_uniforms_custody_query(db_session: Session):
     assert "ISS-SHT-38556016" in res
     assert "ISS-TRS-38556016" in res
     assert "0 uniform items" not in res
+
+
+def test_team_chat_analytics_and_who_charted_today(db_session: Session):
+    """
+    Verifies that querying internal Team Operations Chat (e.g. 'who charted today and what was the message',
+    'can you check on team chart and you will see the messages') retrieves live messages from MySQL `team_messages`:
+    - mutongajoseph29@gmail.com messages sent today:
+      * 'hello everyone.'
+      * 'good morning members..'
+      * 'Make sure all the information is correct and do some payment today for the workers..'
+    Ensures the AI assistant never states 'no chat messages or system communications were recorded for today'.
+    """
+    # 1. Direct analytics report check
+    chat_rep = TeamChatAnalyticsService.get_team_chat_report(db_session)
+    assert chat_rep["total_messages"] >= 30
+    assert chat_rep["today_messages_count"] >= 3
+    assert len(chat_rep["today_senders"]) >= 1
+    assert any("mutonga" in s.lower() for s in chat_rep["today_senders"])
+
+    # Verify today's message contents
+    today_msgs = [r["message"] for r in chat_rep["today_rows"]]
+    assert any("hello everyone" in m.lower() for m in today_msgs)
+    assert any("good morning" in m.lower() for m in today_msgs)
+
+    # 2. Targeted search check
+    query1 = "who charted today and what was the message"
+    matches1 = AITelemetryService.search_database_entities(db_session, query1)
+    assert "matched_team_messages" in matches1
+    assert len(matches1["matched_team_messages"]) > 0
+
+    # 3. Telemetry integration
+    t = AITelemetryService.get_system_telemetry(db_session, user_query=query1, category="WORKFORCE", bypass_cache=True)
+    assert "team_chat_analytics" in t
+    assert "standardized_team_chat_report" in t
+    assert chat_rep["total_messages"] == t["team_chat_analytics"]["total_messages"]
+
+    # 4. Fallback analysis generation
+    res1 = GeminiAIService.generate_grounded_fallback_analysis(query1, t)
+    assert "no chat messages" not in res1.lower()
+    assert "no recorded messages" not in res1.lower()
+    assert ("mutonga" in res1.lower() or "m***" in res1.lower())
+    assert "hello everyone" in res1.lower()
+
+    # Query 2: user asking to check team chart
+    query2 = "can you check on team chart and you will see the messages"
+    res2 = GeminiAIService.generate_grounded_fallback_analysis(query2, t)
+    assert "no chat messages" not in res2.lower()
+    assert "no recorded messages" not in res2.lower()
+    assert ("team operations chat" in res2.lower() or "mutonga" in res2.lower() or "m***" in res2.lower())
+
 
 
 

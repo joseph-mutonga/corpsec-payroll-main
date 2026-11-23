@@ -31,6 +31,7 @@ from application.backend.app.models.call_center import CallLog, PhoneNumber, Cal
 from application.backend.app.models.salary_advance import SalaryAdvance
 from application.backend.app.models.asset import Asset, AssetCategory, AssetAllocation, InventoryItem, InventoryTransaction
 from application.backend.app.models.leave import LeaveRequest
+from application.backend.app.models.team_message import TeamMessage, TeamChatRead
 from application.backend.app.services.erp_analytics_service import (
     AttendanceAnalyticsService,
     OvertimeAnalyticsService,
@@ -39,7 +40,8 @@ from application.backend.app.services.erp_analytics_service import (
     CallCenterAnalyticsService,
     InvoicesAnalyticsService,
     ContractsAnalyticsService,
-    ExpensesAnalyticsService
+    ExpensesAnalyticsService,
+    TeamChatAnalyticsService
 )
 
 
@@ -165,7 +167,8 @@ def classify_user_query(prompt: Optional[str]) -> str:
         "present", "attended", "who attended", "guards present",
         "cap", "caps", "uniform", "uniforms", "boot", "boots", "jacket", "jackets",
         "reflector", "reflectors", "flashlight", "flashlights", "torch", "raincoat", "raincoats",
-        "stock", "inventory", "supplies", "asset", "assets", "equipment", "radio", "radios", "gear"
+        "stock", "inventory", "supplies", "asset", "assets", "equipment", "radio", "radios", "gear",
+        "chat", "chart", "message", "messages", "team chat", "team chart", "who charted", "who chatted", "operations chat", "operations team"
     ]
     if any(w in p for w in workforce_terms):
         return QuestionCategory.WORKFORCE
@@ -365,7 +368,8 @@ class AITelemetryService:
             "matched_calls": [],
             "matched_leave_requests": [],
             "matched_expenses": [],
-            "matched_guard_custody": []
+            "matched_guard_custody": [],
+            "matched_team_messages": []
         }
 
         # 1. Guards search
@@ -608,6 +612,38 @@ class AITelemetryService:
                 if rep and rep.get("found") and rep.get("total_items_issued", 0) > 0:
                     results["matched_guard_custody"].append(rep)
 
+        # 13. Team Operations Chat search (messages, senders, channels)
+        chat_tokens = {"chat", "chart", "message", "messages", "operations", "talk", "discussed", "posted", "sent", "say", "said", "chatted", "charted"}
+        has_chat_intent = any(t in chat_tokens for t in tokens)
+
+        team_msgs = (
+            db.query(TeamMessage)
+            .options(
+                joinedload(TeamMessage.user),
+                joinedload(TeamMessage.receiver)
+            )
+            .order_by(TeamMessage.id.desc())
+            .limit(40)
+            .all()
+        )
+        for tm in team_msgs:
+            sender_str = f"{tm.sender_name} {tm.sender_role} {tm.user.email if tm.user else ''}".lower()
+            receiver_str = f"{tm.receiver.full_name or tm.receiver.email if tm.receiver else ''}".lower()
+            msg_str = f"{sender_str} {receiver_str} {tm.channel} {tm.message or ''}".lower()
+            if any(t in msg_str for t in tokens) or (has_chat_intent and len(results["matched_team_messages"]) < 20):
+                r_name = tm.receiver.full_name or tm.receiver.email if tm.receiver else (f"User #{tm.receiver_id}" if tm.receiver_id else None)
+                is_grp = (tm.receiver_id is None or tm.channel in ["operations", "all", "group_operations"])
+                results["matched_team_messages"].append({
+                    "id": tm.id,
+                    "date": tm.created_at.strftime("%Y-%m-%d") if tm.created_at else None,
+                    "time": tm.created_at.strftime("%I:%M %p") if tm.created_at else None,
+                    "sender_name": tm.sender_name,
+                    "sender_role": tm.sender_role,
+                    "channel": "Operations Team (Group)" if is_grp else f"Direct to {r_name or 'Recipient'}",
+                    "message": tm.message or "",
+                    "has_attachment": bool(tm.attachment_url)
+                })
+
         return results
 
     classify_user_query = staticmethod(classify_user_query)
@@ -658,6 +694,7 @@ class AITelemetryService:
         inv_report = InvoicesAnalyticsService.get_invoices_report(db)
         ctr_report = ContractsAnalyticsService.get_contracts_report(db)
         exp_report = ExpensesAnalyticsService.get_expenses_report(db)
+        team_chat_report = TeamChatAnalyticsService.get_team_chat_report(db)
 
         # Baseline empty/default structures
         error_rates = {
@@ -1201,6 +1238,7 @@ class AITelemetryService:
             "site_invoices_analytics": inv_report,
             "client_contracts_analytics": ctr_report,
             "expenses_analytics": exp_report,
+            "team_chat_analytics": team_chat_report,
             "standardized_attendance_report": att_report.get("standardized_report", ""),
             "standardized_overtime_report": ot_report.get("standardized_report", ""),
             "standardized_advances_report": adv_report.get("standardized_report", ""),
@@ -1209,6 +1247,8 @@ class AITelemetryService:
             "standardized_invoices_report": inv_report.get("standardized_report", ""),
             "standardized_contracts_report": ctr_report.get("standardized_report", ""),
             "standardized_expenses_report": exp_report.get("standardized_report", ""),
+            "standardized_team_chat_report": team_chat_report.get("standardized_report", ""),
+            "team_messages_register": team_chat_report.get("details_rows", []),
             "attendance_details_table": att_report.get("details_rows", []),
             "salary_advances_register": adv_report.get("details_rows", []),
             "assets_inventory_register": ast_report.get("details_rows", []),
