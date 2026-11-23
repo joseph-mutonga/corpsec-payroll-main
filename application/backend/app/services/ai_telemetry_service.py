@@ -38,7 +38,8 @@ from application.backend.app.services.erp_analytics_service import (
     AssetsInventoryAnalyticsService,
     CallCenterAnalyticsService,
     InvoicesAnalyticsService,
-    ContractsAnalyticsService
+    ContractsAnalyticsService,
+    ExpensesAnalyticsService
 )
 
 
@@ -169,25 +170,26 @@ def classify_user_query(prompt: Optional[str]) -> str:
     if any(w in p for w in workforce_terms):
         return QuestionCategory.WORKFORCE
 
-    # 4. Payroll & Statutory Deductions
+    # 4. Management, Commercial Financials, Expenses & Petty Cash
+    mgmt_terms = [
+        "mrr", "revenue", "monthly recurring revenue", "contract", "contracts",
+        "client", "clients", "invoice", "invoices", "billing", "profit",
+        "expense", "expenses", "petty cash", "expenditure", "spending", "outflow",
+        "float balance", "director", "commercial", "turnover"
+    ]
+    if any(w in p for w in mgmt_terms):
+        return QuestionCategory.MANAGEMENT
+
+    # 5. Payroll & Statutory Deductions
     payroll_terms = [
         "payroll", "salary", "salaries", "pay", "payslip", "advance", "advances",
         "nssf", "shif", "nhif", "housing levy", "levy", "tax", "paye", "relief",
         "personal relief", "deduction", "deductions", "gross pay", "net pay",
         "disbursement", "remittance", "statutory", "allowance", "overtime pay",
-        "overtime", "ot", "basic salary", "effective salary", "salary advance"
+        "overtime", "basic salary", "effective salary", "salary advance"
     ]
-    if any(w in p for w in payroll_terms):
+    if any(w in p for w in payroll_terms) or bool(re.search(r"\bot\b", p)):
         return QuestionCategory.PAYROLL
-
-    # 5. Management & Commercial Financials
-    mgmt_terms = [
-        "mrr", "revenue", "monthly recurring revenue", "contract", "contracts",
-        "client", "clients", "invoice", "invoices", "billing", "profit",
-        "expense", "expenses", "petty cash", "expenditure", "director", "commercial", "turnover"
-    ]
-    if any(w in p for w in mgmt_terms):
-        return QuestionCategory.MANAGEMENT
 
     # 6. Default to Complex Analytical
     return QuestionCategory.COMPLEX
@@ -361,7 +363,8 @@ class AITelemetryService:
             "matched_invoices": [],
             "matched_contracts": [],
             "matched_calls": [],
-            "matched_leave_requests": []
+            "matched_leave_requests": [],
+            "matched_expenses": []
         }
 
         # 1. Guards search
@@ -573,6 +576,24 @@ class AITelemetryService:
                     "status": lr.status
                 })
 
+        # 11. Expenses search
+        expenses = db.query(Expense).all()
+        for exp in expenses:
+            exp_str = f"{exp.title} {exp.payee} {exp.receipt_number or ''} {exp.category} {exp.expense_type} {exp.status} {exp.payment_method}".lower()
+            if any(t in exp_str for t in tokens):
+                results["matched_expenses"].append({
+                    "id": exp.id,
+                    "expense_date": str(exp.expense_date) if exp.expense_date else None,
+                    "title": exp.title,
+                    "category": exp.category,
+                    "expense_type": exp.expense_type,
+                    "amount_kes": float(exp.amount),
+                    "payee": exp.payee,
+                    "payment_method": exp.payment_method,
+                    "receipt_number": exp.receipt_number,
+                    "status": exp.status
+                })
+
         return results
 
     classify_user_query = staticmethod(classify_user_query)
@@ -612,6 +633,18 @@ class AITelemetryService:
         host_telemetry = cls.get_host_telemetry()
         db_telemetry = cls.get_database_telemetry(db)
 
+        # ======================================================================
+        # DETERMINISTIC GROUNDING: COMPLETE ERP SINGLE SOURCE OF TRUTH
+        # ======================================================================
+        att_report = AttendanceAnalyticsService.get_attendance_report(db)
+        ot_report = OvertimeAnalyticsService.get_overtime_analysis(db)
+        adv_report = SalaryAdvancesAnalyticsService.get_advances_report(db)
+        ast_report = AssetsInventoryAnalyticsService.get_assets_report(db)
+        cc_report = CallCenterAnalyticsService.get_call_center_report(db)
+        inv_report = InvoicesAnalyticsService.get_invoices_report(db)
+        ctr_report = ContractsAnalyticsService.get_contracts_report(db)
+        exp_report = ExpensesAnalyticsService.get_expenses_report(db)
+
         # Baseline empty/default structures
         error_rates = {
             "unresolved_payroll_errors_total": 0,
@@ -637,7 +670,11 @@ class AITelemetryService:
             "unpaid_site_invoices_count": 0,
             "overdue_invoices_count": 0,
             "unpaid_invoices_amount_kes": 0.0,
-            "month_to_date_recurrent_expenses_kes": 0.0
+            "total_expenses_this_month_kes": exp_report["this_month_total_kes"],
+            "total_expenses_last_month_kes": exp_report["last_month_total_kes"],
+            "month_to_date_recurrent_expenses_kes": exp_report["this_month_total_kes"],
+            "petty_cash_float_balance_kes": exp_report["petty_cash_float_balance_kes"],
+            "recurring_monthly_commitments_kes": exp_report["recurring_monthly_commitments_kes"]
         }
         active_users_summary = {
             "total_system_users": 0,
@@ -655,17 +692,6 @@ class AITelemetryService:
         recent_attendance_register = []
         targeted_matches = {}
         audit_trail = []
-
-        # ======================================================================
-        # DETERMINISTIC GROUNDING: COMPLETE ERP SINGLE SOURCE OF TRUTH
-        # ======================================================================
-        att_report = AttendanceAnalyticsService.get_attendance_report(db)
-        ot_report = OvertimeAnalyticsService.get_overtime_analysis(db)
-        adv_report = SalaryAdvancesAnalyticsService.get_advances_report(db)
-        ast_report = AssetsInventoryAnalyticsService.get_assets_report(db)
-        cc_report = CallCenterAnalyticsService.get_call_center_report(db)
-        inv_report = InvoicesAnalyticsService.get_invoices_report(db)
-        ctr_report = ContractsAnalyticsService.get_contracts_report(db)
 
         # ======================================================================
         # CATEGORY-BASED SELECTIVE QUERY EXECUTION
@@ -875,6 +901,12 @@ class AITelemetryService:
                     "start_date": str(c.start_date) if c.start_date else None,
                     "end_date": str(c.end_date) if c.end_date else None
                 })
+
+            if user_query:
+                try:
+                    targeted_matches = cls.search_database_entities(db, user_query)
+                except Exception as e:
+                    targeted_matches = {"error": str(e)}
 
         else:
             # COMPLEX Analytical: Complete system telemetry snapshot
@@ -1154,6 +1186,7 @@ class AITelemetryService:
             "call_center_summary": cc_report,
             "site_invoices_analytics": inv_report,
             "client_contracts_analytics": ctr_report,
+            "expenses_analytics": exp_report,
             "standardized_attendance_report": att_report.get("standardized_report", ""),
             "standardized_overtime_report": ot_report.get("standardized_report", ""),
             "standardized_advances_report": adv_report.get("standardized_report", ""),
@@ -1161,6 +1194,7 @@ class AITelemetryService:
             "standardized_calls_report": cc_report.get("standardized_report", ""),
             "standardized_invoices_report": inv_report.get("standardized_report", ""),
             "standardized_contracts_report": ctr_report.get("standardized_report", ""),
+            "standardized_expenses_report": exp_report.get("standardized_report", ""),
             "attendance_details_table": att_report.get("details_rows", []),
             "salary_advances_register": adv_report.get("details_rows", []),
             "assets_inventory_register": ast_report.get("details_rows", []),
@@ -1168,6 +1202,7 @@ class AITelemetryService:
             "call_center_logs_register": cc_report.get("recent_calls", []),
             "site_invoices_register": inv_report.get("details_rows", []),
             "client_contracts_register": ctr_report.get("details_rows", []),
+            "expenses_details_table": exp_report.get("details_rows", []),
             "leave_requests_register": leave_requests_register,
             "expenses_register": expenses_register,
             "guards_register": guards_register,

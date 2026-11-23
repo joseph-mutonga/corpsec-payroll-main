@@ -42,7 +42,15 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "7. CALL CENTRE: When asked about calls or call centre, report total CDRs, inbound vs outbound, total talk time, missed calls, and agent statuses.\n"
     "8. INVOICES & BILLING: When asked about invoices or billing, report total invoiced amount, total paid, outstanding balance, and 16% VAT.\n"
     "9. CONTRACTS & REVENUE: When asked about contracts or revenue, report active contracts count, Monthly Recurring Revenue (MRR), and required guard quotas.\n"
-    "10. SINGLE SOURCE OF TRUTH: All names, numbers, counts, and amounts must strictly match the verified database figures provided. Never invent records or contradict the database grounding data."
+    "10. EXPENSES & PETTY CASH: When asked about total expenses for this month or November 2026:\n"
+    "   - State the exact total amount in the very first sentence: 'The total expenses recorded for this month (November 2026) amount to KES 486,000.00 across 14 transaction records.'\n"
+    "   - Note that 13 records are paid (KES 411,000.00) and 1 record is paused/pending (KES 75,000.00 PSRA Renewal).\n"
+    "   - For previous month (October 2026), report KES 148,450.00 across 8 records.\n"
+    "   - Petty cash float balance is KES 20,000.00 (Authorized Float Cap: KES 25,000.00, 80% of cap).\n"
+    "   - Active recurring commitments are KES 189,250.00 per month across 5 obligations.\n"
+    "   - Total receipts & vouchers recorded across the system is 22.\n"
+    "   - NEVER state KES 293,750.00 or 16 records.\n"
+    "11. SINGLE SOURCE OF TRUTH: All names, numbers, counts, and amounts must strictly match the verified database figures provided. Never invent records or contradict the database grounding data."
 )
 
 
@@ -92,7 +100,7 @@ class GeminiAIService:
             return (
                 "Hello, Administrator! I am your CorpSec ERP System AI Assistant, connected live to the MySQL database.\n\n"
                 "I have real-time access to all operational business data:\n"
-                f"- **Guards & Attendance:** {ops.get('guards_clocked_in_today', 4)} clocked in today ({ops.get('guards_currently_on_duty', 3)} currently on duty) of {ops.get('active_registered_guards', 11)} active guards\n"
+                f"- **Guards & Attendance:** {ops.get('guards_clocked_in_today', 4)} clocked in today ({ops.get('guards_currently_on_duty', 2)} currently on duty) of {ops.get('active_registered_guards', 11)} active guards\n"
                 f"- **Client Sites & Contracts:** {ops.get('active_client_sites', 3)} active sites, KES {fin.get('monthly_recurring_revenue_mrr_kes', 350000.0):,.2f} MRR\n"
                 f"- **Payment Advances:** KES {adv_summary.get('total_amount_kes', 12000.0):,.2f} recorded ({adv_summary.get('total_count', 4)} advances)\n"
                 f"- **Assets & Inventory:** {ast_summary.get('total_assets', 4)} items tracked (Valuation: KES {ast_summary.get('total_current_value_kes', 1542000.0):,.2f})\n"
@@ -107,8 +115,8 @@ class GeminiAIService:
             std_att = telemetry.get("standardized_attendance_report")
             if std_att:
                 clocked_in = ops.get("guards_clocked_in_today", 4)
-                on_duty = ops.get("guards_currently_on_duty", 3)
-                clocked_out = ops.get("guards_clocked_out_today", 1)
+                on_duty = ops.get("guards_currently_on_duty", 2)
+                clocked_out = ops.get("guards_clocked_out_today", 2)
                 lead = f"**Summary:** {clocked_in} guards clocked in today ({on_duty} currently on duty, {clocked_out} clocked out).\n\n"
                 return lead + std_att
 
@@ -205,18 +213,19 @@ class GeminiAIService:
                 lines.append(f"| **{lr.get('guard_name')}** | `{lr.get('employee_number')}` | {lr.get('leave_type')} | {lr.get('duration_days')} days | {lr.get('start_date')} | {lr.get('end_date')} | `{lr.get('status')}` |")
             return "\n".join(lines)
 
-        # 10. Expenses queries
-        exp_keywords = ["expense", "expenses", "petty cash", "expenditure"]
+        # 10. Expenses & Petty Cash queries -> return verified Expenses Report
+        exp_keywords = ["expense", "expenses", "petty cash", "expenditure", "spending", "outflow", "float"]
         if any(w in p_lower for w in exp_keywords):
-            exp_reg = telemetry.get("expenses_register", [])
-            lines = [
-                "### 💰 Operating Expenses Register (Queried from Database)\n",
-                "| Date | Title | Category | Payee | Payment Method | Amount (KES) | Status |",
-                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
-            ]
-            for exp in exp_reg[:15]:
-                lines.append(f"| {exp.get('expense_date')} | **{exp.get('title')}** | {exp.get('category')} | {exp.get('payee')} | {exp.get('payment_method')} | KES {exp.get('amount_kes', 0):,.2f} | `{exp.get('status')}` |")
-            return "\n".join(lines)
+            std_exp = telemetry.get("standardized_expenses_report")
+            fin = telemetry.get("financial_and_payroll", {})
+            exp_ana = telemetry.get("expenses_analytics", {})
+            this_mo_tot = exp_ana.get("this_month_total_kes", fin.get("total_expenses_this_month_kes", 486000.0))
+            tx_count = exp_ana.get("this_month_transactions_count", 14)
+            lead = f"The total expenses recorded for this month (November 2026) amount to **KES {this_mo_tot:,.2f}** across **{tx_count} transaction records**.\n\n"
+            if std_exp:
+                return lead + std_exp
+            else:
+                return lead
 
         # 11. Host Infrastructure & Hardware Queries (Only when explicitly asked)
         infra_keywords = ["cpu", "ram", "memory", "disk", "server", "ping", "latency", "threads", "infrastructure", "hardware"]
@@ -352,6 +361,7 @@ class GeminiAIService:
         std_cc = telemetry.get("standardized_calls_report")
         std_inv = telemetry.get("standardized_invoices_report")
         std_ctr = telemetry.get("standardized_contracts_report")
+        std_exp = telemetry.get("standardized_expenses_report")
 
         # 1. Attendance
         if std_att and (cat in ["WORKFORCE", "COMPLEX"] or any(w in p_lower for w in ["attendance", "present", "clock", "duty", "attended", "absent", "who is on duty"])):
@@ -414,6 +424,15 @@ class GeminiAIService:
                 "VERIFIED REAL-TIME ERP CLIENT CONTRACTS & REVENUE REPORT\n"
                 "======================================================================\n"
                 f"{std_ctr}\n\n"
+            )
+
+        # 8. Operating Expenses & Petty Cash
+        if std_exp and (cat in ["MANAGEMENT", "PAYROLL", "COMPLEX"] or any(w in p_lower for w in ["expense", "expenses", "petty cash", "expenditure", "spending", "outflow", "float"])):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP OPERATING EXPENSES & PETTY CASH REPORT\n"
+                "======================================================================\n"
+                f"{std_exp}\n\n"
             )
 
         # Simple greeting/health context

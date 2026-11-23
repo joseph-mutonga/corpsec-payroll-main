@@ -18,7 +18,7 @@ from application.backend.app.models.call_center import CallLog, PhoneNumber, Cal
 from application.backend.app.models.invoice import SiteInvoice, InvoiceItem
 from application.backend.app.models.client_contract import ClientContract, Client
 from application.backend.app.models.leave import LeaveRequest
-from application.backend.app.models.expense import Expense
+from application.backend.app.models.expense import Expense, PettyCashTransaction
 from application.backend.app.models.incident import Incident
 from application.backend.app.models.user import User
 
@@ -899,6 +899,159 @@ class ContractsAnalyticsService:
             "total_contract_value_kes": float(total_value),
             "total_guards_required": total_guards_req,
             "total_clients": len(clients),
+            "details_rows": details_rows,
+            "standardized_report": standardized_report
+        }
+
+
+class ExpensesAnalyticsService:
+    """
+    Dedicated analytics engine for firm operating expenses, recurring commitments,
+    and petty cash imprest book.
+    Queries MySQL `expenses` and `petty_cash_transactions`.
+    """
+
+    @classmethod
+    def get_expenses_report(
+        cls,
+        db: Session,
+        target_year: Optional[int] = None,
+        target_month: Optional[int] = None,
+        category_search: Optional[str] = None
+    ) -> Dict[str, Any]:
+        t0 = time.perf_counter()
+        now_eat = datetime.datetime.now(NAIROBI_TZ)
+        this_yr = target_year or now_eat.year
+        this_mo = target_month or now_eat.month
+
+        first_of_this = datetime.date(this_yr, this_mo, 1)
+        last_mo_date = first_of_this - datetime.timedelta(days=1)
+        last_yr, last_mo = last_mo_date.year, last_mo_date.month
+
+        all_expenses = db.query(Expense).all()
+
+        curr_month_exp = [
+            e for e in all_expenses
+            if e.expense_date and e.expense_date.year == this_yr and e.expense_date.month == this_mo
+        ]
+        last_month_exp = [
+            e for e in all_expenses
+            if e.expense_date and e.expense_date.year == last_yr and e.expense_date.month == last_mo
+        ]
+
+        total_this_month = sum(Decimal(str(e.amount or 0)) for e in curr_month_exp)
+        total_last_month = sum(Decimal(str(e.amount or 0)) for e in last_month_exp)
+        total_vouchers_count = len(all_expenses)
+
+        # Petty cash float balance from latest transaction
+        last_pc_tx = db.query(PettyCashTransaction).order_by(PettyCashTransaction.id.desc()).first()
+        float_balance = float(last_pc_tx.balance_after) if last_pc_tx else 0.0
+
+        # Recurring commitments normalized to monthly
+        recurring_items = db.query(Expense).filter(Expense.is_recurring == True).all()
+        monthly_recurring = Decimal("0.0")
+        for r in recurring_items:
+            interval = (r.recurrence_interval or "MONTHLY").upper()
+            amt = Decimal(str(r.amount or 0))
+            if interval == "MONTHLY":
+                monthly_recurring += amt
+            elif interval == "WEEKLY":
+                monthly_recurring += amt * Decimal("4.33")
+            elif interval == "QUARTERLY":
+                monthly_recurring += amt / Decimal("3.0")
+            elif interval == "ANNUALLY":
+                monthly_recurring += amt / Decimal("12.0")
+
+        # Breakdown by category and type for current month
+        by_category: Dict[str, float] = {}
+        by_type: Dict[str, float] = {}
+        by_status: Dict[str, float] = {}
+        paid_records = []
+        paused_records = []
+
+        details_rows: List[Dict[str, Any]] = []
+        for e in sorted(curr_month_exp, key=lambda x: (x.expense_date or datetime.date.min, x.id), reverse=True):
+            amt = float(e.amount or 0)
+            by_category[e.category] = round(by_category.get(e.category, 0.0) + amt, 2)
+            by_type[e.expense_type] = round(by_type.get(e.expense_type, 0.0) + amt, 2)
+            by_status[e.status] = round(by_status.get(e.status, 0.0) + amt, 2)
+
+            if e.status == "PAID":
+                paid_records.append(e)
+            else:
+                paused_records.append(e)
+
+            row = {
+                "id": e.id,
+                "expense_date": str(e.expense_date) if e.expense_date else None,
+                "title": e.title,
+                "category": e.category,
+                "expense_type": e.expense_type,
+                "amount_kes": amt,
+                "payment_method": e.payment_method,
+                "payee": e.payee,
+                "receipt_number": e.receipt_number or "N/A",
+                "status": e.status,
+                "is_recurring": bool(e.is_recurring),
+                "recurrence_interval": e.recurrence_interval
+            }
+            if category_search:
+                q_clean = category_search.lower()
+                if (q_clean in (e.title or "").lower() or
+                    q_clean in (e.payee or "").lower() or
+                    q_clean in (e.category or "").lower() or
+                    q_clean in (e.expense_type or "").lower()):
+                    details_rows.append(row)
+            else:
+                details_rows.append(row)
+
+        month_label = first_of_this.strftime("%B %Y")
+        last_month_label = last_mo_date.strftime("%B %Y")
+
+        table_lines = [
+            "| Date | Title / Payee | Category | Type | Method | Voucher / Ref | Amount (KES) | Status |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+        ]
+        if details_rows:
+            for r in details_rows:
+                table_lines.append(
+                    f"| {r['expense_date']} | **{r['title']}** ({r['payee']}) | {r['category']} | {r['expense_type']} | {r['payment_method']} | `{r['receipt_number']}` | **KES {r['amount_kes']:,.2f}** | `{r['status']}` |"
+                )
+        else:
+            table_lines.append("| — | No expenses recorded for this criteria | — | — | — | — | — | — |")
+
+        formatted_table = "\n".join(table_lines)
+        q_time_ms = round((time.perf_counter() - t0) * 1000, 2)
+
+        standardized_report = (
+            f"### CORPSEC ERP EXPENSES & PETTY CASH REPORT ({month_label})\n"
+            f"**Audit Timestamp:** {AttendanceAnalyticsService.get_current_timestamp_eat()}\n\n"
+            f"- **Total Expenses This Month ({month_label}):** `KES {float(total_this_month):,.2f}` ({len(curr_month_exp)} transactions)\n"
+            f"- **Previous Month Total ({last_month_label}):** `KES {float(total_last_month):,.2f}` ({len(last_month_exp)} transactions)\n"
+            f"- **Petty Cash Float Balance:** `KES {float_balance:,.2f}` (Authorized Float Cap: KES 25,000.00)\n"
+            f"- **Active Recurring Commitments:** `KES {float(monthly_recurring):,.2f}` per month ({len(recurring_items)} obligations)\n"
+            f"- **Total Receipts & Vouchers Recorded:** {total_vouchers_count} fully tracked\n"
+            f"- **Status Breakdown:** Paid: `KES {sum(e.amount for e in paid_records):,.2f}` ({len(paid_records)} items) | Paused/Pending: `KES {sum(e.amount for e in paused_records):,.2f}` ({len(paused_records)} items)\n\n"
+            f"### CURRENT MONTH EXPENSE TRANSACTIONS REGISTER\n"
+            f"{formatted_table}\n\n"
+            f"### DATABASE VERIFICATION\n"
+            f"- **Query Execution Time:** {q_time_ms:.2f} ms\n"
+            f"- **Verified Records:** {len(curr_month_exp)} transactions in {month_label} queried from MySQL `expenses` and `petty_cash_transactions`"
+        )
+
+        return {
+            "query_time_ms": q_time_ms,
+            "target_month_label": month_label,
+            "this_month_total_kes": float(total_this_month),
+            "this_month_transactions_count": len(curr_month_exp),
+            "last_month_total_kes": float(total_last_month),
+            "last_month_transactions_count": len(last_month_exp),
+            "petty_cash_float_balance_kes": float_balance,
+            "recurring_monthly_commitments_kes": float(monthly_recurring),
+            "total_vouchers_count": total_vouchers_count,
+            "by_category": by_category,
+            "by_type": by_type,
+            "by_status": by_status,
             "details_rows": details_rows,
             "standardized_report": standardized_report
         }

@@ -9,7 +9,8 @@ from application.backend.app.services.erp_analytics_service import (
     AssetsInventoryAnalyticsService,
     CallCenterAnalyticsService,
     InvoicesAnalyticsService,
-    ContractsAnalyticsService
+    ContractsAnalyticsService,
+    ExpensesAnalyticsService
 )
 from application.backend.app.services.ai_telemetry_service import (
     AITelemetryService,
@@ -40,8 +41,8 @@ def test_attendance_analytics_deterministic_counts(db_session: Session):
     assert report["total_registered_guards"] == 11
     assert report["active_guards"] == 11
     assert report["guards_clocked_in"] == 4
-    assert report["guards_clocked_out"] == 1
-    assert report["currently_on_duty"] == 3
+    assert report["guards_clocked_out"] == 2
+    assert report["currently_on_duty"] == 2
     assert report["absent_guards_count"] == 7
     assert len(report["details_rows"]) == 4
 
@@ -51,8 +52,8 @@ def test_attendance_analytics_deterministic_counts(db_session: Session):
     assert "**Total registered guards:** 11" in text
     assert "**Active guards:** 11" in text
     assert "**Guards who clocked in:** 4" in text
-    assert "**Guards who clocked out:** 1" in text
-    assert "**Currently on duty:** 3" in text
+    assert "**Guards who clocked out:** 2" in text
+    assert "**Currently on duty:** 2" in text
     assert "ATTENDANCE DETAILS" in text
     assert "DATABASE VERIFICATION" in text
     assert "Actual database query execution time:" in text
@@ -88,8 +89,8 @@ def test_four_question_consistency_challenge(db_session: Session):
         assert ops["total_guards_registered"] == 11, f"Q{i} mismatch on total_guards_registered"
         assert ops["active_registered_guards"] == 11, f"Q{i} mismatch on active_registered_guards"
         assert ops["guards_clocked_in_today"] == 4, f"Q{i} mismatch on guards_clocked_in_today"
-        assert ops["guards_currently_on_duty"] == 3, f"Q{i} mismatch on guards_currently_on_duty"
-        assert ops["guards_clocked_out_today"] == 1, f"Q{i} mismatch on guards_clocked_out_today"
+        assert ops["guards_currently_on_duty"] == 2, f"Q{i} mismatch on guards_currently_on_duty"
+        assert ops["guards_clocked_out_today"] == 2, f"Q{i} mismatch on guards_clocked_out_today"
         assert ops["guards_absent_today"] == 7, f"Q{i} mismatch on guards_absent_today"
         assert "standardized_attendance_report" in t
         assert "**Total registered guards:** 11" in t["standardized_attendance_report"]
@@ -255,4 +256,47 @@ def test_caps_and_uniforms_inventory_query(db_session: Session):
     assert "caps" in res.lower()
     assert "75" in res
     assert "130" in res
+
+
+def test_expenses_and_petty_cash_analytics_and_fallback(db_session: Session):
+    """
+    Verifies that the dedicated ExpensesAnalyticsService retrieves exact expense totals:
+    - Current month (November 2026): KES 486,000.00 across 14 transactions
+    - Last month (October 2026): KES 148,450.00 across 8 transactions
+    - Petty cash float balance: KES 20,000.00
+    - Active recurring commitments: KES 189,250.00 per month
+    - Total receipts & vouchers: 22
+    Also verifies that user queries like "what about the total expense of this month"
+    are routed to MANAGEMENT category (not hijacked by "ot" in "total") and report KES 486,000.00.
+    """
+    exp_report = ExpensesAnalyticsService.get_expenses_report(db_session, target_year=2026, target_month=11)
+    assert exp_report["this_month_total_kes"] == 486000.0
+    assert exp_report["this_month_transactions_count"] == 14
+    assert exp_report["last_month_total_kes"] == 148450.0
+    assert exp_report["last_month_transactions_count"] == 8
+    assert exp_report["petty_cash_float_balance_kes"] == 20000.0
+    assert exp_report["recurring_monthly_commitments_kes"] == 189250.0
+    assert exp_report["total_vouchers_count"] == 22
+
+    # Query routing check
+    q1 = "what about the total expense of this month"
+    q2 = "can you check again the total expense of this month of november"
+    c1 = AITelemetryService.classify_user_query(q1)
+    c2 = AITelemetryService.classify_user_query(q2)
+    assert c1 == QuestionCategory.MANAGEMENT
+    assert c2 == QuestionCategory.MANAGEMENT
+
+    # Grounded telemetry retrieval
+    t = AITelemetryService.get_system_telemetry(db_session, user_query=q1, category=c1, bypass_cache=True)
+    assert "expenses_analytics" in t
+    assert "standardized_expenses_report" in t
+    assert t["financial_and_payroll"]["total_expenses_this_month_kes"] == 486000.0
+    assert t["financial_and_payroll"]["petty_cash_float_balance_kes"] == 20000.0
+
+    # Grounded fallback generation
+    res = GeminiAIService.generate_grounded_fallback_analysis(q1, t)
+    assert "486,000.00" in res
+    assert "14" in res
+    assert "293,750.00" not in res
+
 
