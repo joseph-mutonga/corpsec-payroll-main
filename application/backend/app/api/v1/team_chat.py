@@ -28,21 +28,42 @@ CHAT_ATTACHMENTS_DIR = os.path.join(os.getcwd(), "uploads", "team_chat")
 os.makedirs(CHAT_ATTACHMENTS_DIR, exist_ok=True)
 
 
-def format_chat_last_message(msg: Optional[TeamMessage], default_text: str = "") -> str:
+def format_chat_last_message(
+    msg: Optional[TeamMessage],
+    default_text: str = "",
+    current_user_id: Optional[int] = None,
+    is_group: bool = False
+) -> str:
     if not msg:
         return default_text
     txt = (msg.message or "").strip()
+    prefix = ""
+    if current_user_id is not None:
+        if msg.user_id == current_user_id:
+            prefix = "You: "
+        elif is_group and msg.sender_name:
+            sname = (msg.sender_name.split('@')[0] or "").replace('.', ' ').strip().title()
+            if sname:
+                prefix = f"{sname}: "
+
+    body = ""
     if txt:
         if msg.attachment_url:
             if msg.attachment_type and msg.attachment_type.startswith("image/"):
-                return f"📷 {txt}"
-            return f"📎 {txt}"
-        return txt
-    if msg.attachment_url:
+                body = f"📷 {txt}"
+            else:
+                body = f"📎 {txt}"
+        else:
+            body = txt
+    elif msg.attachment_url:
         if msg.attachment_type and msg.attachment_type.startswith("image/"):
-            return "📷 Photo"
-        return f"📎 {msg.attachment_name or 'Attachment'}"
-    return default_text
+            body = "📷 Photo"
+        else:
+            body = f"📎 {msg.attachment_name or 'Attachment'}"
+    else:
+        return default_text
+
+    return f"{prefix}{body}"
 
 
 @router.get("/contacts")
@@ -107,7 +128,7 @@ def getChatContacts(
             "avatar": "👥",
             "avatar_initials": "OP",
             "avatar_bg": "#0F766E",
-            "last_message": format_chat_last_message(last_group_msg, "Tap to open team group discussion..."),
+            "last_message": format_chat_last_message(last_group_msg, "No messages yet in Operations Team", current_user.id, is_group=True),
             "last_time": last_group_msg.created_at.isoformat() if last_group_msg else None,
             "user_id": None,
             "unread_count": group_unread_count
@@ -237,11 +258,35 @@ def getChatContacts(
             "avatar": avatar_icon,
             "avatar_initials": initials,
             "avatar_bg": avatar_bg,
-            "last_message": format_chat_last_message(last_dm, f"Click to chat with {display_name}"),
+            "last_message": format_chat_last_message(last_dm, "", current_user.id, is_group=False),
             "last_time": last_dm.created_at.isoformat() if last_dm else None,
             "user_id": u.id,
             "unread_count": dm_unread_count
         })
+
+    # WhatsApp-Style Dynamic Contact Sorting:
+    # 1. Unread conversations float to the very top (highest immediate priority).
+    # 2. Chronological by newest message timestamp (last_time descending) so whoever texted floats to the top.
+    # 3. Contacts with no message history are placed neatly below in the team directory, sorted alphabetically.
+    active_contacts = [c for c in contacts if c.get("last_time") or (c.get("unread_count") or 0) > 0]
+    active_contacts.sort(
+        key=lambda c: (
+            1 if (c.get("unread_count") or 0) > 0 else 0,
+            c.get("last_time") or ""
+        ),
+        reverse=True
+    )
+
+    inactive_contacts = [c for c in contacts if not c.get("last_time") and (c.get("unread_count") or 0) == 0]
+    inactive_contacts.sort(
+        key=lambda c: (
+            0 if c.get("is_group") else 1,
+            c.get("role", ""),
+            (c.get("display_name") or c.get("name") or "").lower()
+        )
+    )
+
+    contacts = active_contacts + inactive_contacts
 
     total_unread = sum(c["unread_count"] for c in contacts)
 

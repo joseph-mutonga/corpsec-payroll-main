@@ -158,6 +158,10 @@ def classify_user_query(prompt: Optional[str]) -> str:
     if any(h in p for h in host_terms) and not any(w in p for w in business_entities):
         return QuestionCategory.SIMPLE
 
+    # 2b. Attendance & Daily Shifts (Attendance questions with overtime route to WORKFORCE unless monetary payroll is specified)
+    if any(att in p for att in ["attendance", "present guards", "clocked in", "clock in", "clock out", "on duty"]) and not any(w in p for w in ["salary", "payroll", "payslip", "nssf", "shif", "paye", "advance", "deduction"]):
+        return QuestionCategory.WORKFORCE
+
     # 3. Payroll & Statutory Deductions (Checked before workforce so "guard salary" or "guard overtime" routes to payroll)
     payroll_terms = [
         "payroll", "salary", "salaries", "pay", "payslip", "advance", "advances",
@@ -706,11 +710,17 @@ class AITelemetryService:
             "recent_payroll_error_samples": []
         }
         operations_telemetry = {
-            "total_guards_registered": 0,
-            "active_guards_on_duty_roster": 0,
+            "total_guards_registered": att_report["total_registered_guards"],
+            "active_registered_guards": att_report["active_guards"],
+            "guards_clocked_in_today": att_report["guards_clocked_in"],
+            "guards_clocked_out_today": att_report["guards_clocked_out"],
+            "guards_currently_on_duty": att_report["currently_on_duty"],
+            "active_guards_on_duty_roster": att_report["currently_on_duty"],
+            "guards_absent_today": att_report["absent_guards_count"],
+            "incomplete_attendance_records": att_report["incomplete_records_count"],
             "total_client_sites": 0,
             "active_client_sites": 0,
-            "today_attendance_punches_logged": 0,
+            "today_attendance_punches_logged": att_report["records_count"],
             "active_field_supervisors": 0,
             "call_center_calls_handled_today": 0
         }

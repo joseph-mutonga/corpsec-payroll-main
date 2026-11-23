@@ -571,5 +571,88 @@ def test_team_chat_pin_and_unpin_important_messages(client, setup_rbac_users):
     assert msg_id not in pinned_after_ids
 
 
+def test_team_chat_contacts_sorted_by_recent_messages(client, setup_rbac_users):
+    """
+    Verifies that contacts directory dynamically sorts conversations:
+    1. Unread incoming messages float to the very top (index 0).
+    2. Conversations with the most recent messages appear above older ones.
+    3. The message preview snippet contains the actual message content.
+    4. When a new person texts, they immediately float to the top so the admin
+       does not have to search for them.
+    """
+    db = SessionLocal()
+    admin_user = db.query(User).filter(User.email == "rbac_admin@corpsec.co.ke").first()
+    supervisor_user = db.query(User).filter(User.email == "rbac_supervisor@corpsec.co.ke").first()
+    hr_user = db.query(User).filter(User.email == "rbac_hr@corpsec.co.ke").first()
+    db.close()
+
+    admin_headers = {"Authorization": f"Bearer {setup_rbac_users[UserRole.ADMIN.value]}"}
+    sup_headers = {"Authorization": f"Bearer {setup_rbac_users[UserRole.SUPERVISOR.value]}"}
+    hr_headers = {"Authorization": f"Bearer {setup_rbac_users[UserRole.HR.value]}"}
+
+    # 1. Supervisor sends a direct message to Admin
+    msg1_text = "Hello Admin, site inspection finished at Chap Chap"
+    post_res1 = client.post(
+        "/api/v1/team-chat/messages",
+        headers=sup_headers,
+        json={"message": msg1_text, "receiver_id": admin_user.id}
+    )
+    assert post_res1.status_code == 201
+
+    # Admin checks contacts: Supervisor MUST be at index 0 (top of list)
+    res2 = client.get("/api/v1/team-chat/contacts", headers=admin_headers)
+    assert res2.status_code == 200
+    contacts2 = res2.json()["contacts"]
+    assert contacts2[0]["user_id"] == supervisor_user.id
+    assert contacts2[0]["unread_count"] >= 1
+    assert msg1_text in contacts2[0]["last_message"]
+
+    # 2. Now HR sends a direct message to Admin later
+    msg2_text = "Good morning Admin, leave applications are pending approval"
+    post_res2 = client.post(
+        "/api/v1/team-chat/messages",
+        headers=hr_headers,
+        json={"message": msg2_text, "receiver_id": admin_user.id}
+    )
+    assert post_res2.status_code == 201
+
+    # Admin checks contacts: HR MUST now be at index 0 (top of list) because they texted most recently!
+    res3 = client.get("/api/v1/team-chat/contacts", headers=admin_headers)
+    assert res3.status_code == 200
+    contacts3 = res3.json()["contacts"]
+    assert contacts3[0]["user_id"] == hr_user.id
+    assert contacts3[0]["unread_count"] >= 1
+    assert msg2_text in contacts3[0]["last_message"]
+
+    # Supervisor is still near top (index 1) with their unread message
+    assert contacts3[1]["user_id"] == supervisor_user.id
+
+    # 3. Admin marks HR message as read by opening HR chat
+    mark_hr = client.post(
+        "/api/v1/team-chat/mark-read",
+        headers=admin_headers,
+        json={"contact_id": f"dm_{hr_user.id}", "user_id": hr_user.id}
+    )
+    assert mark_hr.status_code == 200
+
+    # 4. Admin replies to supervisor
+    msg3_text = "Received the report, thank you supervisor"
+    post_res3 = client.post(
+        "/api/v1/team-chat/messages",
+        headers=admin_headers,
+        json={"message": msg3_text, "receiver_id": supervisor_user.id}
+    )
+    assert post_res3.status_code == 201
+
+    # Admin checks contacts again: Supervisor chat was just replied to, so it has newest timestamp and floats to index 0!
+    res4 = client.get("/api/v1/team-chat/contacts", headers=admin_headers)
+    assert res4.status_code == 200
+    contacts4 = res4.json()["contacts"]
+    assert contacts4[0]["user_id"] == supervisor_user.id
+    assert "You: " in contacts4[0]["last_message"]
+    assert msg3_text in contacts4[0]["last_message"]
+
+
+
 
 

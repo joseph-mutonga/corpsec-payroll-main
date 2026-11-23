@@ -15575,6 +15575,7 @@ async function initWhatsAppChat() {
     waPollTimer = setInterval(() => {
       if (window.currentActiveTab === 'team-chat') {
         loadWhatsAppActiveMessages(true);
+        pollWhatsAppContacts();
       } else {
         clearInterval(waPollTimer);
         waPollTimer = null;
@@ -15598,6 +15599,52 @@ async function initWhatsAppChat() {
   }
 }
 
+let waLastContactsFingerprint = '';
+
+async function pollWhatsAppContacts() {
+  try {
+    const res = await apiFetch('/team-chat/contacts');
+    if (!res.ok) return;
+    const data = await res.json();
+    const contacts = data.contacts || [];
+
+    const fingerprint = contacts.map(c => `${c.id}:${c.unread_count}:${c.last_time || ''}:${(c.last_message || '').slice(0, 15)}`).join('|');
+    if (fingerprint === waLastContactsFingerprint) return;
+    waLastContactsFingerprint = fingerprint;
+
+    waContactsCache = contacts;
+    updateTeamChatBadges(data.total_unread || 0);
+
+    const counts = data.counts || {};
+    const cntAll = document.getElementById('wa-pill-cnt-all');
+    if (cntAll) cntAll.innerText = counts.all || waContactsCache.length;
+    const cntCh = document.getElementById('wa-pill-cnt-channels');
+    if (cntCh) cntCh.innerText = counts.channels || waContactsCache.filter(c => c.category === 'channels' || c.is_group).length;
+    const cntSup = document.getElementById('wa-pill-cnt-supervisors');
+    if (cntSup) cntSup.innerText = counts.supervisors || waContactsCache.filter(c => c.category === 'supervisors').length;
+    const cntAdmin = document.getElementById('wa-pill-cnt-admin_hr');
+    if (cntAdmin) cntAdmin.innerText = counts.admin_hr || waContactsCache.filter(c => c.category === 'admin_hr').length;
+
+    renderWhatsAppContacts(document.getElementById('wa-contact-search')?.value || '');
+  } catch (err) {
+    // Silent fail on background poll
+  }
+}
+
+function sortContactsByRecent(a, b) {
+  const unreadA = (a.unread_count || 0) > 0 ? 1 : 0;
+  const unreadB = (b.unread_count || 0) > 0 ? 1 : 0;
+  if (unreadA !== unreadB) return unreadB - unreadA;
+
+  const timeA = a.last_time ? new Date(a.last_time).getTime() : 0;
+  const timeB = b.last_time ? new Date(b.last_time).getTime() : 0;
+  if (timeA !== timeB) return timeB - timeA;
+
+  const nameA = (a.display_name || a.name || a.email || '').toLowerCase();
+  const nameB = (b.display_name || b.name || b.email || '').toLowerCase();
+  return nameA.localeCompare(nameB);
+}
+
 function renderWhatsAppContactItem(c) {
   const isActive = c.id === waActiveContact.id;
   const unread = parseInt(c.unread_count, 10) || 0;
@@ -15606,7 +15653,18 @@ function renderWhatsAppContactItem(c) {
   let timeFormatted = '';
   if (c.last_time) {
     const d = new Date(c.last_time);
-    timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    if (isToday) {
+      timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (isYesterday) {
+      timeFormatted = 'Yesterday';
+    } else {
+      timeFormatted = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
   }
 
   const roleColor = {
@@ -15638,6 +15696,7 @@ function renderWhatsAppContactItem(c) {
 
   const avatarBg = c.avatar_bg || '#202c33';
   const avatarInitials = c.avatar_initials || (c.name ? c.name.slice(0, 2).toUpperCase() : '👥');
+  const messageSnippet = c.last_message || c.subtitle || 'Tap to start conversation';
 
   return `
     <div class="wa-contact-item ${isActive ? 'active' : ''}" onclick="selectWhatsAppChat('${c.id}')">
@@ -15659,8 +15718,8 @@ function renderWhatsAppContactItem(c) {
           </span>
         </div>
         <div class="wa-contact-bottom">
-          <span class="wa-contact-msg" style="${msgStyle}">
-            ${escapeHtml(c.subtitle || c.last_message || '')}
+          <span class="wa-contact-msg" style="${msgStyle}" title="${escapeHtml(messageSnippet)}">
+            ${escapeHtml(messageSnippet)}
           </span>
           <div style="display:flex; align-items:center; gap:6px;">
             ${unreadBadgeHtml}
@@ -15675,7 +15734,7 @@ function renderWhatsAppContacts(filterQuery = '') {
   const container = document.getElementById('wa-contact-list');
   if (!container) return;
 
-  let list = waContactsCache || [];
+  let list = (waContactsCache || []).slice();
 
   // Filter by pill
   if (waCurrentFilter === 'channels' || waCurrentFilter === 'group') {
@@ -15683,7 +15742,7 @@ function renderWhatsAppContacts(filterQuery = '') {
   } else if (waCurrentFilter === 'supervisors') {
     list = list.filter(c => c.category === 'supervisors' || strCaseEqual(c.role, 'SUPERVISOR'));
   } else if (waCurrentFilter === 'admin_hr') {
-    list = list.filter(c => c.category === 'admin_hr' || strCaseEqual(c.role, 'ADMIN') || strCaseEqual(c.role, 'HR'));
+    list = list.filter(c => c.category === 'admin_hr' || strCaseEqual(c.role, 'ADMIN') || strCaseEqual(c.role, 'HR') || strCaseEqual(c.role, 'STAFF'));
   } else if (waCurrentFilter === 'direct') {
     list = list.filter(c => !c.is_group);
   } else if (waCurrentFilter === 'unread') {
@@ -15701,9 +15760,13 @@ function renderWhatsAppContacts(filterQuery = '') {
       (c.role || '').toLowerCase().includes(q) ||
       (c.role_display || '').toLowerCase().includes(q) ||
       (c.assigned_sites_str || '').toLowerCase().includes(q) ||
-      (c.subtitle || '').toLowerCase().includes(q)
+      (c.subtitle || '').toLowerCase().includes(q) ||
+      (c.last_message || '').toLowerCase().includes(q)
     );
   }
+
+  // Dynamic WhatsApp ordering: unread messages and newest conversations float to the very top!
+  list.sort(sortContactsByRecent);
 
   if (!list || list.length === 0) {
     const emptyMsg = waCurrentFilter === 'unread'
@@ -15718,48 +15781,37 @@ function renderWhatsAppContacts(filterQuery = '') {
     return;
   }
 
-  // If viewing 'all' without search filter, group into well-organized visual sections
+  // If viewing 'all' without search filter, prioritize active conversations at the very top
   if ((waCurrentFilter === 'all' || !waCurrentFilter) && !filterQuery) {
-    const channels = list.filter(c => c.is_group || c.category === 'channels');
-    const supervisors = list.filter(c => c.category === 'supervisors');
-    const adminHr = list.filter(c => c.category === 'admin_hr' || (!c.is_group && c.category !== 'supervisors'));
+    const activeChats = list.filter(c => c.last_time || (c.unread_count || 0) > 0);
+    const directoryContacts = list.filter(c => !c.last_time && (c.unread_count || 0) === 0);
 
     let html = '';
-    if (channels.length > 0) {
+    if (activeChats.length > 0) {
       html += `
         <div class="wa-section-header">
-          <span>📢 Operations Channels &amp; Groups</span>
-          <span class="wa-section-badge">${channels.length}</span>
+          <span>💬 Recent Conversations &amp; Messages</span>
+          <span class="wa-section-badge">${activeChats.length}</span>
         </div>
       `;
-      html += channels.map(renderWhatsAppContactItem).join('');
+      html += activeChats.map(renderWhatsAppContactItem).join('');
     }
 
-    if (supervisors.length > 0) {
+    if (directoryContacts.length > 0) {
       html += `
         <div class="wa-section-header">
-          <span>🛡️ Field Supervisors (Client Sites)</span>
-          <span class="wa-section-badge">${supervisors.length}</span>
+          <span>👥 Team Directory (New Conversation)</span>
+          <span class="wa-section-badge">${directoryContacts.length}</span>
         </div>
       `;
-      html += supervisors.map(renderWhatsAppContactItem).join('');
-    }
-
-    if (adminHr.length > 0) {
-      html += `
-        <div class="wa-section-header">
-          <span>💼 Management &amp; HR Administration</span>
-          <span class="wa-section-badge">${adminHr.length}</span>
-        </div>
-      `;
-      html += adminHr.map(renderWhatsAppContactItem).join('');
+      html += directoryContacts.map(renderWhatsAppContactItem).join('');
     }
 
     container.innerHTML = html;
     return;
   }
 
-  // Otherwise render filtered list directly
+  // Otherwise render filtered list directly (already sorted with newest on top)
   container.innerHTML = list.map(renderWhatsAppContactItem).join('');
 }
 
