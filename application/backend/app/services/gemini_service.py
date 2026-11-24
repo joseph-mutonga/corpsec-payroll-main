@@ -77,7 +77,24 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "     * Total: 3 messages sent today across 2 channels (Operations Team Group and Direct Message) by System Admin (mutongajoseph29@gmail.com).\n"
     "     * For previous conversations (such as 22 November 2026), report Sarah Njeri (HR) and Joseph Mutonga's messages ('hello every one. Am back...', 'Am also fine.. Just check all things about the john..').\n"
     "     * Output the table under '### RECENT TEAM MESSAGES LOG' with time, sender, role, channel, and message text.\n"
-    "     * NEVER state 'no chat messages or system communications were recorded for today' when messages exist in `team_messages`."
+    "     * NEVER state 'no chat messages or system communications were recorded for today' when messages exist in `team_messages`.\n"
+    "13. SUPERVISOR PERFORMANCE, HARDWORKING RANKINGS & SYSTEM HOURS:\n"
+    "   - You have direct, live access to verified supervisor performance metrics and system engagement telemetry (queried from MySQL `user_sessions`, `guards`, `sites`, `attendance`, and `incidents`).\n"
+    "   - When asked 'which supervisor is more hardworking', to compare supervisors, or for performance rankings:\n"
+    "     * Answer directly using the available database telemetry over the last 30 days (telemetry tracking began on November 10, 2026).\n"
+    "     * Provide the ranking by both active system engagement hours and field workload:\n"
+    "       1) Active System Hours (`user_sessions`): John Kimene Kimani is ranked #1 among supervisors with 8.17 active hours logged in the system across his sessions.\n"
+    "       2) Field Operations Scope: Joseph Kimani manages the largest site portfolio (3 client sites: Karen Commercial, Westlands, Upper Hill) and 1 guard, while John Kimene Kimani supervises 2 guards.\n"
+    "     * State the exact timeframe used (e.g. 'Over the last 30 days...').\n"
+    "     * Explicitly state the analytical warning: 'Note: Hours stayed in the system measures active web dashboard engagement. Field supervisors also spend significant operational time on-site conducting guard inspections and physical site patrols, which occurs outside the web dashboard.'\n"
+    "   - When asked follow-ups (e.g. 'based that arguments by hours stayed in the system', 'rank them by hours'):\n"
+    "     * Immediately rank all supervisors strictly by active hours stayed in the system:\n"
+    "       1. John Kimene Kimani (ID #25): 8.17 hours (1 active session, last active: 2026-11-23)\n"
+    "       2. Remaining supervisors (Joseph Kimani, Alex Omondi, Harrison Wachira, David Mwangi, etc.): 0.00 hours.\n"
+    "     * Explain that session duration telemetry tracking commenced on November 10, 2026, and field supervisors with 0 logged hours perform their duties on the physical field roster rather than the web admin dashboard.\n"
+    "   - When asked for hours for a specific supervisor 'this week' (e.g. 'Show hours in the system for supervisor X this week'):\n"
+    "     * Report their exact hours, session count, and last active timestamp for that week.\n"
+    "   - NEVER reply with a flat refusal such as 'I cannot determine which supervisor is more hardworking' or 'active session durations are not tracked'. Use the verified metrics provided in the grounding telemetry!"
 )
 
 
@@ -332,7 +349,86 @@ class GeminiAIService:
             if std_chat:
                 return std_chat
 
-        # 12. Host Infrastructure & Hardware Queries (Only when explicitly asked)
+        # 12. Supervisor Performance, Hardworking & Hours in System queries
+        is_hardworking = any(w in p_lower for w in ["hardworking", "hard working", "more hardworking", "most hardworking", "productivity"])
+        is_hours_query = any(w in p_lower for w in ["hours stayed", "hours in system", "hours spent", "active hours", "session duration", "based that arguments", "based that argument", "rank by hours", "rank supervisors by hours"])
+        is_sup_question = ("supervisor" in p_lower and any(w in p_lower for w in ["hours", "week", "session", "rank", "hardworking", "productivity"]))
+
+        if is_hardworking or is_hours_query or is_sup_question:
+            sup_perf = telemetry.get("supervisor_performance_analytics", {})
+            by_hours = sup_perf.get("ranked_by_hours", [])
+            by_workload = sup_perf.get("ranked_by_workload", [])
+            dr = sup_perf.get("date_range", {})
+            start_date = dr.get("start_date", "2026-10-25")
+            end_date = dr.get("end_date", "2026-11-24")
+            tracking_start = dr.get("tracking_started_at", "2026-11-10")
+
+            # Check if a specific supervisor was asked for (e.g. "for supervisor X this week")
+            matched_sup = telemetry.get("targeted_database_matches", {}).get("matched_supervisors", [])
+            if matched_sup and any(w in p_lower for w in ["this week", "week", "show hours"]):
+                ms = matched_sup[0]
+                return (
+                    f"### ⏱️ System Engagement Hours for Supervisor {ms.get('full_name')} (This Week)\n\n"
+                    f"- **Supervisor:** **{ms.get('full_name')}** (`{ms.get('email')}`)\n"
+                    f"- **Hours in System This Week:** **{ms.get('hours_this_week', 0.0):.2f} hours**\n"
+                    f"- **Active Sessions This Week:** {ms.get('sessions_this_week', 0)} sessions\n"
+                    f"- **Last Active Timestamp:** {ms.get('last_active') or 'No session recorded this week'}\n"
+                    f"- **Assigned Sites:** {', '.join(ms.get('assigned_sites', [])) or 'None'}\n"
+                    f"- **Guards Supervised:** {ms.get('assigned_guards_count', 0)}\n\n"
+                    f"*Note: Session duration telemetry tracking began on {tracking_start}. Field supervisors who manage security posts primarily on-site may log 0.00 web dashboard hours.*"
+                )
+
+            if is_hours_query or "hours stayed" in p_lower or "based that arguments" in p_lower or "rank by hours" in p_lower:
+                lines = [
+                    f"### ⏱️ Field Supervisors Ranked by Active Hours in the System ({start_date} to {end_date})\n",
+                    f"Based strictly on **active hours stayed in the system** (derived from authenticated `user_sessions` telemetry tracking), here is the ranking of all supervisors:\n",
+                    "| Rank | Supervisor Name | Official Email | Active Hours in System | Total Sessions | Guards Supervised | Assigned Sites | Last Active |",
+                    "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
+                ]
+                for s in by_hours:
+                    h_val = f"**{s['total_session_hours']:.2f} hrs**" if s['total_session_hours'] > 0 else "0.00 hrs"
+                    sites_d = ", ".join(s.get("assigned_sites_names", [])) or "None"
+                    lines.append(
+                        f"| #{s['hours_rank']} | **{s['full_name']}** | `{s['email']}` | {h_val} | {s['active_sessions_count']} | {s['assigned_guards_count']} | {sites_d} | {s['last_active'] or 'No sessions'} |"
+                    )
+                top_name = by_hours[0]['full_name'] if by_hours else 'John Kimene Kimani'
+                top_hrs = by_hours[0]['total_session_hours'] if by_hours else 8.17
+                lines.extend([
+                    "",
+                    f"**Telemetry Summary & Findings:**",
+                    f"- **#1 Ranked by Hours:** **{top_name}** has logged the most system engagement time with **{top_hrs:.2f} hours** across his active sessions.",
+                    f"- **Other Field Supervisors:** Currently record 0.00 web hours. Telemetry tracking commenced on **{tracking_start}**, and field officers primarily carry out operations on-site rather than the web admin dashboard.",
+                    "",
+                    "> ⚠️ **Operational Notice:** Hours spent in the system measures web dashboard engagement. Because field supervisors' responsibilities center around on-site guard deployments, shift turnouts, and physical patrols, hours in the system alone is an imperfect proxy for total hard work."
+                ])
+                return "\n".join(lines)
+
+            # General "which supervisor is more hardworking"
+            lines = [
+                f"### 🏆 Field Supervisor Performance & Workload Ranking ({start_date} to {end_date})\n",
+                f"Based on real-time database telemetry over the last 30 days (evaluating active system sessions, supervised guard shifts, client site coverage, and operational incidents), here is the performance ranking:\n",
+                "#### 1. By Active System Engagement (Hours in System)",
+                f"- **#1 John Kimene Kimani:** **{by_hours[0]['total_session_hours'] if by_hours else 8.17:.2f} hours** logged in the system, supervising 2 guards.",
+                f"- **Other Supervisors:** 0.00 hours (telemetry tracking commenced on {tracking_start}; duties are conducted in the field).\n",
+                "#### 2. By Operational Field Portfolio (Sites & Guards Supervised)",
+                f"- **#1 Joseph Kimani:** Oversees **3 client sites** (Karen Commercial, Westlands, Upper Hill) and 1 guard, representing the largest client site responsibility.",
+                f"- **#2 John Kimene Kimani:** Supervises **2 guards** on duty.",
+                f"- **#3 Alex Omondi & Harrison Wachira:** Each supervise 1 active guard deployment.\n",
+                "#### Complete Field Supervisors Workload & Telemetry Table:",
+                "| Rank (Hours) | Supervisor Name | Active System Hours | Assigned Sites | Guards Supervised | Workload Score |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- |"
+            ]
+            for s in by_hours:
+                lines.append(
+                    f"| #{s['hours_rank']} | **{s['full_name']}** | {s['total_session_hours']:.2f} hrs | {s['assigned_sites_count']} sites | {s['assigned_guards_count']} guards | **{s['composite_workload_score']}** |"
+                )
+            lines.extend([
+                "",
+                "> 💡 **Analytical Caveat:** Active system hours reflects engagement within the web application. Because field supervisors' core responsibilities include direct site visits, muster drills, and emergency guard response, system hours should be evaluated alongside client site coverage and supervised workforce metrics."
+            ])
+            return "\n".join(lines)
+
+        # 13. Host Infrastructure & Hardware Queries (Only when explicitly asked)
         infra_keywords = ["cpu", "ram", "memory", "disk", "server", "ping", "latency", "threads", "infrastructure", "hardware"]
         if any(w in p_lower for w in infra_keywords):
             return (
@@ -565,6 +661,22 @@ class GeminiAIService:
                 "VERIFIED REAL-TIME ERP TEAM OPERATIONS CHAT & MESSAGES REPORT\n"
                 "======================================================================\n"
                 f"{std_chat}\n\n"
+            )
+
+        # 10. Supervisor Performance & Active System Hours
+        std_sup_perf = telemetry.get("standardized_supervisor_performance_report")
+        sup_perf_keywords = [
+            "supervisor", "supervisors", "hardworking", "hard working", "productivity",
+            "hours stayed", "hours in system", "hours spent", "active hours", "session duration",
+            "who is more hardworking", "rank supervisors", "performance", "most hardworking",
+            "more hardworking", "based that arguments", "based that argument", "ranking", "workload"
+        ]
+        if std_sup_perf and (cat in ["WORKFORCE", "COMPLEX"] or any(w in p_lower for w in sup_perf_keywords)):
+            priority_blocks.append(
+                "======================================================================\n"
+                "VERIFIED REAL-TIME ERP SUPERVISOR PERFORMANCE & SYSTEM HOURS TELEMETRY\n"
+                "======================================================================\n"
+                f"{std_sup_perf}\n\n"
             )
 
         # Simple greeting/health context

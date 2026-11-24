@@ -49,17 +49,29 @@ def test_call_recording_database_retrieval_stream(client, db):
     """
     Verifies that calling /api/v1/call-center/recordings/{id}/stream
     retrieves audio bytes directly from the database (call_logs.recording_data)
-    and returns appropriate headers.
+    for authorized administrators and returns appropriate headers.
     """
+    admin, token = get_or_create_admin(db)
     sample_bytes = b"SAMPLE_AUDIO_BINARY_STORED_IN_DATABASE_FOR_CORPSEC_CALL_LOGS_TABLE"
     call = create_sample_call_with_recording(db, audio_bytes=sample_bytes)
 
-    response = client.get(f"/api/v1/call-center/recordings/{call.id}/stream")
+    # 1. Unauthenticated request should be rejected with 401
+    unauth_res = client.get(f"/api/v1/call-center/recordings/{call.id}/stream")
+    assert unauth_res.status_code == 401
+
+    # 2. Authenticated Admin request succeeds with 200
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get(f"/api/v1/call-center/recordings/{call.id}/stream", headers=headers)
     assert response.status_code == 200
     assert response.headers.get("x-audio-source") == "database"
     assert response.headers.get("x-database-retrieved") == "true"
     assert response.content == sample_bytes
     assert int(response.headers.get("content-length")) == len(sample_bytes)
+
+    # 3. Query param token also succeeds (for browser <audio src="...?token=...">)
+    query_res = client.get(f"/api/v1/call-center/recordings/{call.id}/stream?token={token}")
+    assert query_res.status_code == 200
+    assert query_res.content == sample_bytes
 
 
 def test_call_recording_database_range_seeking(client, db):
@@ -67,10 +79,11 @@ def test_call_recording_database_range_seeking(client, db):
     Verifies that HTTP Range requests are served directly from the database bytes
     with HTTP 206 Partial Content.
     """
+    admin, token = get_or_create_admin(db)
     sample_bytes = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_TEST_AUDIO_BYTES_FOR_SEEKING"
     call = create_sample_call_with_recording(db, audio_bytes=sample_bytes)
 
-    headers = {"Range": "bytes=10-25"}
+    headers = {"Range": "bytes=10-25", "Authorization": f"Bearer {token}"}
     response = client.get(f"/api/v1/call-center/recordings/{call.id}/stream", headers=headers)
     assert response.status_code == 206
     assert response.headers.get("x-audio-source") == "database"
@@ -83,10 +96,12 @@ def test_call_recording_download(client, db):
     """
     Verifies download query parameter serves attachment directly from database.
     """
+    admin, token = get_or_create_admin(db)
     sample_bytes = b"AUDIO_DATA_DOWNLOAD_VERIFICATION_BYTES"
     call = create_sample_call_with_recording(db, audio_bytes=sample_bytes)
 
-    response = client.get(f"/api/v1/call-center/recordings/{call.id}/stream?download=true")
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get(f"/api/v1/call-center/recordings/{call.id}/stream?download=true", headers=headers)
     assert response.status_code == 200
     assert "attachment" in response.headers.get("content-disposition", "")
     assert response.headers.get("x-audio-source") == "database"
@@ -139,7 +154,10 @@ def test_save_call_recording_persists_to_database(client, db):
     assert call.recording_data == new_audio_bytes
 
     # Verify stream retrieves this exact binary from database
-    stream_resp = client.get(f"/api/v1/call-center/recordings/{call.id}/stream")
+    stream_resp = client.get(
+        f"/api/v1/call-center/recordings/{call.id}/stream",
+        headers={"Authorization": f"Bearer {token}"}
+    )
     assert stream_resp.status_code == 200
     assert stream_resp.content == new_audio_bytes
     assert stream_resp.headers.get("x-audio-source") == "database"

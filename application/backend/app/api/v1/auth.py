@@ -574,6 +574,9 @@ def session_heartbeat(
         diff = int((now - sess.last_activity).total_seconds())
         if 0 < diff <= 120:
             elapsed = diff
+        elif diff > 900:
+            # Idle timeout: session was idle for > 15 minutes; do not inflate duration for open tabs
+            elapsed = 0
         elif diff > 120:
             elapsed = 60
     else:

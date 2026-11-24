@@ -43,6 +43,7 @@ from application.backend.app.services.erp_analytics_service import (
     ExpensesAnalyticsService,
     TeamChatAnalyticsService
 )
+from application.backend.app.services.performance_metrics_service import PerformanceMetricsService
 
 
 # ==============================================================================
@@ -59,7 +60,9 @@ SENSITIVE_KEYS = {
 EXEMPT_OPERATIONAL_KEYS = {
     "full_name", "guard_name", "supervisor_name", "email", "phone",
     "contact_person", "client_name", "site_name", "assigned_supervisor",
-    "supervisor_phone", "emergency_contact_name", "employee_number"
+    "supervisor_phone", "emergency_contact_name", "employee_number",
+    "total_session_hours", "active_sessions_count", "hours_rank", "workload_rank",
+    "composite_workload_score", "tracking_started_at", "last_active"
 }
 
 def is_sensitive_key(key: str) -> bool:
@@ -193,7 +196,8 @@ def classify_user_query(prompt: Optional[str]) -> str:
         "cap", "caps", "uniform", "uniforms", "boot", "boots", "jacket", "jackets",
         "reflector", "reflectors", "flashlight", "flashlights", "torch", "raincoat", "raincoats",
         "stock", "inventory", "supplies", "asset", "assets", "equipment", "radio", "radios", "gear",
-        "chat", "chart", "message", "messages", "team chat", "team chart", "who charted", "who chatted", "operations chat", "operations team"
+        "chat", "chart", "message", "messages", "team chat", "team chart", "who charted", "who chatted", "operations chat", "operations team",
+        "hardworking", "hard working", "productivity", "hours stayed", "hours in system", "hours spent", "active hours", "session duration", "who is more hardworking", "rank supervisors", "performance", "most hardworking", "more hardworking", "based that arguments", "based that argument"
     ]
     if any(w in p for w in workforce_terms):
         return QuestionCategory.WORKFORCE
@@ -406,6 +410,7 @@ class AITelemetryService:
             ]
             s_str = f"{s.full_name or ''} {s.email} {s.phone} {' '.join(assigned_sites)} {' '.join(assigned_guards)}".lower()
             if any(t in s_str for t in tokens):
+                hours_data = PerformanceMetricsService.get_individual_supervisor_hours(db, str(s.id), days=7)
                 results["matched_supervisors"].append({
                     "id": s.id,
                     "full_name": s.full_name or s.email,
@@ -414,7 +419,10 @@ class AITelemetryService:
                     "status": s.status,
                     "assigned_sites": assigned_sites,
                     "assigned_guards_count": len(assigned_guards),
-                    "assigned_guards": assigned_guards
+                    "assigned_guards": assigned_guards,
+                    "hours_this_week": hours_data["total_session_hours"] if hours_data else 0.0,
+                    "sessions_this_week": hours_data["active_sessions_count"] if hours_data else 0,
+                    "last_active": hours_data.get("last_active") if hours_data else None
                 })
 
         # 3. Sites search
@@ -1229,6 +1237,10 @@ class AITelemetryService:
             } for exp in expenses_all
         ]
 
+        # Supervisor Performance Metrics & System Session Duration Telemetry
+        sup_perf_summary = PerformanceMetricsService.get_supervisor_performance_metrics(db, days=30)
+        std_sup_perf_report = PerformanceMetricsService.format_supervisor_performance_report(sup_perf_summary)
+
         db_query_time_ms = round((time.perf_counter() - t_db_start) * 1000, 2)
 
         raw_telemetry = {
@@ -1240,6 +1252,10 @@ class AITelemetryService:
             "database_telemetry": db_telemetry,
             "error_rates_and_alerts": error_rates,
             "workforce_and_operations": operations_telemetry,
+            "supervisor_performance_analytics": sup_perf_summary,
+            "standardized_supervisor_performance_report": std_sup_perf_report,
+            "supervisors_ranked_by_hours": sup_perf_summary.get("ranked_by_hours", []),
+            "supervisors_ranked_by_workload": sup_perf_summary.get("ranked_by_workload", []),
             "attendance_analytics": att_report,
             "overtime_analytics": ot_report,
             "salary_advances_analytics": adv_report,

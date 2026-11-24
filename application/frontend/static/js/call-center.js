@@ -28,6 +28,29 @@
   };
 
   /* ==========================================================================
+     RBAC & Authentication Helpers (Restricts Call Recordings to Admin Only)
+     ========================================================================== */
+  function getAuthToken() {
+    return localStorage.getItem('corpsec_token') ||
+           localStorage.getItem('token') ||
+           (typeof authToken !== 'undefined' ? authToken : '');
+  }
+
+  function isCurrentUserAdmin() {
+    const user = (typeof window.getLoggedInUser === 'function') ? window.getLoggedInUser() : null;
+    const role = (user && user.role) ? String(user.role).trim().toUpperCase() : (localStorage.getItem('user_role') || '').trim().toUpperCase();
+    return role === 'ADMIN' || role === 'SYSTEM ADMIN';
+  }
+
+  function getAuthenticatedAudioUrl(url) {
+    if (!url) return '';
+    const token = getAuthToken();
+    if (!token) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}token=${encodeURIComponent(token)}`;
+  }
+
+  /* ==========================================================================
      API Helper: Auto-resolves tokens and unwraps JSON responses
      ========================================================================== */
   async function callCenterFetch(endpoint, options = {}) {
@@ -1194,20 +1217,33 @@
         else if (c.status === 'RINGING') statusBadge = `<span class="cc-badge cc-badge-ringing">Ringing</span>`;
 
         const duration = formatCallDuration(c.duration_seconds);
-        const audioSrc = c.stream_url || c.recording_url;
-        const recordingPlayer = audioSrc
-          ? `<div style="display:flex; align-items:center; gap:6px;">
-               <div class="cc-audio-player">
-                 <audio controls src="${audioSrc}" preload="none" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
-                 <div style="font-size:9px; color:#059669; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:3px;">
-                   <span>🗄️</span> DB Stored
-                 </div>
-               </div>
-               <button class="btn btn-primary" onclick="openAudioPlayerModal(${c.id}, '${escapeQuote(c.caller_name)}', '${escapeQuote(c.caller_number)}', '${audioSrc}', '${audioSrc}?download=true')" style="font-size:10px; padding:4px 8px; font-weight:700; background:#2563EB; display:inline-flex; align-items:center; gap:3px;" title="Listen in high-clarity player">
-                 <span>🎧</span> Listen
-               </button>
-             </div>`
-          : `<span style="color:#94A3B8; font-size:11px;">None</span>`;
+        const isAdmin = isCurrentUserAdmin();
+        const rawAudioSrc = c.stream_url || c.recording_url;
+        let recordingPlayer = `<span style="color:#94A3B8; font-size:11px;">None</span>`;
+
+        if (rawAudioSrc || c.recording_restricted) {
+          if (isAdmin && rawAudioSrc) {
+            const authAudioSrc = getAuthenticatedAudioUrl(rawAudioSrc);
+            const authDlUrl = getAuthenticatedAudioUrl(`${rawAudioSrc}?download=true`);
+            recordingPlayer = `
+              <div style="display:flex; align-items:center; gap:6px;">
+                <div class="cc-audio-player">
+                  <audio controls src="${authAudioSrc}" preload="none" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
+                  <div style="font-size:9px; color:#059669; font-weight:700; margin-top:2px; display:flex; align-items:center; gap:3px;">
+                    <span>🗄️</span> DB Stored
+                  </div>
+                </div>
+                <button class="btn btn-primary" onclick="openAudioPlayerModal(${c.id}, '${escapeQuote(c.caller_name)}', '${escapeQuote(c.caller_number)}', '${authAudioSrc}', '${authDlUrl}')" style="font-size:10px; padding:4px 8px; font-weight:700; background:#2563EB; display:inline-flex; align-items:center; gap:3px;" title="Listen in high-clarity player (Admin Only)">
+                  <span>🎧</span> Listen
+                </button>
+              </div>`;
+          } else {
+            recordingPlayer = `
+              <span class="badge" style="background:#F1F5F9; color:#64748B; border:1px solid #E2E8F0; font-size:11px; font-weight:600; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;" title="Audio recordings can only be listened to by System Administrators.">
+                <span>🔒</span> Admin Only
+              </span>`;
+          }
+        }
 
         const virtualNum = c.recipient_number || c.virtual_number || '-';
 
@@ -1559,10 +1595,11 @@
   };
 
   window.onAudioPlaybackError = function (el, callId) {
-    if (!el || el.dataset.retried === 'true') return;
+    if (!el || el.dataset.retried === 'true' || !isCurrentUserAdmin()) return;
     el.dataset.retried = 'true';
     console.warn(`[CallCenter] Audio playback fallback for call #${callId}`);
-    el.src = `/api/v1/call-center/recordings/${callId}/stream?fallback=true&t=${Date.now()}`;
+    const fallbackUrl = `/api/v1/call-center/recordings/${callId}/stream?fallback=true&t=${Date.now()}`;
+    el.src = getAuthenticatedAudioUrl(fallbackUrl);
     try { el.load(); } catch (err) {}
   };
 
@@ -1578,9 +1615,45 @@
       return;
     }
 
+    const isAdmin = isCurrentUserAdmin();
     tbody.innerHTML = calls.map(c => {
-      const audioSrc = c.stream_url || c.recording_url || `/api/v1/call-center/recordings/${c.id}/stream`;
-      const dlUrl = c.download_url || `/api/v1/call-center/recordings/${c.id}/stream?download=true`;
+      const rawAudioSrc = c.stream_url || c.recording_url || `/api/v1/call-center/recordings/${c.id}/stream`;
+      const rawDlUrl = c.download_url || `/api/v1/call-center/recordings/${c.id}/stream?download=true`;
+      const authAudioSrc = isAdmin ? getAuthenticatedAudioUrl(rawAudioSrc) : null;
+      const authDlUrl = isAdmin ? getAuthenticatedAudioUrl(rawDlUrl) : null;
+
+      const audioCell = isAdmin ? `
+        <div class="cc-audio-player">
+          <audio controls src="${authAudioSrc}" preload="metadata" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
+          <div style="font-size:10px; color:#059669; font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
+            <span>🗄️</span> Retrieved from Database
+          </div>
+        </div>
+      ` : `
+        <div style="display:inline-flex; align-items:center; gap:6px; background:#F8FAFC; border:1px solid #E2E8F0; padding:6px 12px; border-radius:8px;">
+          <span style="font-size:14px;">🔒</span>
+          <div>
+            <div style="font-size:11px; font-weight:700; color:#475569;">Admin Access Only</div>
+            <div style="font-size:10px; color:#94A3B8;">Audio playback restricted</div>
+          </div>
+        </div>
+      `;
+
+      const actionCell = isAdmin ? `
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="btn btn-primary" onclick="openAudioPlayerModal(${c.id}, '${escapeQuote(c.caller_name)}', '${escapeQuote(c.caller_number)}', '${authAudioSrc}', '${authDlUrl}')" style="font-size:11px; padding:6px 10px; display:inline-flex; align-items:center; gap:4px; font-weight:700; background:#2563EB;">
+            <span>🎧</span> Listen
+          </button>
+          <a href="${authDlUrl}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:6px 10px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight:700;">
+            <span>⬇</span> Download
+          </a>
+        </div>
+      ` : `
+        <span style="font-size:11px; color:#94A3B8; font-weight:600; display:inline-flex; align-items:center; gap:4px; padding:4px 8px; background:#F1F5F9; border-radius:4px;">
+          <span>🔒</span> Restricted
+        </span>
+      `;
+
       return `
       <tr>
         <td>
@@ -1590,24 +1663,8 @@
         <td>${c.agent_name || 'Agent'}</td>
         <td>${formatDate(c.created_at || c.started_at)}</td>
         <td style="font-weight:700;">${formatCallDuration(c.duration_seconds)}</td>
-        <td>
-          <div class="cc-audio-player">
-            <audio controls src="${audioSrc}" preload="metadata" onerror="onAudioPlaybackError(this, ${c.id})"></audio>
-            <div style="font-size:10px; color:#059669; font-weight:700; margin-top:3px; display:flex; align-items:center; gap:4px;">
-              <span>🗄️</span> Retrieved from Database
-            </div>
-          </div>
-        </td>
-        <td>
-          <div style="display:flex; align-items:center; gap:6px;">
-            <button class="btn btn-primary" onclick="openAudioPlayerModal(${c.id}, '${escapeQuote(c.caller_name)}', '${escapeQuote(c.caller_number)}', '${audioSrc}', '${dlUrl}')" style="font-size:11px; padding:6px 10px; display:inline-flex; align-items:center; gap:4px; font-weight:700; background:#2563EB;">
-              <span>🎧</span> Listen
-            </button>
-            <a href="${dlUrl}" download="call_recording_${c.id}.wav" class="btn btn-secondary" style="font-size:11px; padding:6px 10px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight:700;">
-              <span>⬇</span> Download
-            </a>
-          </div>
-        </td>
+        <td>${audioCell}</td>
+        <td>${actionCell}</td>
       </tr>
     `;
     }).join('');
@@ -1843,9 +1900,17 @@
   }
 
   /* ==========================================================================
-     18b. Audio Player Modal (Direct Database Audio Playback for Admins)
+     18b. Audio Player Modal (Direct Database Audio Playback for Admins Only)
      ========================================================================== */
   window.openAudioPlayerModal = function (callId, callerName, callerNumber, audioSrc, dlUrl) {
+    if (!isCurrentUserAdmin()) {
+      if (typeof showToast === 'function') {
+        showToast('🔒 Access Denied: Only System Administrators are authorized to listen to call recordings.', 'warning');
+      } else {
+        alert('Access Denied: Only System Administrators are authorized to listen to call recordings.');
+      }
+      return;
+    }
     const modal = document.getElementById('modal-audio-player');
     if (!modal) return;
 
@@ -1857,7 +1922,8 @@
     if (callerNumEl) callerNumEl.innerText = callerNumber || '';
     if (callIdEl) callIdEl.innerText = `#${callId}`;
 
-    const streamUrl = audioSrc || `/api/v1/call-center/recordings/${callId}/stream`;
+    const rawStreamUrl = audioSrc || `/api/v1/call-center/recordings/${callId}/stream`;
+    const streamUrl = getAuthenticatedAudioUrl(rawStreamUrl);
     const audioEl = document.getElementById('modal-audio-element');
     if (audioEl) {
       audioEl.pause();
@@ -1869,7 +1935,8 @@
 
     const dlBtn = document.getElementById('modal-audio-download-btn');
     if (dlBtn) {
-      dlBtn.href = dlUrl || `/api/v1/call-center/recordings/${callId}/stream?download=true`;
+      const rawDl = dlUrl || `/api/v1/call-center/recordings/${callId}/stream?download=true`;
+      dlBtn.href = getAuthenticatedAudioUrl(rawDl);
       dlBtn.download = `call_recording_${callId}.wav`;
     }
 

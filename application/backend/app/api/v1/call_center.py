@@ -659,11 +659,12 @@ def list_call_logs(
 
     logs = q.order_by(CallLog.created_at.desc()).limit(limit).all()
 
+    is_admin = bool(current_user and (current_user.role or "").strip().upper() in [UserRole.ADMIN.value, "SYSTEM ADMIN"])
     result = []
     for l in logs:
         has_blob = bool(l.recording_data and len(l.recording_data) > 0)
         has_rec = bool(has_blob or (l.recording_url and l.recording_url.strip()) or l.status == "COMPLETED")
-        stream_url = f"/api/v1/call-center/recordings/{l.id}/stream" if has_rec else None
+        stream_url = f"/api/v1/call-center/recordings/{l.id}/stream" if (has_rec and is_admin) else None
         result.append({
             "id": l.id,
             "call_sid": l.call_sid,
@@ -678,10 +679,11 @@ def list_call_logs(
             "status": l.status,
             "duration_seconds": l.duration_seconds,
             "wait_time_seconds": l.wait_time_seconds,
-            "recording_url": stream_url or l.recording_url,
-            "raw_recording_url": l.recording_url,
+            "recording_url": stream_url if is_admin else None,
+            "raw_recording_url": l.recording_url if is_admin else None,
             "stream_url": stream_url,
-            "has_db_recording": has_blob,
+            "has_db_recording": has_blob if is_admin else False,
+            "recording_restricted": not is_admin,
             "retrieved_from": "database",
             "voicemail_url": l.voicemail_url,
             "disposition": l.disposition,
@@ -719,10 +721,11 @@ def list_call_recordings(
         )
 
     records = q.order_by(CallLog.created_at.desc()).limit(limit).all()
+    is_admin = bool(current_user and (current_user.role or "").strip().upper() in [UserRole.ADMIN.value, "SYSTEM ADMIN"])
     result = []
     for r in records:
         has_blob = bool(r.recording_data and len(r.recording_data) > 0)
-        stream_path = f"/api/v1/call-center/recordings/{r.id}/stream"
+        stream_path = f"/api/v1/call-center/recordings/{r.id}/stream" if is_admin else None
         result.append({
             "id": r.id,
             "call_sid": r.call_sid,
@@ -733,13 +736,14 @@ def list_call_recordings(
             "agent_name": r.agent.full_name or r.agent.email if r.agent else "General Dispatch",
             "duration_seconds": r.duration_seconds,
             "recording_url": stream_path,
-            "raw_recording_url": r.recording_url,
+            "raw_recording_url": r.recording_url if is_admin else None,
             "stream_url": stream_path,
-            "download_url": f"{stream_path}?download=true",
+            "download_url": f"{stream_path}?download=true" if is_admin else None,
+            "audio_restricted": not is_admin,
             "disposition": r.disposition or "Completed Call",
             "created_at": r.created_at.isoformat(),
             "retrieved_from": "database",
-            "has_db_recording": has_blob
+            "has_db_recording": has_blob if is_admin else False
         })
     return result
 
@@ -805,13 +809,22 @@ async def stream_call_recording(
     call_id: int,
     request: Request,
     download: bool = Query(False),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Streams the recorded audio directly from the database table (call_logs.recording_data).
+    Strictly restricted to System Administrators only (Supervisors and other roles are rejected with HTTP 403 Forbidden).
     Supports HTTP Range requests for seeking and direct audio download.
     Guarantees audio is retrieved directly from database records.
     """
+    user_role = (current_user.role or "").strip().upper()
+    if user_role not in [UserRole.ADMIN.value, "SYSTEM ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only System Administrators are authorized to listen to or download call recordings."
+        )
+
     call = db.query(CallLog).filter(CallLog.id == call_id).first()
     if not call:
         raise HTTPException(status_code=404, detail="Call record not found")

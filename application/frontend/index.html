@@ -372,8 +372,7 @@
 
         <!-- Compact AI Quick-Access Banner (Opens Dedicated AI Assistant & Telemetry Charts Page - System Admin Only) -->
         <div class="dash-ai-quick-banner" id="dash-ai-quick-banner" onclick="switchTab('ai-assistant')"
-          style="display:none;"
-          title="Open Google Gemini AI Assistant & Live Performance Charts in Dedicated Page">
+          style="display:none;" title="Open Google Gemini AI Assistant & Live Performance Charts in Dedicated Page">
           <div class="dash-ai-banner-left">
             <div class="dash-ai-banner-icon">🤖</div>
             <div class="dash-ai-banner-text">
@@ -3390,24 +3389,29 @@
             .wa-container {
               position: relative;
             }
+
             .wa-sidebar {
               width: 100% !important;
               min-width: 100% !important;
               flex: 1 1 100% !important;
               display: flex;
             }
+
             .wa-main {
               width: 100% !important;
               min-width: 100% !important;
               flex: 1 1 100% !important;
               display: none;
             }
+
             .wa-container.chat-active .wa-sidebar {
               display: none !important;
             }
+
             .wa-container.chat-active .wa-main {
               display: flex !important;
             }
+
             #wa-mobile-back-btn {
               display: inline-flex !important;
             }
@@ -3560,7 +3564,9 @@
             <!-- Active Chat Header -->
             <div class="wa-main-header">
               <div class="wa-chat-target">
-                <button type="button" id="wa-mobile-back-btn" class="wa-icon-btn" style="display:none; margin-right:4px;" onclick="closeWhatsAppMobileChat()" title="Back to Chats Directory">←</button>
+                <button type="button" id="wa-mobile-back-btn" class="wa-icon-btn"
+                  style="display:none; margin-right:4px;" onclick="closeWhatsAppMobileChat()"
+                  title="Back to Chats Directory">←</button>
                 <div class="wa-contact-avatar" id="wa-active-avatar">👥</div>
                 <div>
                   <div style="font-size:15px; font-weight:600; color:#e9edef;" id="wa-active-name">🏢 Operations Team
@@ -4664,7 +4670,8 @@
         </div>
 
         <!-- Metric KPI Cards -->
-        <div class="metrics-grid" style="margin-bottom:24px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+        <div class="metrics-grid"
+          style="margin-bottom:24px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
           <div class="metric-card metric-cyan">
             <div class="metric-header">
               <div class="metric-label">Active Corporate Staff</div>
@@ -4703,7 +4710,8 @@
               <div class="metric-icon-bubble">⏸️</div>
             </div>
             <div class="metric-value" id="staff-metric-suspended" style="color:#D97706;">0</div>
-            <div class="metric-footer"><span class="metric-trend" style="color:#92400E;">Offboarded / Suspended</span></div>
+            <div class="metric-footer"><span class="metric-trend" style="color:#92400E;">Offboarded / Suspended</span>
+            </div>
           </div>
         </div>
 
@@ -4843,28 +4851,36 @@
         <!-- Section 2: Suspended & Exited Staff Management -->
         <div id="staff-suspended-section" class="table-container" style="display:none;">
           <!-- Suspended Management Guidance Banner -->
-          <div style="background:#FFFBEB; border-bottom:1px solid #FDE68A; padding:14px 20px; display:flex; align-items:center; gap:12px;">
+          <div
+            style="background:#FFFBEB; border-bottom:1px solid #FDE68A; padding:14px 20px; display:flex; align-items:center; gap:12px;">
             <span style="font-size:22px;">⚠️</span>
             <div style="font-size:12px; color:#92400E; line-height:1.5;">
-              <strong>Suspended &amp; Exited Personnel Management:</strong> This section handles staff members who have been suspended, offboarded, or have left work and are no longer active corporate staff. From here, you can inspect their personnel file (verified CVs, academic credentials, company property, and advances), reinstate them back to active duty, or permanently purge/delete their account and data.
+              <strong>Suspended &amp; Exited Personnel Management:</strong> This section handles staff members who have
+              been suspended, offboarded, or have left work and are no longer active corporate staff. From here, you can
+              inspect their personnel file (verified CVs, academic credentials, company property, and advances),
+              reinstate them back to active duty, or permanently purge/delete their account and data.
             </div>
           </div>
           <div
             style="padding:16px 20px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <button id="staff-suspended-filter-all" class="btn btn-primary" style="padding:6px 12px; font-size:12px;"
-                onclick="filterSuspendedStaffList('ALL')">All Suspended (<span id="staff-suspended-count-all">0</span>)</button>
+                onclick="filterSuspendedStaffList('ALL')">All Suspended (<span
+                  id="staff-suspended-count-all">0</span>)</button>
               <button id="staff-suspended-filter-hr" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
-                onclick="filterSuspendedStaffList('HR')">Suspended HR (<span id="staff-suspended-count-hr">0</span>)</button>
-              <button id="staff-suspended-filter-supervisor" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
-                onclick="filterSuspendedStaffList('SUPERVISOR')">Suspended Supervisors (<span id="staff-suspended-count-supervisor">0</span>)</button>
-              <button id="staff-suspended-filter-admin" class="btn btn-secondary" style="padding:6px 12px; font-size:12px;"
-                onclick="filterSuspendedStaffList('ADMIN')">Suspended Admins (<span id="staff-suspended-count-admin">0</span>)</button>
+                onclick="filterSuspendedStaffList('HR')">Suspended HR (<span
+                  id="staff-suspended-count-hr">0</span>)</button>
+              <button id="staff-suspended-filter-supervisor" class="btn btn-secondary"
+                style="padding:6px 12px; font-size:12px;" onclick="filterSuspendedStaffList('SUPERVISOR')">Suspended
+                Supervisors (<span id="staff-suspended-count-supervisor">0</span>)</button>
+              <button id="staff-suspended-filter-admin" class="btn btn-secondary"
+                style="padding:6px 12px; font-size:12px;" onclick="filterSuspendedStaffList('ADMIN')">Suspended Admins
+                (<span id="staff-suspended-count-admin">0</span>)</button>
             </div>
             <div style="display:flex; gap:10px; align-items:center;">
               <input type="text" id="staff-suspended-search-input" class="form-control"
-                placeholder="Search suspended staff..."
-                style="max-width:260px; font-size:12px; padding:6px 12px;" oninput="handleSuspendedStaffSearch()">
+                placeholder="Search suspended staff..." style="max-width:260px; font-size:12px; padding:6px 12px;"
+                oninput="handleSuspendedStaffSearch()">
             </div>
           </div>
           <div style="overflow-x:auto;">
@@ -4882,7 +4898,8 @@
               </thead>
               <tbody id="staff-suspended-table-body">
                 <tr>
-                  <td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No suspended staff members found.</td>
+                  <td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No suspended staff members
+                    found.</td>
                 </tr>
               </tbody>
             </table>
@@ -7000,12 +7017,15 @@
           <div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label style="font-size:12px; font-weight:700; color:#334155;">Client Company Organization *</label>
-              <a href="javascript:void(0)" onclick="closeAddSiteModal(); openRegisterClientModal();" style="font-size:11px; color:#4F46E5; text-decoration:none; font-weight:600;">+ Register Client</a>
+              <a href="javascript:void(0)" onclick="closeAddSiteModal(); openRegisterClientModal();"
+                style="font-size:11px; color:#4F46E5; text-decoration:none; font-weight:600;">+ Register Client</a>
             </div>
-            <select id="new-site-client" class="form-control" required style="width:100%;" onchange="handleNewSiteClientChange(event)">
+            <select id="new-site-client" class="form-control" required style="width:100%;"
+              onchange="handleNewSiteClientChange(event)">
               <option value="">Loading client companies from Clients & Contracts...</option>
             </select>
-            <small style="color:#64748B; font-size:11px; margin-top:2px; display:block;">Retrieved from Clients & Contracts registry to ensure site is attached to the client company.</small>
+            <small style="color:#64748B; font-size:11px; margin-top:2px; display:block;">Retrieved from Clients &
+              Contracts registry to ensure site is attached to the client company.</small>
           </div>
           <div>
             <label style="font-size:12px; font-weight:700; display:block; margin-bottom:4px;">Location</label>
@@ -8357,7 +8377,8 @@
             <div>
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <label style="font-size:12px; font-weight:700; color:#334155;">Client Company Organization *</label>
-                <a href="javascript:void(0)" onclick="closeEditSiteModal(); openRegisterClientModal();" style="font-size:11px; color:#4F46E5; text-decoration:none; font-weight:600;">+ Register Client</a>
+                <a href="javascript:void(0)" onclick="closeEditSiteModal(); openRegisterClientModal();"
+                  style="font-size:11px; color:#4F46E5; text-decoration:none; font-weight:600;">+ Register Client</a>
               </div>
               <select id="edit-site-client" class="form-control" required style="width:100%;">
                 <option value="">Loading client companies from Clients & Contracts...</option>
