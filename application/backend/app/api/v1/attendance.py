@@ -3,7 +3,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from application.backend.app.api.deps import get_db, require_admin, require_guard, get_current_user
+from application.backend.app.api.deps import (
+    get_db, require_admin, require_guard, get_current_user,
+    require_admin_or_supervisor
+)
 from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.shift import Shift
@@ -18,6 +21,36 @@ from application.backend.app.services.attendance_service import (
 )
 
 from application.backend.app.models.roster import RosterAssignment
+
+def is_guard_under_supervisor(db: Session, guard_id: int, supervisor_user_id: int, site_id: Optional[int] = None) -> bool:
+    """
+    Checks if a guard is under the mandate of a supervisor:
+    1. Guard directly assigned to the supervisor (Guard.supervisor_id == supervisor_user_id)
+    2. Guard stationed at a site supervised by this supervisor (Site.supervisor_id == supervisor_user_id)
+    3. Attendance record is associated with a site supervised by this supervisor
+    4. Guard has roster assignments at a site supervised by this supervisor
+    """
+    guard = db.query(Guard).filter(Guard.id == guard_id).first()
+    if not guard:
+        return False
+    if guard.supervisor_id == supervisor_user_id:
+        return True
+
+    sup_site_ids = [s[0] for s in db.query(Site.id).filter(Site.supervisor_id == supervisor_user_id).all()]
+    if sup_site_ids:
+        if guard.primary_site_id and guard.primary_site_id in sup_site_ids:
+            return True
+        if site_id and site_id in sup_site_ids:
+            return True
+        rostered = db.query(RosterAssignment).filter(
+            RosterAssignment.guard_id == guard_id,
+            RosterAssignment.site_id.in_(sup_site_ids)
+        ).first()
+        if rostered:
+            return True
+
+    return False
+
 
 router = APIRouter(prefix="/attendance", tags=["Attendance Management"])
 
@@ -236,10 +269,21 @@ def check_period_not_locked(db: Session, target_date: date):
 def manual_log_attendance(
     payload: AttendanceLogRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(require_admin_or_supervisor)
 ):
-    """Admin endpoint to log manual shift attendance record."""
+    """
+    Log manual shift attendance record.
+    Accessible to ADMIN, HR, and FIELD SUPERVISORS for their assigned guards.
+    """
     check_period_not_locked(db, payload.shift_date)
+
+    role_upper = (current_user.role or "").upper()
+    if role_upper == UserRole.SUPERVISOR.value:
+        if not is_guard_under_supervisor(db, payload.guard_id, current_user.id, payload.site_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor Mandate Restriction: You are only authorized to log attendance for guards under your supervision or assigned sites."
+            )
 
     shift_duration = 12.0
     if payload.shift_id:
@@ -254,6 +298,10 @@ def manual_log_attendance(
         guard = db.query(Guard).filter(Guard.id == payload.guard_id).first()
         site_id = guard.primary_site_id if guard and guard.primary_site_id else 1
 
+    actor_label = "Supervisor" if role_upper == UserRole.SUPERVISOR.value else "Admin"
+    user_name_display = current_user.full_name or current_user.email
+    notes_val = f"Logged by {actor_label} ({user_name_display}): {payload.notes}" if payload.notes else f"Logged by {actor_label} ({user_name_display})"
+
     att = Attendance(
         guard_id=payload.guard_id,
         shift_id=payload.shift_id,
@@ -264,12 +312,23 @@ def manual_log_attendance(
         regular_hours=reg_hrs,
         overtime_hours=ot_hrs,
         status="PRESENT",
-        notes=payload.notes
+        notes=notes_val
     )
     db.add(att)
     db.flush()
     
     sync_overtime_claim(db, att)
+
+    audit_entry = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="MANUAL_LOG_ATTENDANCE",
+        target_entity="Attendance",
+        target_id=str(att.id),
+        reason=f"Manual attendance #{att.id} created for Guard #{payload.guard_id} by {actor_label} ({current_user.email})"
+    )
+    db.add(audit_entry)
 
     db.commit()
     db.refresh(att)
@@ -290,10 +349,17 @@ def get_attendance_anomalies(
     start_date: date = Query(...),
     end_date: date = Query(...),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(require_admin_or_supervisor)
 ):
     """Pre-payroll anomaly scanner matching Screen 9."""
-    anomalies = scan_pre_payroll_anomalies(db, start_date, end_date)
+    role_upper = (current_user.role or "").upper()
+    guard_ids = None
+    if role_upper == UserRole.SUPERVISOR.value:
+        sup_site_ids = [s[0] for s in db.query(Site.id).filter(Site.supervisor_id == current_user.id).all()]
+        guard_ids = [g[0] for g in db.query(Guard.id).filter(
+            (Guard.supervisor_id == current_user.id) | (Guard.primary_site_id.in_(sup_site_ids))
+        ).all()]
+    anomalies = scan_pre_payroll_anomalies(db, start_date, end_date, guard_ids=guard_ids)
     return anomalies
 
 
@@ -302,21 +368,38 @@ def correct_attendance_record(
     attendance_id: int,
     payload: AttendanceCorrectionRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(require_admin_or_supervisor)
 ):
-    """Admin attendance correction modal endpoint matching Screen 9."""
+    """
+    Mandate endpoint to correct attendance record.
+    Accessible to ADMIN, HR, and FIELD SUPERVISORS for their assigned guards.
+    """
     att = db.query(Attendance).filter(Attendance.id == attendance_id).first()
     if not att:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
 
     check_period_not_locked(db, att.shift_date)
 
+    role_upper = (current_user.role or "").upper()
+    if role_upper == UserRole.SUPERVISOR.value:
+        if not is_guard_under_supervisor(db, att.guard_id, current_user.id, att.site_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor Mandate Restriction: You are only authorized to correct attendance records for guards under your supervision or assigned sites."
+            )
+
     att.actual_clock_in = payload.actual_clock_in
     att.actual_clock_out = payload.actual_clock_out
     att.status = payload.status
-    att.notes = f"Corrected by Admin: {payload.reason}"
 
-    if att.actual_clock_in and att.actual_clock_out:
+    actor_label = "Supervisor" if role_upper == UserRole.SUPERVISOR.value else "Admin"
+    user_name_display = current_user.full_name or current_user.email
+    att.notes = f"Corrected by {actor_label} ({user_name_display}): {payload.reason}"
+
+    if att.status in ["ABSENT", "OFF"]:
+        att.regular_hours = 0.0
+        att.overtime_hours = 0.0
+    elif att.actual_clock_in and att.actual_clock_out:
         shift_duration = 12.0
         if att.shift_id:
             shift = db.query(Shift).filter(Shift.id == att.shift_id).first()
@@ -325,8 +408,22 @@ def correct_attendance_record(
         reg_hrs, ot_hrs = calculate_shift_hours(att.actual_clock_in, att.actual_clock_out, shift_duration)
         att.regular_hours = reg_hrs
         att.overtime_hours = ot_hrs
+    else:
+        att.regular_hours = 0.0
+        att.overtime_hours = 0.0
 
     sync_overtime_claim(db, att)
+
+    audit_entry = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="CORRECT_ATTENDANCE",
+        target_entity="Attendance",
+        target_id=str(att.id),
+        reason=f"Attendance #{att.id} (Guard #{att.guard_id}) corrected by {actor_label} ({current_user.email}): {payload.reason}"
+    )
+    db.add(audit_entry)
 
     db.commit()
     db.refresh(att)
@@ -357,8 +454,16 @@ def list_attendance_records(
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(Attendance.guard_id == current_user.guard_id)
     elif current_user.role == UserRole.SUPERVISOR.value:
-        assigned_guard_ids = [g[0] for g in db.query(Guard.id).filter(Guard.supervisor_id == current_user.id).all()]
-        query = query.filter(Attendance.guard_id.in_(assigned_guard_ids))
+        sup_site_ids = [s[0] for s in db.query(Site.id).filter(Site.supervisor_id == current_user.id).all()]
+        assigned_guard_ids = [g[0] for g in db.query(Guard.id).filter(
+            (Guard.supervisor_id == current_user.id) | (Guard.primary_site_id.in_(sup_site_ids))
+        ).all()]
+        if sup_site_ids:
+            query = query.filter(
+                (Attendance.guard_id.in_(assigned_guard_ids)) | (Attendance.site_id.in_(sup_site_ids))
+            )
+        else:
+            query = query.filter(Attendance.guard_id.in_(assigned_guard_ids))
     elif guard_id:
         query = query.filter(Attendance.guard_id == guard_id)
 

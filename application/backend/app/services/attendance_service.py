@@ -66,7 +66,7 @@ def sync_overtime_claim(db: Session, att: Attendance) -> Optional[OvertimeClaim]
         return None
 
 
-def scan_pre_payroll_anomalies(db: Session, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+def scan_pre_payroll_anomalies(db: Session, start_date: date, end_date: date, guard_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
     """
     Scans attendance records for anomalies prior to payroll processing:
     1. Missing clock-out (Clocked in but never clocked out)
@@ -76,6 +76,8 @@ def scan_pre_payroll_anomalies(db: Session, start_date: date, end_date: date) ->
         Attendance.shift_date >= start_date,
         Attendance.shift_date <= end_date
     )
+    if guard_ids is not None:
+        query = query.filter(Attendance.guard_id.in_(guard_ids))
 
     records = query.all()
     anomalies = []

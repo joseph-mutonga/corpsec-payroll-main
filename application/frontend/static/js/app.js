@@ -3028,11 +3028,17 @@ async function rejectOvertimeClaim(claimId) {
 }
 
 // Manual Attendance Modal Handlers
-function openManualAttendanceModal() {
+async function openManualAttendanceModal() {
   const select = document.getElementById('manual-att-guard-id');
   if (select) {
+    if (!cachedGuards || cachedGuards.length === 0) {
+      try {
+        const res = await apiFetch('/guards');
+        if (res.ok) cachedGuards = await res.json();
+      } catch (e) {}
+    }
     select.innerHTML = '';
-    cachedGuards.filter(g => g.status === 'ACTIVE').forEach(g => {
+    (cachedGuards || []).filter(g => g.status === 'ACTIVE').forEach(g => {
       const opt = document.createElement('option');
       opt.value = g.id;
       opt.innerText = `${g.full_name} (${g.employee_number})`;
@@ -3275,18 +3281,18 @@ function closeCorrectAttendanceModal() {
 async function handleCorrectAttendanceSubmit(e) {
   e.preventDefault();
   const attId = document.getElementById('correct-att-id').value;
-  const clockInStr = document.getElementById('correct-att-clock-in').value;
-  const clockOutStr = document.getElementById('correct-att-clock-out').value;
+  const clockInStr = (document.getElementById('correct-att-clock-in').value || '').trim();
+  const clockOutStr = (document.getElementById('correct-att-clock-out').value || '').trim();
   const statusVal = document.getElementById('correct-att-status').value;
-  const reasonVal = document.getElementById('correct-att-reason').value;
+  const reasonVal = (document.getElementById('correct-att-reason').value || '').trim();
 
   try {
     const res = await apiFetch(`/attendance/${attId}/correct`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        actual_clock_in: clockInStr,
-        actual_clock_out: clockOutStr,
+        actual_clock_in: clockInStr ? clockInStr : null,
+        actual_clock_out: clockOutStr ? clockOutStr : null,
         status: statusVal,
         reason: reasonVal
       })
@@ -3299,6 +3305,9 @@ async function handleCorrectAttendanceSubmit(e) {
     }
 
     closeCorrectAttendanceModal();
+    if (typeof showToast === 'function') {
+      showToast('Attendance record corrected successfully.', 'success');
+    }
     loadAttendance();
   } catch (err) {
     alert('Error correcting attendance: ' + err.message);

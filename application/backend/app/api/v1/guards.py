@@ -277,7 +277,11 @@ def list_guards(
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(Guard.id == current_user.guard_id)
     elif current_user.role == UserRole.SUPERVISOR.value:
-        query = query.filter(Guard.supervisor_id == current_user.id)
+        sup_site_ids = [s[0] for s in db.query(Site.id).filter(Site.supervisor_id == current_user.id).all()]
+        if sup_site_ids:
+            query = query.filter((Guard.supervisor_id == current_user.id) | (Guard.primary_site_id.in_(sup_site_ids)))
+        else:
+            query = query.filter(Guard.supervisor_id == current_user.id)
 
     if status_filter:
         query = query.filter(Guard.status == status_filter.upper())
@@ -335,8 +339,11 @@ def get_guard_detail(
 
     if current_user.role == UserRole.GUARD.value and current_user.guard_id != guard_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view other guard profiles")
-    if current_user.role == UserRole.SUPERVISOR.value and guard.supervisor_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view profiles of guards not assigned to you")
+    if current_user.role == UserRole.SUPERVISOR.value:
+        sup_site_ids = [s[0] for s in db.query(Site.id).filter(Site.supervisor_id == current_user.id).all()]
+        is_assigned = (guard.supervisor_id == current_user.id) or (guard.primary_site_id in sup_site_ids if sup_site_ids else False)
+        if not is_assigned:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to view profiles of guards not assigned to you")
 
     return _format_guard_detail(guard)
 
