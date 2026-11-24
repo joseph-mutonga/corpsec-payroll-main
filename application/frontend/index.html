@@ -189,6 +189,12 @@
       <li class="nav-item" onclick="switchTab('leave')">🏖️ Leave Requests</li>
       <li class="nav-item" onclick="switchTab('guards')">🛡️ Guard Directory</li>
       <li class="nav-item" onclick="switchTab('supervisors')">👨‍💼 Supervisors</li>
+      <li class="nav-item" id="nav-item-supervisor-reports" onclick="switchTab('supervisor-reports')"
+        style="display:flex; align-items:center; justify-content:space-between;">
+        <span>📋 Supervisor Reports</span>
+        <span id="sup-reports-nav-badge" class="badge"
+          style="display:none; background:#4338CA; color:#FFF; font-size:10px; font-weight:800; padding:2px 7px; border-radius:10px;">0</span>
+      </li>
       <li class="nav-item" onclick="switchTab('sites')">🏢 Client Sites & Rates</li>
       <li class="nav-item" onclick="switchTab('shifts')">📅 Shift Roster</li>
 
@@ -1551,6 +1557,80 @@
                 <tr>
                   <td colspan="8" style="text-align:center; padding:24px; color:#64748B;">Select date or click 'Load
                     Roll' to view guard attendance.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Panel: Field Supervisor Reports (PDF) -->
+      <section id="panel-supervisor-reports" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:18px; font-weight:700; color:#0F172A;" id="sup-reports-header-title">📋 Field Supervisor Reports (PDF)</h2>
+            <p style="font-size:13px; color:#64748B; margin-top:2px;" id="sup-reports-header-sub">
+              Operational site inspections, patrol summaries, and incident dossiers dispatched to System Administration in PDF format.
+            </p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" onclick="loadSupervisorReports()">🔄 Refresh</button>
+            <button class="btn btn-primary" onclick="openSubmitSupervisorReportModal()" style="background:#4338CA; border-color:#4338CA;">
+              + Submit Report (PDF)
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="table-container" style="padding:14px 18px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; background:#F8FAFC;">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div>
+              <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:2px;">Filter Status:</label>
+              <select id="sup-reports-status-filter" class="form-control" style="font-size:12px; padding:4px 10px;" onchange="loadSupervisorReports()">
+                <option value="ALL">All Reports</option>
+                <option value="SUBMITTED">⏳ Pending Review (Submitted)</option>
+                <option value="UNDER_REVIEW">🔍 Under Review</option>
+                <option value="REVIEWED">✅ Reviewed</option>
+                <option value="ACTION_REQUIRED">⚠️ Action Required</option>
+              </select>
+            </div>
+            <div id="sup-reports-supervisor-filter-wrap" style="display:none;">
+              <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:2px;">Supervisor:</label>
+              <select id="sup-reports-supervisor-filter" class="form-control" style="font-size:12px; padding:4px 10px;" onchange="loadSupervisorReports()">
+                <option value="">All Supervisors</option>
+              </select>
+            </div>
+          </div>
+          <div style="flex:1; max-width:320px; min-width:200px;">
+            <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:2px;">Search Dossiers:</label>
+            <input type="text" id="sup-reports-search-input" class="form-control" placeholder="Search by title, ref, site..." style="font-size:12px; padding:4px 10px;" oninput="debounceLoadSupervisorReports()">
+          </div>
+        </div>
+
+        <!-- Reports Table -->
+        <div class="table-container">
+          <div style="padding:14px 20px; font-weight:700; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+            <span>Operational Reports Register</span>
+            <span id="sup-reports-count-badge" class="badge" style="background:#EEF2FF; color:#4338CA;">0 Reports</span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Ref #</th>
+                  <th>Title &amp; Type</th>
+                  <th>Supervisor</th>
+                  <th>Client Site</th>
+                  <th>Date</th>
+                  <th>Document (PDF)</th>
+                  <th>Review Status</th>
+                  <th>Admin Feedback</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="sup-reports-table-body">
+                <tr>
+                  <td colspan="9" style="text-align:center; padding:24px; color:#64748B;">Loading supervisor reports...</td>
                 </tr>
               </tbody>
             </table>
@@ -7685,6 +7765,147 @@
           <button type="button" class="btn btn-secondary" onclick="closeSetGuardOffDaysModal()">Cancel</button>
           <button type="submit" id="btn-save-guard-offdays" class="btn btn-primary" style="background:#4338CA; border-color:#4338CA;">
             💾 Save 4 Off-Days Schedule
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Submit Supervisor Report (PDF) -->
+  <div id="modal-submit-supervisor-report" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeSubmitSupervisorReportModal()">
+    <div class="modal-content" style="max-width:620px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">📑 Submit Field Report to System Admin</h3>
+          <p style="font-size:12px; color:#64748B; margin:4px 0 0 0;">
+            Transmits a formal operational report in PDF format directly into the System Administration review register.
+          </p>
+        </div>
+        <button type="button" onclick="closeSubmitSupervisorReportModal()"
+          style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <form onsubmit="handleSubmitSupervisorReport(event)">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:18px;">
+          
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Report Title *</label>
+            <input type="text" id="sup-report-title" class="form-control" placeholder="e.g. Weekly Site Patrol &amp; Security Deployment Audit" required>
+          </div>
+
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:180px;">
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Report Classification *</label>
+              <select id="sup-report-type" class="form-control" required>
+                <option value="FIELD_INSPECTION">🔍 Field Inspection Report</option>
+                <option value="PATROL_LOG">🚶 Patrol &amp; Guard Check Log</option>
+                <option value="INCIDENT_SUMMARY">🚨 Incident Summary Dossier</option>
+                <option value="EQUIPMENT_AUDIT">📦 Equipment &amp; Uniform Audit</option>
+                <option value="STAFFING_ISSUE">👥 Staffing &amp; Attendance Brief</option>
+                <option value="GENERAL_REPORT">📑 General Operational Briefing</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:180px;">
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Client Site (Optional)</label>
+              <select id="sup-report-site-id" class="form-control">
+                <option value="">-- All Supervised Sites --</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:140px;">
+              <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Report Date *</label>
+              <input type="date" id="sup-report-date" class="form-control" required>
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Executive Summary &amp; Field Observations *</label>
+            <textarea id="sup-report-summary" class="form-control" rows="4" placeholder="Detail guard turnout, perimeter security checks, occurrences, and operational findings..." required></textarea>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Supervisor Recommendations &amp; Directives (Optional)</label>
+            <textarea id="sup-report-recommendations" class="form-control" rows="2" placeholder="Recommended management actions, equipment needs, or follow-ups requested from Admin..."></textarea>
+          </div>
+
+          <!-- PDF File Upload Zone -->
+          <div style="border:2px dashed #CBD5E1; border-radius:10px; padding:16px; background:#F8FAFC; text-align:center;">
+            <div style="font-size:24px; margin-bottom:4px;">📄</div>
+            <label style="font-size:13px; font-weight:700; color:#1E293B; display:block; margin-bottom:2px;">Attach PDF Report (Optional)</label>
+            <p style="font-size:11.5px; color:#64748B; margin:0 0 10px 0;">
+              Upload an existing document (<strong>.pdf only</strong>), or leave empty to automatically generate a formal CorpSec Enterprise PDF dossier.
+            </p>
+            <input type="file" id="sup-report-file" accept=".pdf,application/pdf" class="form-control" style="max-width:320px; margin:auto; font-size:12px;">
+          </div>
+
+        </div>
+
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="btn btn-secondary" onclick="closeSubmitSupervisorReportModal()">Cancel</button>
+          <button type="submit" id="btn-submit-sup-report" class="btn btn-primary" style="background:#4338CA; border-color:#4338CA;">
+            🚀 Submit Report (PDF) to Admin
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: System Admin Review & Feedback on Supervisor Report -->
+  <div id="modal-review-supervisor-report" class="modal-overlay" style="display:none;"
+    onclick="if(event.target===this) closeReviewSupervisorReportModal()">
+    <div class="modal-content" style="max-width:540px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0;">✍️ System Admin Report Review</h3>
+          <p style="font-size:12px; color:#64748B; margin:4px 0 0 0;">Inspect field report, update review status, and dispatch feedback to supervisor.</p>
+        </div>
+        <button type="button" onclick="closeReviewSupervisorReportModal()"
+          style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong id="review-rep-ref" style="color:#4338CA; font-size:13px;">REP-202611-0001</strong>
+          <span id="review-rep-status-badge" class="badge">SUBMITTED</span>
+        </div>
+        <div id="review-rep-title" style="font-size:14px; font-weight:700; color:#0F172A; margin-bottom:4px;"></div>
+        <div style="font-size:12px; color:#475569; display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+          <div>👤 Supervisor: <strong id="review-rep-supervisor"></strong></div>
+          <div>🏢 Site: <strong id="review-rep-site"></strong></div>
+          <div>📅 Date: <strong id="review-rep-date"></strong></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 12px; background:#4338CA; color:#fff;" id="btn-review-read-pdf">
+            👁️ Read Report PDF
+          </button>
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 12px;" id="btn-review-download-pdf">
+            ⬇️ Download PDF
+          </button>
+        </div>
+      </div>
+
+      <form onsubmit="handleReviewSupervisorReportSubmit(event)">
+        <input type="hidden" id="review-rep-id" value="">
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:18px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Review Decision / Status *</label>
+            <select id="review-rep-status-select" class="form-control" required>
+              <option value="REVIEWED">✅ REVIEWED — Acknowledged &amp; Verified</option>
+              <option value="UNDER_REVIEW">🔍 UNDER_REVIEW — Further Verification In Progress</option>
+              <option value="ACTION_REQUIRED">⚠️ ACTION_REQUIRED — Supervisor Rectification Required</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Admin Feedback &amp; Action Notes</label>
+            <textarea id="review-rep-notes" class="form-control" rows="3" placeholder="Enter administrative directives, acknowledgments, or instructions for the supervisor..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="btn btn-secondary" onclick="closeReviewSupervisorReportModal()">Cancel</button>
+          <button type="submit" id="btn-save-rep-review" class="btn btn-primary">
+            💾 Save Review &amp; Acknowledge
           </button>
         </div>
       </form>

@@ -823,6 +823,24 @@ function updateUserProfileDisplay(userData) {
       if (navItem) navItem.style.display = 'none';
     });
   }
+
+  // Supervisor reports navigation & panel setup
+  const supReportsNav = document.getElementById('nav-item-supervisor-reports');
+  const supReportsFilterWrap = document.getElementById('sup-reports-supervisor-filter-wrap');
+  const supReportsHeaderTitle = document.getElementById('sup-reports-header-title');
+  const supReportsHeaderSub = document.getElementById('sup-reports-header-sub');
+
+  if (supReportsNav) supReportsNav.style.display = 'flex';
+  if (isAdminUser) {
+    if (supReportsFilterWrap) supReportsFilterWrap.style.display = 'block';
+    if (supReportsHeaderTitle) supReportsHeaderTitle.innerText = '📋 Field Supervisor Reports (PDF)';
+    if (supReportsHeaderSub) supReportsHeaderSub.innerText = 'Operational site inspections, patrol summaries, and incident dossiers dispatched to System Administration in PDF format.';
+    try { populateSupervisorFilterOptions(); } catch (e) {}
+  } else if (userData.role === 'SUPERVISOR') {
+    if (supReportsFilterWrap) supReportsFilterWrap.style.display = 'none';
+    if (supReportsHeaderTitle) supReportsHeaderTitle.innerText = '📋 My Field Operational Reports (PDF)';
+    if (supReportsHeaderSub) supReportsHeaderSub.innerText = 'Submit operational inspection reports directly to System Admin in PDF format and view past submissions.';
+  }
 }
 
 let isLoggingOut = false;
@@ -957,7 +975,8 @@ function switchTab(tabId, updateHistory = true) {
     'salary-advances': 'Mid-Month Salary Advances & Automatic Payroll Deductions',
     'expenses': 'Firm Expenses, Petty Cash & Recurring Expenditure',
     'download-app': 'Download & Install Desktop Application in Your Machine',
-    'anonymous': 'Anonymous Guard Reports & Whistleblower Feed'
+    'anonymous': 'Anonymous Guard Reports & Whistleblower Feed',
+    'supervisor-reports': 'Field Supervisor Operational Reports (PDF)'
   };
 
   if (tabId === 'documents') {
@@ -1026,6 +1045,7 @@ function switchTab(tabId, updateHistory = true) {
   if (tabId === 'audit') loadAuditLogs();
   if (tabId === 'settings') loadSettings();
   if (tabId === 'supervisors') loadSupervisors();
+  if (tabId === 'supervisor-reports') loadSupervisorReports();
   if (tabId === 'documents') loadCompanyDocuments();
   if (tabId === 'staff') loadStaffMembers();
   if (tabId === 'invoices') loadInvoices();
@@ -17167,3 +17187,548 @@ window.setAttendanceTodayDate = setAttendanceTodayDate;
 window.resetAttendanceFilters = resetAttendanceFilters;
 window.filterAttendanceLogs = filterAttendanceLogs;
 window.openCorrectAttendanceModal = openCorrectAttendanceModal;
+
+// ============================================================================
+// FIELD SUPERVISOR OPERATIONAL REPORTS (PDF SUBMISSION & ADMIN REVIEW)
+// ============================================================================
+let debounceSupReportsTimer = null;
+
+function debounceLoadSupervisorReports() {
+  if (debounceSupReportsTimer) clearTimeout(debounceSupReportsTimer);
+  debounceSupReportsTimer = setTimeout(() => {
+    loadSupervisorReports();
+  }, 300);
+}
+
+async function loadSupervisorReports() {
+  const tbody = document.getElementById('sup-reports-table-body');
+  if (!tbody) return;
+
+  const statusFilter = document.getElementById('sup-reports-status-filter')?.value || 'ALL';
+  const supFilterEl = document.getElementById('sup-reports-supervisor-filter');
+  const supIdFilter = (supFilterEl && supFilterEl.value) ? supFilterEl.value : '';
+  const searchInput = document.getElementById('sup-reports-search-input')?.value || '';
+
+  const params = new URLSearchParams();
+  if (statusFilter && statusFilter !== 'ALL') params.append('status', statusFilter);
+  if (supIdFilter) params.append('supervisor_id', supIdFilter);
+  if (searchInput.trim()) params.append('search', searchInput.trim());
+
+  try {
+    const res = await apiFetch(`/supervisor-reports?${params.toString()}`);
+    if (!res.ok) {
+      throw new Error(`Failed to load reports (HTTP ${res.status})`);
+    }
+    const reports = await res.json();
+
+    // Update count badge
+    const countBadge = document.getElementById('sup-reports-count-badge');
+    if (countBadge) {
+      countBadge.innerText = `${reports.length} Report${reports.length === 1 ? '' : 's'}`;
+    }
+
+    // Update navigation badge if present
+    const navBadge = document.getElementById('sup-reports-nav-badge');
+    if (navBadge) {
+      const pendingCount = reports.filter(r => r.status === 'SUBMITTED').length;
+      navBadge.innerText = pendingCount > 0 ? pendingCount : '';
+      navBadge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
+    }
+
+    // Populate supervisor filter options if admin and not populated
+    if (supFilterEl && supFilterEl.options.length <= 1) {
+      populateSupervisorFilterOptions();
+    }
+
+    if (!Array.isArray(reports) || reports.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" style="text-align:center; padding:36px; color:#64748B;">
+            <div style="font-size:32px; margin-bottom:8px;">📭</div>
+            <strong style="color:#1E293B; font-size:14px;">No Supervisor Reports Found</strong>
+            <p style="margin:4px 0 0 0; font-size:12px;">No operational dossiers match the current filter criteria.</p>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const curUser = currentUser || {};
+    const isAdmin = (curUser.role === 'ADMIN' || curUser.role === 'Admin' || curUser.role === 'System Admin');
+
+    tbody.innerHTML = reports.map(rep => {
+      // Status badge
+      let statusBadge = '';
+      if (rep.status === 'SUBMITTED') {
+        statusBadge = '<span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700; border:1px solid #FCD34D;">⏳ PENDING REVIEW</span>';
+      } else if (rep.status === 'UNDER_REVIEW') {
+        statusBadge = '<span class="badge" style="background:#E0E7FF; color:#3730A3; font-weight:700; border:1px solid #C7D2FE;">🔍 UNDER REVIEW</span>';
+      } else if (rep.status === 'REVIEWED') {
+        statusBadge = '<span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700; border:1px solid #86EFAC;">✅ REVIEWED</span>';
+      } else if (rep.status === 'ACTION_REQUIRED') {
+        statusBadge = '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700; border:1px solid #FCA5A5;">⚠️ ACTION REQUIRED</span>';
+      } else {
+        statusBadge = `<span class="badge" style="background:#E2E8F0; color:#334155;">${escapeHtml(rep.status)}</span>`;
+      }
+
+      // Friendly type label
+      const typeMap = {
+        'FIELD_INSPECTION': '🔍 Field Inspection',
+        'PATROL_LOG': '🚶 Patrol Check Log',
+        'INCIDENT_SUMMARY': '🚨 Incident Dossier',
+        'EQUIPMENT_AUDIT': '📦 Equipment Audit',
+        'STAFFING_ISSUE': '👥 Staffing Brief',
+        'GENERAL_REPORT': '📑 General Brief'
+      };
+      const typeDisplay = typeMap[rep.report_type] || rep.report_type;
+
+      // File size formatting
+      const sizeStr = rep.file_size_bytes
+        ? (rep.file_size_bytes > 1048576 ? `${(rep.file_size_bytes/1048576).toFixed(1)} MB` : `${Math.round(rep.file_size_bytes/1024)} KB`)
+        : 'PDF Doc';
+
+      // Admin feedback column
+      let feedbackHtml = '';
+      if (rep.admin_notes) {
+        feedbackHtml = `
+          <div style="font-size:12px; color:#1E293B; max-width:220px; line-height:1.4;">
+            ${escapeHtml(rep.admin_notes)}
+          </div>
+          <div style="font-size:11px; color:#64748B; margin-top:2px;">
+            Reviewed by: <strong>${escapeHtml(rep.reviewed_by_name || 'System Admin')}</strong>
+          </div>
+        `;
+      } else {
+        feedbackHtml = '<span style="color:#94A3B8; font-size:12px; font-style:italic;">Pending review</span>';
+      }
+
+      // Actions buttons
+      let actionButtons = '';
+      if (isAdmin) {
+        actionButtons = `
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn btn-primary" style="font-size:11px; padding:4px 9px; background:#4338CA; border-color:#4338CA;" onclick="openReviewSupervisorReportModal(${rep.id})" title="Review & Feedback">
+              ✍️ Review
+            </button>
+            <button class="btn btn-secondary" style="font-size:11px; padding:4px 8px;" onclick="viewSupervisorReportPDF(${rep.id}, '${escapeHtml(rep.title).replace(/'/g, "\\'")}', '${escapeHtml(rep.file_name || 'report.pdf').replace(/'/g, "\\'")}')" title="Read PDF">
+              👁️
+            </button>
+            <button class="btn btn-secondary" style="font-size:11px; padding:4px 8px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteSupervisorReport(${rep.id})" title="Delete Report">
+              🗑️
+            </button>
+          </div>
+        `;
+      } else {
+        actionButtons = `
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn btn-secondary" style="font-size:11px; padding:4px 9px;" onclick="viewSupervisorReportPDF(${rep.id}, '${escapeHtml(rep.title).replace(/'/g, "\\'")}', '${escapeHtml(rep.file_name || 'report.pdf').replace(/'/g, "\\'")}')" title="View PDF">
+              👁️ Read PDF
+            </button>
+            <button class="btn btn-secondary" style="font-size:11px; padding:4px 7px;" onclick="downloadSupervisorReport(${rep.id}, '${escapeHtml(rep.file_name || 'report.pdf').replace(/'/g, "\\'")}')" title="Download">
+              ⬇️
+            </button>
+            ${rep.status === 'SUBMITTED' ? `
+              <button class="btn btn-secondary" style="font-size:11px; padding:4px 7px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteSupervisorReport(${rep.id})" title="Delete Report">
+                🗑️
+              </button>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      return `
+        <tr>
+          <td>
+            <span style="font-family:monospace; font-weight:700; color:#4338CA; font-size:12px;">${escapeHtml(rep.reference_number)}</span>
+          </td>
+          <td>
+            <div style="font-weight:700; color:#0F172A; font-size:13px; margin-bottom:2px;">
+              ${escapeHtml(rep.title)}
+            </div>
+            <span class="badge" style="background:#F1F5F9; color:#475569; font-size:11px;">${typeDisplay}</span>
+          </td>
+          <td>
+            <div style="font-weight:600; color:#1E293B; font-size:12.5px;">${escapeHtml(rep.supervisor_name || 'Field Supervisor')}</div>
+            ${rep.supervisor_phone ? `<div style="font-size:11px; color:#64748B;">📞 ${escapeHtml(rep.supervisor_phone)}</div>` : ''}
+          </td>
+          <td>
+            <span style="font-size:12.5px; color:#334155; font-weight:500;">
+              ${rep.site_name ? `🏢 ${escapeHtml(rep.site_name)}` : '<span style="color:#94A3B8; font-style:italic;">All Sites</span>'}
+            </span>
+          </td>
+          <td style="font-size:12.5px; color:#475569; white-space:nowrap;">
+            📅 ${rep.report_date || '—'}
+          </td>
+          <td>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:16px;">📄</span>
+              <div>
+                <a href="javascript:void(0)" onclick="viewSupervisorReportPDF(${rep.id}, '${escapeHtml(rep.title).replace(/'/g, "\\'")}', '${escapeHtml(rep.file_name || 'report.pdf').replace(/'/g, "\\'")}')" style="color:#4338CA; font-weight:600; font-size:12px; text-decoration:underline;">
+                  ${escapeHtml(rep.file_name || 'View Report')}
+                </a>
+                <div style="font-size:11px; color:#64748B;">${sizeStr}</div>
+              </div>
+            </div>
+          </td>
+          <td>${statusBadge}</td>
+          <td>${feedbackHtml}</td>
+          <td>${actionButtons}</td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (err) {
+    console.error('Error loading supervisor reports:', err);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align:center; padding:24px; color:#DC2626;">
+          ⚠️ Error loading supervisor reports: ${escapeHtml(err.message)}
+        </td>
+      </tr>
+    `;
+  }
+}
+
+async function populateSupervisorFilterOptions() {
+  const sel = document.getElementById('sup-reports-supervisor-filter');
+  if (!sel) return;
+  try {
+    if (!supervisorsCache || supervisorsCache.length === 0) {
+      const res = await apiFetch('/supervisors');
+      if (res.ok) supervisorsCache = await res.json();
+    }
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">All Supervisors</option>' +
+      (supervisorsCache || []).map(s => `<option value="${s.id}">👨‍💼 ${escapeHtml(s.full_name || s.email)}</option>`).join('');
+    if (currentVal) sel.value = currentVal;
+  } catch (e) {
+    console.error('Error populating supervisor filter:', e);
+  }
+}
+
+async function openSubmitSupervisorReportModal() {
+  const modal = document.getElementById('modal-submit-supervisor-report');
+  if (!modal) return;
+
+  // Reset inputs
+  const titleInp = document.getElementById('sup-report-title');
+  if (titleInp) titleInp.value = '';
+
+  const typeSel = document.getElementById('sup-report-type');
+  if (typeSel) typeSel.value = 'FIELD_INSPECTION';
+
+  const dateInp = document.getElementById('sup-report-date');
+  if (dateInp) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInp.value = today;
+  }
+
+  const sumInp = document.getElementById('sup-report-summary');
+  if (sumInp) sumInp.value = '';
+
+  const recInp = document.getElementById('sup-report-recommendations');
+  if (recInp) recInp.value = '';
+
+  const fileInp = document.getElementById('sup-report-file');
+  if (fileInp) fileInp.value = '';
+
+  // Populate Sites
+  const siteSel = document.getElementById('sup-report-site-id');
+  if (siteSel) {
+    try {
+      if (!cachedSites || cachedSites.length === 0) {
+        const sRes = await apiFetch('/sites');
+        if (sRes.ok) cachedSites = await sRes.json();
+      }
+      siteSel.innerHTML = '<option value="">-- All Supervised Sites --</option>' +
+        (cachedSites || []).map(s => `<option value="${s.id}">🏢 ${escapeHtml(s.site_name)} (${escapeHtml(s.location || 'Nairobi')})</option>`).join('');
+    } catch (e) {
+      console.error('Error populating site select:', e);
+    }
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeSubmitSupervisorReportModal() {
+  const modal = document.getElementById('modal-submit-supervisor-report');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleSubmitSupervisorReport(event) {
+  if (event) event.preventDefault();
+
+  const title = document.getElementById('sup-report-title')?.value?.trim();
+  const report_type = document.getElementById('sup-report-type')?.value || 'FIELD_INSPECTION';
+  const site_id = document.getElementById('sup-report-site-id')?.value;
+  const report_date = document.getElementById('sup-report-date')?.value;
+  const summary = document.getElementById('sup-report-summary')?.value?.trim();
+  const recommendations = document.getElementById('sup-report-recommendations')?.value?.trim();
+  const fileInput = document.getElementById('sup-report-file');
+  const file = fileInput?.files?.[0];
+
+  if (!title || title.length < 3) {
+    alert('Please enter a descriptive report title (at least 3 characters).');
+    return;
+  }
+  if (!summary) {
+    alert('Please enter the report executive summary / field observations.');
+    return;
+  }
+
+  if (file) {
+    const fn = file.name.toLowerCase();
+    if (!fn.endsWith('.pdf')) {
+      alert('Supervisor reports must be uploaded in PDF format (.pdf). Please choose a valid PDF file.');
+      return;
+    }
+  }
+
+  const btn = document.getElementById('btn-submit-sup-report');
+  const origBtnText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Compiling & Transmitting PDF...';
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('report_type', report_type);
+    if (site_id) formData.append('site_id', site_id);
+    if (report_date) formData.append('report_date', report_date);
+    if (summary) formData.append('summary', summary);
+    if (recommendations) formData.append('recommendations', recommendations);
+    if (file) formData.append('file', file);
+
+    const res = await apiFetch('/supervisor-reports', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to submit supervisor report');
+    }
+
+    showToast('Field Operational Report (PDF) submitted to System Admin successfully!', 'success');
+    closeSubmitSupervisorReportModal();
+    loadSupervisorReports();
+  } catch (err) {
+    alert('Submission failed: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnText;
+    }
+  }
+}
+
+function viewSupervisorReportPDF(reportId, title, fileName) {
+  const modal = document.getElementById('modal-view-document');
+  const titleEl = document.getElementById('viewer-doc-title');
+  const subEl = document.getElementById('viewer-doc-sub');
+  const metaBar = document.getElementById('viewer-meta-bar');
+  const contentBody = document.getElementById('viewer-content-body');
+  const fsBtn = document.getElementById('viewer-fullscreen-btn');
+  const dlBtn = document.getElementById('viewer-download-btn');
+
+  const pdfUrl = `/api/v1/supervisor-reports/${reportId}/pdf?token=${encodeURIComponent(authToken || '')}`;
+
+  if (titleEl) titleEl.innerText = title || 'Field Supervisor Operational Report';
+  if (subEl) subEl.innerText = 'Field Supervisor Operational Dossier • Formal PDF Transmission';
+  if (metaBar) {
+    metaBar.innerHTML = `
+      <div><strong>Document:</strong> <span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">📄 Supervisor Report (PDF)</span></div>
+      <div><strong>File Name:</strong> ${escapeHtml(fileName || 'supervisor_report.pdf')}</div>
+      <div><strong>Security Classification:</strong> Confidential Internal Operational Dossier</div>
+    `;
+  }
+  if (fsBtn) {
+    fsBtn.onclick = () => window.open(pdfUrl, '_blank');
+  }
+  if (dlBtn) {
+    dlBtn.onclick = () => downloadSupervisorReport(reportId, fileName || 'supervisor_report.pdf');
+  }
+  if (contentBody) {
+    contentBody.innerHTML = `
+      <iframe src="${pdfUrl}" style="width:100%; height:100%; min-height:500px; border:none; display:block;" title="${escapeHtml(title || 'Supervisor Report')}"></iframe>
+    `;
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+async function downloadSupervisorReport(reportId, fileName) {
+  try {
+    const res = await apiFetch(`/supervisor-reports/${reportId}/download`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to download report PDF');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || `Supervisor_Report_${reportId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Error downloading report: ' + err.message);
+  }
+}
+
+async function openReviewSupervisorReportModal(reportId) {
+  const modal = document.getElementById('modal-review-supervisor-report');
+  if (!modal) return;
+
+  try {
+    const res = await apiFetch(`/supervisor-reports/${reportId}`);
+    if (!res.ok) {
+      throw new Error(`Failed to load report details (HTTP ${res.status})`);
+    }
+    const rep = await res.json();
+
+    const idInput = document.getElementById('review-rep-id');
+    if (idInput) idInput.value = rep.id;
+
+    const refEl = document.getElementById('review-rep-ref');
+    if (refEl) refEl.innerText = rep.reference_number;
+
+    const titleEl = document.getElementById('review-rep-title');
+    if (titleEl) titleEl.innerText = rep.title;
+
+    const supEl = document.getElementById('review-rep-supervisor');
+    if (supEl) supEl.innerText = rep.supervisor_name || 'Supervisor';
+
+    const siteEl = document.getElementById('review-rep-site');
+    if (siteEl) siteEl.innerText = rep.site_name || 'All Supervised Sites';
+
+    const dateEl = document.getElementById('review-rep-date');
+    if (dateEl) dateEl.innerText = rep.report_date || '—';
+
+    const statusBadge = document.getElementById('review-rep-status-badge');
+    if (statusBadge) {
+      statusBadge.innerText = rep.status;
+      if (rep.status === 'REVIEWED') {
+        statusBadge.style.background = '#DCFCE7';
+        statusBadge.style.color = '#166534';
+      } else if (rep.status === 'ACTION_REQUIRED') {
+        statusBadge.style.background = '#FEE2E2';
+        statusBadge.style.color = '#991B1B';
+      } else {
+        statusBadge.style.background = '#FEF3C7';
+        statusBadge.style.color = '#92400E';
+      }
+    }
+
+    const statusSel = document.getElementById('review-rep-status-select');
+    if (statusSel) {
+      statusSel.value = (rep.status === 'SUBMITTED') ? 'REVIEWED' : rep.status;
+    }
+
+    const notesInp = document.getElementById('review-rep-notes');
+    if (notesInp) {
+      notesInp.value = rep.admin_notes || '';
+    }
+
+    const readBtn = document.getElementById('btn-review-read-pdf');
+    if (readBtn) {
+      readBtn.onclick = () => viewSupervisorReportPDF(rep.id, rep.title, rep.file_name);
+    }
+
+    const dlBtn = document.getElementById('btn-review-download-pdf');
+    if (dlBtn) {
+      dlBtn.onclick = () => downloadSupervisorReport(rep.id, rep.file_name);
+    }
+
+    modal.style.display = 'flex';
+  } catch (err) {
+    alert('Error opening review modal: ' + err.message);
+  }
+}
+
+function closeReviewSupervisorReportModal() {
+  const modal = document.getElementById('modal-review-supervisor-report');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleReviewSupervisorReportSubmit(event) {
+  if (event) event.preventDefault();
+
+  const reportId = document.getElementById('review-rep-id')?.value;
+  const status = document.getElementById('review-rep-status-select')?.value;
+  const admin_notes = document.getElementById('review-rep-notes')?.value;
+
+  if (!reportId) {
+    alert('Missing report ID');
+    return;
+  }
+
+  const btn = document.getElementById('btn-save-rep-review');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = 'Saving Review...';
+  }
+
+  try {
+    const res = await apiFetch(`/supervisor-reports/${reportId}/review`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: status,
+        admin_notes: admin_notes
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to save review');
+    }
+
+    showToast('Report review decision & feedback saved successfully!', 'success');
+    closeReviewSupervisorReportModal();
+    loadSupervisorReports();
+  } catch (err) {
+    alert('Review save failed: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+
+async function deleteSupervisorReport(reportId) {
+  if (!reportId) return;
+  const ok = confirm('Are you sure you want to permanently delete this supervisor report dossier? This action will remove the registered record and the PDF file.');
+  if (!ok) return;
+
+  try {
+    const res = await apiFetch(`/supervisor-reports/${reportId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || 'Failed to delete report');
+    }
+    showToast(data.message || 'Report deleted successfully', 'success');
+    loadSupervisorReports();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+window.loadSupervisorReports = loadSupervisorReports;
+window.debounceLoadSupervisorReports = debounceLoadSupervisorReports;
+window.populateSupervisorFilterOptions = populateSupervisorFilterOptions;
+window.openSubmitSupervisorReportModal = openSubmitSupervisorReportModal;
+window.closeSubmitSupervisorReportModal = closeSubmitSupervisorReportModal;
+window.handleSubmitSupervisorReport = handleSubmitSupervisorReport;
+window.viewSupervisorReportPDF = viewSupervisorReportPDF;
+window.downloadSupervisorReport = downloadSupervisorReport;
+window.openReviewSupervisorReportModal = openReviewSupervisorReportModal;
+window.closeReviewSupervisorReportModal = closeReviewSupervisorReportModal;
+window.handleReviewSupervisorReportSubmit = handleReviewSupervisorReportSubmit;
+window.deleteSupervisorReport = deleteSupervisorReport;

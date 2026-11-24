@@ -19,7 +19,7 @@ from application.backend.app.core.limiter import limiter, _rate_limit_exceeded_h
 from slowapi.errors import RateLimitExceeded
 from application.backend.app.models import *
 from application.backend.app.api.v1 import (
-    auth, guards, sites, shifts, attendance, overtime, payroll, payslips, payments, guard_portal, reports, audit, settings as sys_settings, archive, incidents, leave, statutory, roster, regions, off_days, supervisor as supervisor_module, staff as staff_module, documents as documents_module, invoices as invoices_module, assets as assets_module, clients as clients_module, company_history as company_history_module, salary_advances as salary_advances_module, desktop_app as desktop_module, expenses as expenses_module, anonymous_reporting as anonymous_reporting_module, chart_analytics as chart_analytics_module, team_chat as team_chat_module, call_center as call_center_module, ai_insights as ai_insights_module
+    auth, guards, sites, shifts, attendance, overtime, payroll, payslips, payments, guard_portal, reports, audit, settings as sys_settings, archive, incidents, leave, statutory, roster, regions, off_days, supervisor as supervisor_module, staff as staff_module, documents as documents_module, invoices as invoices_module, assets as assets_module, clients as clients_module, company_history as company_history_module, salary_advances as salary_advances_module, desktop_app as desktop_module, expenses as expenses_module, anonymous_reporting as anonymous_reporting_module, chart_analytics as chart_analytics_module, team_chat as team_chat_module, call_center as call_center_module, ai_insights as ai_insights_module, supervisor_reports as supervisor_reports_module
 )
 
 # Ensure database tables exist and schema columns are synchronized
@@ -109,6 +109,7 @@ app.include_router(team_chat_module.router, prefix=settings.API_V1_STR)
 app.include_router(call_center_module.router, prefix=settings.API_V1_STR)
 app.include_router(ai_insights_module.router, prefix=settings.API_V1_STR)
 app.include_router(ai_insights_module.router, prefix="/api")
+app.include_router(supervisor_reports_module.router, prefix=settings.API_V1_STR)
 
 # Serve Static Assets & SPA index.html
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend"))

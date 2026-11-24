@@ -254,3 +254,187 @@ def generate_payslip_pdf(data: Dict[str, Any]) -> bytes:
     buffer.seek(0)
     return buffer.getvalue()
 
+
+def generate_supervisor_report_pdf(data: Dict[str, Any]) -> bytes:
+    """
+    Generates a formal, high-quality PDF report for Field Supervisor Operational Reports.
+    Matches CorpSec Enterprise document branding and standards.
+    Returns: PDF file bytes
+    """
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40
+    )
+
+    styles = getSampleStyleSheet()
+
+    header_style = ParagraphStyle(
+        'RepHeader',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=16,
+        leading=20,
+        textColor=colors.HexColor('#0F172A')
+    )
+    subhead_style = ParagraphStyle(
+        'RepSubHead',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#4338CA')
+    )
+    body_bold = ParagraphStyle(
+        'BodyBold',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor('#1E293B')
+    )
+    body_text = ParagraphStyle(
+        'BodyText',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor('#334155')
+    )
+    section_title = ParagraphStyle(
+        'SectionTitle',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=16,
+        textColor=colors.HexColor('#1E293B')
+    )
+
+    story = []
+
+    # 1. Top Brand Banner
+    brand_data = [
+        [
+            Paragraph("<b>CORPSEC INVESTIGATIONS &amp; GUARDING SERVICES LTD</b><br/><font color='#64748B' size='8'>Security Operations, Workforce Telemetry &amp; Field Intelligence</font>", header_style),
+            Paragraph("<b>OFFICIAL DISPATCH</b><br/><font color='#64748B' size='8'>Confidential Operational Report</font>", ParagraphStyle('RightNotice', parent=body_bold, alignment=2, textColor=colors.HexColor('#4338CA')))
+        ]
+    ]
+    t_brand = Table(brand_data, colWidths=[350, 180])
+    t_brand.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    story.append(t_brand)
+    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#4338CA'), spaceBefore=2, spaceAfter=14))
+
+    # 2. Report Title & Type
+    story.append(Paragraph(f"<b>REPORT TITLE:</b> {data.get('title', 'Field Operational Report')}", section_title))
+    story.append(Spacer(1, 6))
+
+    # 3. Metadata Table
+    meta_rows = [
+        [
+            Paragraph("<b>Reference Number:</b>", body_bold),
+            Paragraph(str(data.get('reference_number', 'N/A')), body_text),
+            Paragraph("<b>Report Date:</b>", body_bold),
+            Paragraph(str(data.get('report_date', 'N/A')), body_text)
+        ],
+        [
+            Paragraph("<b>Reporting Supervisor:</b>", body_bold),
+            Paragraph(str(data.get('supervisor_name', 'N/A')), body_text),
+            Paragraph("<b>Supervisor Email/Phone:</b>", body_bold),
+            Paragraph(f"{data.get('supervisor_email', '')} / {data.get('supervisor_phone', '')}", body_text)
+        ],
+        [
+            Paragraph("<b>Client Site:</b>", body_bold),
+            Paragraph(str(data.get('site_name', 'All Supervised Sites')), body_text),
+            Paragraph("<b>Report Classification:</b>", body_bold),
+            Paragraph(str(data.get('report_type', 'FIELD_INSPECTION')).replace('_', ' ').title(), body_text)
+        ],
+        [
+            Paragraph("<b>Submission Timestamp:</b>", body_bold),
+            Paragraph(str(data.get('submitted_at', '')), body_text),
+            Paragraph("<b>Target Recipient:</b>", body_bold),
+            Paragraph("System Administration Hub", body_text)
+        ]
+    ]
+    t_meta = Table(meta_rows, colWidths=[130, 140, 120, 140])
+    t_meta.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+        ('PADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    story.append(t_meta)
+    story.append(Spacer(1, 16))
+
+    # 4. Executive Summary / Field Findings
+    story.append(Paragraph("<b>1. EXECUTIVE SUMMARY &amp; OPERATIONAL FINDINGS</b>", subhead_style))
+    story.append(Spacer(1, 6))
+    summary_text = (data.get('summary') or 'No summary text provided by supervisor.').replace('\n', '<br/>')
+    summary_box = [
+        [Paragraph(summary_text, body_text)]
+    ]
+    t_summary = Table(summary_box, colWidths=[530])
+    t_summary.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#FFFFFF')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#E2E8F0')),
+        ('PADDING', (0, 0), (-1, -1), 10),
+    ]))
+    story.append(t_summary)
+    story.append(Spacer(1, 16))
+
+    # 5. Recommendations & Action Items
+    if data.get('recommendations'):
+        story.append(Paragraph("<b>2. SUPERVISOR RECOMMENDATIONS &amp; REQUIRED ACTIONS</b>", subhead_style))
+        story.append(Spacer(1, 6))
+        rec_text = str(data.get('recommendations', '')).replace('\n', '<br/>')
+        rec_box = [
+            [Paragraph(rec_text, body_text)]
+        ]
+        t_rec = Table(rec_box, colWidths=[530])
+        t_rec.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EFF6FF')),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#93C5FD')),
+            ('PADDING', (0, 0), (-1, -1), 10),
+        ]))
+        story.append(t_rec)
+        story.append(Spacer(1, 16))
+
+    # 6. Formal Sign-Off Block
+    story.append(Paragraph("<b>3. AUTHENTICATION &amp; ADMINISTRATIVE REVIEW</b>", subhead_style))
+    story.append(Spacer(1, 6))
+    sign_data = [
+        [
+            Paragraph("<b>Filed By (Field Supervisor):</b><br/><br/>"
+                      f"Name: <b>{data.get('supervisor_name', 'N/A')}</b><br/>"
+                      "Status: <i>Digitally Certified &amp; Dispatched</i><br/>"
+                      f"Date: {data.get('report_date', 'N/A')}", body_text),
+            Paragraph("<b>Administrative Acknowledgment:</b><br/><br/>"
+                      "Recipient: <b>CorpSec System Administration</b><br/>"
+                      "Status: <i>Logged in Central Register for Inspection</i><br/>"
+                      "Action: <i>Review &amp; Feedback Queue</i>", body_text)
+        ]
+    ]
+    t_sign = Table(sign_data, colWidths=[260, 270])
+    t_sign.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#CBD5E1')),
+        ('PADDING', (0, 0), (-1, -1), 10),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    story.append(t_sign)
+
+    story.append(Spacer(1, 24))
+    story.append(Paragraph("<i>This formal operational report was generated and transmitted via the CorpSec Enterprise Portal. Confidential property of CorpSec Investigations &amp; Guarding Services Ltd.</i>", ParagraphStyle('Foot', parent=body_text, fontName='Helvetica-Oblique', fontSize=8, textColor=colors.HexColor('#64748B'), alignment=1)))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
