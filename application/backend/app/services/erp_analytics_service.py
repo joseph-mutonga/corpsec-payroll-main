@@ -866,6 +866,16 @@ class CallCenterAnalyticsService:
         total_seconds = sum(c.duration_seconds or 0 for c in calls)
         total_minutes = round(total_seconds / 60.0, 1)
 
+        today = datetime.date.today()
+        today_calls = [c for c in calls if c.created_at and c.created_at.date() == today]
+        today_calls_count = len(today_calls)
+        today_inbound = len([c for c in today_calls if c.direction == "INBOUND"])
+        today_outbound = len([c for c in today_calls if c.direction == "OUTBOUND"])
+        today_completed = len([c for c in today_calls if c.status == "COMPLETED"])
+        today_missed = len([c for c in today_calls if c.status == "MISSED"])
+        today_talk_seconds = sum(c.duration_seconds or 0 for c in today_calls)
+        today_talk_minutes = round(today_talk_seconds / 60.0, 1)
+
         phone_numbers = db.query(PhoneNumber).all()
         queues = db.query(CallQueue).all()
         agents = db.query(AgentStatus).options(joinedload(AgentStatus.user)).all()
@@ -912,26 +922,29 @@ class CallCenterAnalyticsService:
 
         formatted_table = "\n".join(table_lines)
         q_time_ms = round((time.perf_counter() - t0) * 1000, 2)
+        today_str = today.strftime("%d %B %Y")
 
         standardized_report = (
             f"### CALL CENTRE & TELEPHONY REPORT\n"
             f"**Audit Date:** {AttendanceAnalyticsService.get_current_timestamp_eat()}\n\n"
+            f"- **Calls Made Today ({today_str}):** {today_calls_count} calls ({today_inbound} Inbound, {today_outbound} Outbound, {today_completed} Completed, {today_missed} Missed, {today_talk_minutes} talk mins)\n"
             f"- **Total CDR Call Logs:** {total_calls} calls ({total_minutes} total talk-time minutes)\n"
             f"- **Call Distribution:** {inbound} Inbound calls | {outbound} Outbound calls\n"
             f"- **Call Dispositions:** {completed} Completed | {missed} Missed calls | {voicemail} Voicemail\n"
             f"- **Configured DID Numbers:** {len(phone_numbers)} active numbers\n"
             f"- **Inbound Call Queues:** {len(queues)} queues\n"
-            f"- **Live Agent State:** {agent_states.get('AVAILABLE', 0)} Available | {agent_states.get('ON_CALL', 0)} On Call | {agent_states.get('BREAK', 0)} On Break | {agent_states.get('OFFLINE', 0)} Offline\n\n"
-            f"### RECENT CALL DETAIL RECORDS (CDRS)\n"
-            f"{formatted_table}\n\n"
-            f"### DATABASE VERIFICATION\n"
-            f"- **Query Execution Time:** {q_time_ms:.2f} ms\n"
-            f"- **Verified Records:** {total_calls} call logs queried from MySQL `call_logs` and `agent_statuses`"
+            f"- **Live Agent State:** {agent_states.get('AVAILABLE', 0)} Available | {agent_states.get('ON_CALL', 0)} On Call | {agent_states.get('BREAK', 0)} On Break | {agent_states.get('OFFLINE', 0)} Offline"
         )
 
         return {
             "query_time_ms": q_time_ms,
             "total_calls": total_calls,
+            "calls_today": today_calls_count,
+            "inbound_today": today_inbound,
+            "outbound_today": today_outbound,
+            "completed_today": today_completed,
+            "missed_today": today_missed,
+            "talk_minutes_today": today_talk_minutes,
             "inbound_calls": inbound,
             "outbound_calls": outbound,
             "completed_calls": completed,
@@ -941,6 +954,7 @@ class CallCenterAnalyticsService:
             "phone_numbers_count": len(phone_numbers),
             "queues_count": len(queues),
             "recent_calls": details_rows,
+            "recent_calls_table": formatted_table,
             "standardized_report": standardized_report
         }
 
@@ -1335,6 +1349,12 @@ class TeamChatAnalyticsService:
                 .all()
             )
             today_msgs = today_specific
+            if not today_msgs and target_date is None and all_recent:
+                latest_date = max((m.created_at.date() for m in all_recent if m.created_at), default=None)
+                if latest_date:
+                    report_date = latest_date
+                    report_date_str = report_date.strftime("%d %B %Y")
+                    today_msgs = [m for m in all_recent if m.created_at and m.created_at.date() == latest_date]
 
         today_senders = list(dict.fromkeys([
             f"{m.sender_name} ({m.sender_role})" for m in today_msgs

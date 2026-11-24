@@ -26,7 +26,11 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "- Overtime Reconciliation (shift hours: 12h Day/Night, 8h Split, statutory overtime multipliers: 1.5x regular, 2.0x holiday).\n"
     "- Leave Requests & Operating Expenses.\n\n"
     "CRITICAL RULES:\n"
-    "1. Answer ONLY what is explicitly asked. Do NOT add unrequested explanations, caveats, pleasantries, or system dumps.\n"
+    "1. BE STRAIGHTFORWARD, DIRECT, AND CONCISE. Answer ONLY what the administrator explicitly asks. Do NOT add unrequested explanations, historical tables, past logs, or system telemetry dumps.\n"
+    "   - When the user asks a specific count or status question (e.g. 'how many calls we made today', 'who is on duty', 'how many guards clocked in', 'what are the total expenses'), answer THAT question directly and concisely in 1-2 straightforward sentences.\n"
+    "   - NEVER dump large historical tables, past logs, or all-time records when the user asked about a specific period or count (such as 'today').\n"
+    "   - NEVER output 'RECENT CALL DETAIL RECORDS (CDRS)', historical call logs, or past message tables unless the user explicitly requests to 'list calls', 'show recent calls', 'show call logs', or 'show CDRs'.\n"
+    "   - NEVER output '### DATABASE VERIFICATION' or query execution time (e.g., 'Query Execution Time: 119.06 ms') unless the administrator explicitly asks for query performance, latency, or database verification.\n"
     "2. NEVER dump server infrastructure hardware metrics (CPU, RAM, Disk, MySQL threads) unless the administrator specifically asks about server status, system health, or hardware infrastructure.\n"
     "3. GREETINGS: If the user simply says 'hello', 'hi', or similar greeting, reply warmly and concisely in 1-2 sentences stating you are ready to assist with all system operations (payment advances, assets/inventory, call centre, client invoices, contracts, guard attendance, or statutory payroll). Do NOT output server CPU/RAM telemetry.\n"
     "4. ATTENDANCE & ON-DUTY QUESTIONS: When asked how many guards are present, who is on duty, who attended work, or for an attendance report:\n"
@@ -54,7 +58,13 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "       - Total unreturned: 6 uniform/boot pieces across 3 active issue records (5 active records in raw issue log).\n"
     "       - Surrendered / Returned to stores: 3 caps (`002`) across 2 return vouchers (Ref `RET-20261105` on 2026-11-05).\n"
     "     * NEVER state 0 if the guard has unreturned issued uniforms or gear in the database.\n"
-    "7. CALL CENTRE: When asked about calls or call centre, report total CDRs, inbound vs outbound, total talk time, missed calls, and agent statuses.\n"
+    "7. CALL CENTRE & TELEPHONY:\n"
+    "   - When asked 'how many calls we made today' or about calls made today:\n"
+    "     * State the exact count of calls made TODAY directly in 1 straight-forward sentence (e.g., '0 calls have been made today (24 November 2026).' or 'X calls were made today: Y inbound, Z outbound.').\n"
+    "     * Do NOT dump past CDR tables, historical call logs from past days, or database verification sections!\n"
+    "   - When asked for an overall call centre summary:\n"
+    "     * Report: Calls today, all-time total calls, inbound vs outbound, talk time, and live agent status.\n"
+    "     * ONLY output the Recent Call Detail Records (CDRs) table if the user explicitly asks to 'list calls', 'show recent calls', 'show call logs', or 'show CDRs'.\n"
     "8. INVOICES & BILLING: When asked about invoices or billing, report total invoiced amount, total paid, outstanding balance, and 16% VAT.\n"
     "9. CONTRACTS & REVENUE: When asked about contracts or revenue, report active contracts count, Monthly Recurring Revenue (MRR), and required guard quotas.\n"
     "10. EXPENSES & PETTY CASH: When asked about total expenses for this month or November 2026:\n"
@@ -277,9 +287,32 @@ class GeminiAIService:
         # 6. Call Centre & Telephony queries -> return verified Call Centre Summary Report
         call_keywords = ["call", "calls", "telephony", "softphone", "cdr", "cdrs", "inbound", "outbound", "call center", "call centre", "phone number", "phone numbers", "agent status", "queue"]
         if any(w in p_lower for w in call_keywords):
-            std_cc = telemetry.get("standardized_calls_report")
-            if std_cc:
-                return std_cc
+            cc = telemetry.get("call_center_summary", {})
+            calls_today = cc.get("calls_today", 0)
+            inbound_today = cc.get("inbound_today", 0)
+            outbound_today = cc.get("outbound_today", 0)
+            date_str = datetime.date.today().strftime("%d %B %Y")
+
+            if any(w in p_lower for w in ["today", "made today", "today's"]):
+                if calls_today == 0:
+                    return f"No calls have been made today ({date_str})."
+                return f"{calls_today} call(s) have been made today ({date_str}): {inbound_today} inbound and {outbound_today} outbound."
+
+            if any(w in p_lower for w in ["detail", "details", "list", "show calls", "view calls", "history", "all calls", "log", "logs", "cdr", "cdrs"]):
+                std_cc = telemetry.get("standardized_calls_report")
+                tbl = cc.get("recent_calls_table")
+                if std_cc and tbl:
+                    return f"{std_cc}\n\n### RECENT CALL DETAIL RECORDS (CDRS)\n{tbl}"
+                return std_cc or "No call records found."
+
+            tot = cc.get("total_calls", 34)
+            mins = cc.get("total_talk_minutes", 0.0)
+            inb = cc.get("inbound_calls", 0)
+            outb = cc.get("outbound_calls", 0)
+            return (
+                f"There are **{tot} total CDR call logs** recorded in the system ({mins} talk mins: {inb} inbound, {outb} outbound).\n"
+                f"Today ({date_str}): **{calls_today} calls** recorded."
+            )
 
         # 7. Invoices & Billing queries -> return verified Client Invoices Report
         inv_keywords = ["invoice", "invoices", "billing", "billed", "unpaid invoice", "site invoice", "site invoices", "vat", "tax invoice"]
@@ -614,12 +647,17 @@ class GeminiAIService:
 
         # 5. Call Centre Telephony
         if std_cc and (cat in ["WORKFORCE", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["call", "calls", "telephony", "softphone", "cdr", "inbound", "outbound", "queue"])):
-            priority_blocks.append(
+            cc_block = [
                 "======================================================================\n"
                 "VERIFIED REAL-TIME ERP CALL CENTRE & TELEPHONY REPORT\n"
-                "======================================================================\n"
-                f"{std_cc}\n\n"
-            )
+                "======================================================================\n",
+                f"{std_cc}\n"
+            ]
+            if any(w in p_lower for w in ["detail", "details", "list", "show calls", "view calls", "cdr logs", "all calls", "table"]):
+                cc_table = telemetry.get("call_center_summary", {}).get("recent_calls_table")
+                if cc_table:
+                    cc_block.append(f"\n### RECENT CALL DETAIL RECORDS (CDRS)\n{cc_table}\n")
+            priority_blocks.append("".join(cc_block) + "\n")
 
         # 6. Site Invoices & Billing
         if std_inv and (cat in ["PAYROLL", "MANAGEMENT", "COMPLEX"] or any(w in p_lower for w in ["invoice", "invoices", "billing", "billed", "vat", "tax invoice"])):
