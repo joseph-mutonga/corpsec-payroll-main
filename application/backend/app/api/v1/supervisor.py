@@ -21,7 +21,11 @@ from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.shift import Shift
 from application.backend.app.models.audit import AuditLog
-from application.backend.app.api.v1.attendance import auto_close_past_unclosed_shifts
+from application.backend.app.models.off_day import GuardOffDaySchedule, OffDayAllowance
+from application.backend.app.models.roster import RosterAssignment
+from application.backend.app.models.payroll import PayrollPeriod
+from application.backend.app.api.v1.attendance import auto_close_past_unclosed_shifts, is_guard_under_supervisor
+from application.backend.app.schemas.off_day import GuardOffDayScheduleCreate, GuardOffDayScheduleResponse
 
 router = APIRouter(prefix="/supervisors", tags=["Supervisor Management"])
 
@@ -106,7 +110,7 @@ class SupervisorAttendanceStatusResponse(BaseModel):
     shift_name: Optional[str] = None
     supervisor_id: Optional[int] = None
     attendance_id: Optional[int] = None
-    attendance_status: str = "NOT_MARKED"  # PRESENT, ABSENT, LATE, NOT_MARKED
+    attendance_status: str = "NOT_MARKED"  # PRESENT, ABSENT, LATE, OFF, NOT_MARKED
     actual_clock_in: Optional[datetime] = None
     actual_clock_out: Optional[datetime] = None
     notes: Optional[str] = None
@@ -470,6 +474,17 @@ def get_supervisor_guards_attendance(
         site_name = g.site.site_name if g.site else "Unassigned Site"
         shift_name = g.shift.name if g.shift else "Day Shift"
 
+        att_status = att.status if att else "NOT_MARKED"
+        att_notes = att.notes if att else None
+        if att_status == "NOT_MARKED":
+            sched_off = db.query(GuardOffDaySchedule).filter(
+                GuardOffDaySchedule.guard_id == g.id,
+                GuardOffDaySchedule.off_date == target_date
+            ).first()
+            if sched_off:
+                att_status = "OFF"
+                att_notes = sched_off.notes or "Scheduled Off-Day (Set by Supervisor)"
+
         results.append(SupervisorAttendanceStatusResponse(
             guard_id=g.id,
             employee_number=g.employee_number,
@@ -481,10 +496,10 @@ def get_supervisor_guards_attendance(
             shift_name=shift_name,
             supervisor_id=g.supervisor_id or target_sup_id,
             attendance_id=att.id if att else None,
-            attendance_status=att.status if att else "NOT_MARKED",
+            attendance_status=att_status,
             actual_clock_in=att.actual_clock_in if att else None,
             actual_clock_out=att.actual_clock_out if att else None,
-            notes=att.notes if att else None
+            notes=att_notes
         ))
     return results
 
@@ -502,7 +517,7 @@ def supervisor_mark_attendance(
     Creates or updates Attendance records for the given shift_date.
     Admins can mark any guard; supervisors can only mark their assigned guards (directly or via sites).
     """
-    valid_statuses = {"PRESENT", "ABSENT", "LATE"}
+    valid_statuses = {"PRESENT", "ABSENT", "LATE", "OFF"}
     results = []
 
     for record in payload.records:
@@ -511,7 +526,7 @@ def supervisor_mark_attendance(
             raise HTTPException(status_code=404, detail=f"Guard #{record.guard_id} not found.")
 
         if current_user.role == UserRole.SUPERVISOR.value:
-            is_supervised = guard.supervisor_id == current_user.id or (guard.site and guard.site.supervisor_id == current_user.id)
+            is_supervised = is_guard_under_supervisor(db, guard.id, current_user.id, guard.primary_site_id)
             if not is_supervised:
                 raise HTTPException(
                     status_code=403,
@@ -522,7 +537,7 @@ def supervisor_mark_attendance(
         if att_status not in valid_statuses:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid status '{record.attendance_status}'. Must be PRESENT, ABSENT, or LATE."
+                detail=f"Invalid status '{record.attendance_status}'. Must be PRESENT, ABSENT, LATE, or OFF."
             )
 
         resolved_shift_id = record.shift_id or guard.shift_id
@@ -553,7 +568,7 @@ def supervisor_mark_attendance(
                     att.actual_clock_in = now
                 if att.regular_hours == 0.0:
                     att.regular_hours = shift_duration
-            elif att_status == "ABSENT":
+            elif att_status in ["ABSENT", "OFF"]:
                 att.regular_hours = 0.0
                 att.overtime_hours = 0.0
         else:
@@ -766,3 +781,280 @@ def supervisor_guard_clock_out(
         "overtime_hours": att.overtime_hours,
         "status": att.status
     }
+
+
+# ── Supervisor: Set and Manage Guard Monthly Off-Days (4 Days) ─────────────────
+
+@router.get("/guards/{guard_id}/off-days", response_model=GuardOffDayScheduleResponse)
+def get_guard_off_days_schedule(
+    guard_id: int,
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    """
+    Retrieve scheduled monthly off-days for a guard.
+    Supervisors can only view off-days for guards under their supervision or assigned sites.
+    """
+    guard = db.query(Guard).filter(Guard.id == guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=404, detail=f"Guard #{guard_id} not found.")
+
+    if current_user.role == UserRole.SUPERVISOR.value:
+        if not is_guard_under_supervisor(db, guard.id, current_user.id, guard.primary_site_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Supervisor Mandate Restriction: You are only authorized to view off-days for guards under your supervision or assigned sites."
+            )
+
+    target_year = year or date.today().year
+    target_month = month or date.today().month
+
+    schedules = db.query(GuardOffDaySchedule).filter(
+        GuardOffDaySchedule.guard_id == guard_id,
+        GuardOffDaySchedule.year == target_year,
+        GuardOffDaySchedule.month == target_month
+    ).order_by(GuardOffDaySchedule.off_date.asc()).all()
+
+    off_dates = [s.off_date for s in schedules]
+    latest = schedules[0] if schedules else None
+    notes = latest.notes if latest else None
+    created_at = latest.created_at if latest else None
+    updated_at = latest.updated_at if latest else None
+    sup_id = latest.supervisor_id if latest else current_user.id
+
+    sup_user = db.query(User).filter(User.id == sup_id).first() if sup_id else None
+    sup_name = sup_user.full_name or sup_user.email if sup_user else None
+
+    return GuardOffDayScheduleResponse(
+        guard_id=guard.id,
+        guard_name=guard.full_name,
+        employee_number=guard.employee_number,
+        year=target_year,
+        month=target_month,
+        off_dates=off_dates,
+        total_off_days=len(off_dates),
+        supervisor_id=sup_id,
+        supervisor_name=sup_name,
+        notes=notes,
+        created_at=created_at,
+        updated_at=updated_at
+    )
+
+
+@router.post("/guards/{guard_id}/off-days", response_model=GuardOffDayScheduleResponse, status_code=status.HTTP_200_OK)
+def set_guard_off_days_schedule(
+    guard_id: int,
+    payload: GuardOffDayScheduleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    """
+    Supervisor sets the 4 required monthly off-days for their assigned guard.
+    The supervisor has full authority to decide the specific dates (consecutive or non-consecutive).
+    Synchronizes with RosterAssignment (marking days as OFF override) and Attendance records.
+    """
+    guard = db.query(Guard).filter(Guard.id == guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=404, detail=f"Guard #{guard_id} not found.")
+
+    if current_user.role == UserRole.SUPERVISOR.value:
+        if not is_guard_under_supervisor(db, guard.id, current_user.id, guard.primary_site_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Supervisor Mandate Restriction: You are only authorized to set off-days for guards under your supervision or assigned sites."
+            )
+
+    # Check for locked payroll period
+    period = db.query(PayrollPeriod).filter(
+        PayrollPeriod.year == payload.year,
+        PayrollPeriod.month == payload.month
+    ).first()
+    if period and period.status in ["CONFIRMED", "CLOSED"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot schedule off-days for locked payroll period ({period.status})"
+        )
+
+    # Clean and validate dates
+    unique_dates = sorted(list(set(payload.off_dates)))
+    if len(unique_dates) == 0:
+        raise HTTPException(status_code=400, detail="At least 1 off-date must be provided.")
+    if len(unique_dates) > 4:
+        raise HTTPException(
+            status_code=400,
+            detail="A maximum of 4 off-days per calendar month can be scheduled for a guard."
+        )
+
+    for d in unique_dates:
+        if d.year != payload.year or d.month != payload.month:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Date {d.strftime('%Y-%m-%d')} does not belong to {payload.year}-{payload.month:02d}."
+            )
+
+    now = datetime.now()
+
+    # Find previous scheduled off days for this month to detect removed days
+    previous_schedules = db.query(GuardOffDaySchedule).filter(
+        GuardOffDaySchedule.guard_id == guard.id,
+        GuardOffDaySchedule.year == payload.year,
+        GuardOffDaySchedule.month == payload.month
+    ).all()
+    prev_dates = {s.off_date for s in previous_schedules}
+
+    # Remove previous schedules
+    for s in previous_schedules:
+        db.delete(s)
+    db.flush()
+
+    # Revert roster overrides for dates that are no longer off-days
+    removed_dates = prev_dates - set(unique_dates)
+    for rem_date in removed_dates:
+        old_asgn = db.query(RosterAssignment).filter(
+            RosterAssignment.guard_id == guard.id,
+            RosterAssignment.shift_date == rem_date,
+            RosterAssignment.is_override == True,
+            RosterAssignment.site_id.is_(None)
+        ).first()
+        if old_asgn:
+            db.delete(old_asgn)
+
+    # Insert new schedule records and synchronize RosterAssignment & Attendance
+    note_text = payload.notes or "Scheduled Off-Day (Set by Supervisor)"
+    new_records = []
+    for d in unique_dates:
+        sched = GuardOffDaySchedule(
+            guard_id=guard.id,
+            supervisor_id=current_user.id,
+            year=payload.year,
+            month=payload.month,
+            off_date=d,
+            notes=note_text,
+            created_at=now,
+            updated_at=now
+        )
+        db.add(sched)
+        new_records.append(sched)
+
+        # 1. Sync RosterAssignment (mark as Day Off override)
+        asgn = db.query(RosterAssignment).filter(
+            RosterAssignment.guard_id == guard.id,
+            RosterAssignment.shift_date == d
+        ).first()
+        if asgn:
+            asgn.site_id = None
+            asgn.shift_id = None
+            asgn.is_override = True
+            asgn.notes = note_text
+            asgn.updated_at = now
+        else:
+            asgn = RosterAssignment(
+                guard_id=guard.id,
+                site_id=None,
+                shift_id=None,
+                shift_date=d,
+                is_override=True,
+                notes=note_text
+            )
+            db.add(asgn)
+
+        # 2. Sync Attendance (if attendance record exists and not clocked in, mark status OFF)
+        att = db.query(Attendance).filter(
+            Attendance.guard_id == guard.id,
+            Attendance.shift_date == d
+        ).first()
+        if att:
+            if att.actual_clock_in is None or att.status in ["NOT_MARKED", "ABSENT"]:
+                att.status = "OFF"
+                att.regular_hours = 0.0
+                att.overtime_hours = 0.0
+                att.notes = note_text
+
+    dates_str = ", ".join(d.strftime("%Y-%m-%d") for d in unique_dates)
+    audit = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="SUPERVISOR_SET_GUARD_OFF_DAYS",
+        target_entity="GuardOffDaySchedule",
+        target_id=str(guard.id),
+        new_values=f"Scheduled {len(unique_dates)} off-day(s) for {guard.full_name} ({payload.year}-{payload.month:02d}): {dates_str}",
+        reason=payload.notes or "Supervisor monthly off-day scheduling mandate"
+    )
+    db.add(audit)
+    db.commit()
+
+    return GuardOffDayScheduleResponse(
+        guard_id=guard.id,
+        guard_name=guard.full_name,
+        employee_number=guard.employee_number,
+        year=payload.year,
+        month=payload.month,
+        off_dates=unique_dates,
+        total_off_days=len(unique_dates),
+        supervisor_id=current_user.id,
+        supervisor_name=current_user.full_name or current_user.email,
+        notes=note_text,
+        created_at=now,
+        updated_at=now
+    )
+
+
+@router.delete("/guards/{guard_id}/off-days", status_code=status.HTTP_200_OK)
+def delete_guard_off_days_schedule(
+    guard_id: int,
+    year: int = Query(...),
+    month: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    """
+    Remove scheduled off-days for a guard in a given month.
+    """
+    guard = db.query(Guard).filter(Guard.id == guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=404, detail=f"Guard #{guard_id} not found.")
+
+    if current_user.role == UserRole.SUPERVISOR.value:
+        if not is_guard_under_supervisor(db, guard.id, current_user.id, guard.primary_site_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Supervisor Mandate Restriction: You are only authorized to manage off-days for guards under your supervision or assigned sites."
+            )
+
+    schedules = db.query(GuardOffDaySchedule).filter(
+        GuardOffDaySchedule.guard_id == guard.id,
+        GuardOffDaySchedule.year == year,
+        GuardOffDaySchedule.month == month
+    ).all()
+
+    count = len(schedules)
+    for s in schedules:
+        # Revert RosterAssignment override if any
+        asgn = db.query(RosterAssignment).filter(
+            RosterAssignment.guard_id == guard.id,
+            RosterAssignment.shift_date == s.off_date,
+            RosterAssignment.is_override == True,
+            RosterAssignment.site_id.is_(None)
+        ).first()
+        if asgn:
+            db.delete(asgn)
+        db.delete(s)
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="SUPERVISOR_DELETE_GUARD_OFF_DAYS",
+        target_entity="GuardOffDaySchedule",
+        target_id=str(guard.id),
+        new_values=f"Deleted {count} scheduled off-days for {guard.full_name} ({year}-{month:02d})",
+        reason="Reset off-days schedule"
+    )
+    db.add(audit)
+    db.commit()
+
+    return {"status": "success", "message": f"Removed {count} scheduled off-days for {guard.full_name}"}
+

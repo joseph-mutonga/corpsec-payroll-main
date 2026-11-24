@@ -72,3 +72,28 @@ class OffDayRequestResponse(BaseModel):
     reliever_assignments: List[RelieverAssignmentResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GuardOffDayScheduleCreate(BaseModel):
+    year: int
+    month: int = Field(..., ge=1, le=12)
+    off_dates: List[date] = Field(..., min_length=1, max_length=4)
+    notes: Optional[str] = None
+
+
+class GuardOffDayScheduleResponse(BaseModel):
+    guard_id: int
+    guard_name: str
+    employee_number: str
+    year: int
+    month: int
+    off_dates: List[date]
+    total_off_days: int
+    supervisor_id: int
+    supervisor_name: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+

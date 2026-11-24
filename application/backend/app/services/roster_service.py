@@ -9,7 +9,7 @@ from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.shift import Shift
 from application.backend.app.models.leave import LeaveRequest
-from application.backend.app.models.off_day import OffDayRequest, RelieverAssignment
+from application.backend.app.models.off_day import OffDayRequest, RelieverAssignment, GuardOffDaySchedule
 from application.backend.app.models.attendance import Attendance
 from application.backend.app.schemas.roster import (
     RosterPatternCreate, RosterOverrideCreate, RosterGridResponse, RosterGridRow, RosterGridCell
@@ -277,6 +277,15 @@ def get_roster_grid(db: Session, year: int, month: int) -> RosterGridResponse:
             off_day_map[(od.guard_id, curr_o)] = od
             curr_o += timedelta(days=1)
 
+    # Fetch scheduled off-days set by supervisor for this month
+    scheduled_off_days = db.query(GuardOffDaySchedule).filter(
+        GuardOffDaySchedule.year == year,
+        GuardOffDaySchedule.month == month
+    ).all()
+    scheduled_off_map: Dict[tuple, GuardOffDaySchedule] = {}
+    for so in scheduled_off_days:
+        scheduled_off_map[(so.guard_id, so.off_date)] = so
+
     # Fetch reliever assignments overlapping this month
     reliever_asgns = db.query(RelieverAssignment).options(
         joinedload(RelieverAssignment.site),
@@ -347,13 +356,14 @@ def get_roster_grid(db: Session, year: int, month: int) -> RosterGridResponse:
                     is_leave=True,
                     duration_hours=None
                 )
-            elif off_req:
-                # Approved Off Day
+            elif off_req or (guard.id, curr_date) in scheduled_off_map:
+                sched_entry = scheduled_off_map.get((guard.id, curr_date))
+                label = "OFF (Scheduled Off Day)" if sched_entry else "OFF (Off Day)"
                 cells[date_str] = RosterGridCell(
                     date=date_str,
                     assignment_id=asgn.id if asgn else None,
                     site_id=None,
-                    site_name="OFF (Off Day)",
+                    site_name=label,
                     shift_id=None,
                     shift_name="Off",
                     is_night_shift=False,

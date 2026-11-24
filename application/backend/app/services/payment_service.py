@@ -1,12 +1,12 @@
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from application.backend.app.models.payroll import PayrollPeriod, PayrollRecord
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.user import User
 from application.backend.app.models.attendance import Attendance
-from application.backend.app.models.off_day import OffDayRequest, OffDayAllowance
+from application.backend.app.models.off_day import OffDayRequest, OffDayAllowance, GuardOffDaySchedule
 from application.backend.app.services.payroll_engine import calculate_month_to_date_guard_pay, format_pay_period_label
 
 
@@ -171,21 +171,31 @@ def build_payment_schedules_and_reconciliation(
                 OffDayRequest.end_date >= period.start_date
             ).all()
 
-            off_day_count = 0
+            off_dates_set = set()
             for off_req in approved_off_requests:
                 c_start = max(off_req.start_date, period.start_date)
                 c_end = min(off_req.end_date, eval_end_date)
-                if c_end >= c_start:
-                    off_day_count += (c_end - c_start).days + 1
+                curr = c_start
+                while curr <= c_end:
+                    off_dates_set.add(curr)
+                    curr += timedelta(days=1)
 
-            off_attendance_count = db.query(Attendance).filter(
+            for att_off in db.query(Attendance.shift_date).filter(
                 Attendance.guard_id == guard.id,
                 Attendance.shift_date >= period.start_date,
                 Attendance.shift_date <= eval_end_date,
                 Attendance.status == "OFF"
-            ).count()
-            off_day_count += off_attendance_count
+            ).all():
+                off_dates_set.add(att_off[0])
 
+            for sched in db.query(GuardOffDaySchedule.off_date).filter(
+                GuardOffDaySchedule.guard_id == guard.id,
+                GuardOffDaySchedule.off_date >= period.start_date,
+                GuardOffDaySchedule.off_date <= eval_end_date
+            ).all():
+                off_dates_set.add(sched[0])
+
+            off_day_count = len(off_dates_set)
             has_explicit_off = (off_day_count > 0 or len(approved_off_requests) > 0)
 
             allowance_entry = db.query(OffDayAllowance).filter(

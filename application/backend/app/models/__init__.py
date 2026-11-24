@@ -16,7 +16,7 @@ from application.backend.app.models.payroll import (
     MpesaPaymentItem,
 )
 from application.backend.app.models.leave import LeaveRequest
-from application.backend.app.models.off_day import OffDayAllowance, OffDayRequest, RelieverAssignment
+from application.backend.app.models.off_day import OffDayAllowance, OffDayRequest, RelieverAssignment, GuardOffDaySchedule
 from application.backend.app.models.incident import Incident
 from application.backend.app.models.training import TrainingRecord
 from application.backend.app.models.document import Document

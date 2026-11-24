@@ -15,7 +15,8 @@ from application.backend.app.schemas.off_day import (
     OffDayAllowanceCreate, OffDayAllowanceResponse,
     OffDayRequestCreate, OffDayRequestResponse,
     OffDayRequestApprovePayload, OffDayRequestRejectPayload,
-    RelieverAssignmentResponse
+    RelieverAssignmentResponse,
+    GuardOffDayScheduleCreate, GuardOffDayScheduleResponse
 )
 
 router = APIRouter(prefix="/off-days", tags=["Off Days & Relievers"])
@@ -422,3 +423,29 @@ def _build_off_day_request_response(db: Session, req: OffDayRequest) -> OffDayRe
         reviewed_at=req.reviewed_at,
         reliever_assignments=reliever_list
     )
+
+
+# ── Guard Off-Days Schedule Aliases ───────────────────────────────────────────
+
+@router.get("/guards/{guard_id}/schedule", response_model=GuardOffDayScheduleResponse)
+def get_guard_off_days_schedule_alias(
+    guard_id: int,
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    from application.backend.app.api.v1.supervisor import get_guard_off_days_schedule
+    return get_guard_off_days_schedule(guard_id=guard_id, year=year, month=month, db=db, current_user=current_user)
+
+
+@router.post("/guards/{guard_id}/schedule", response_model=GuardOffDayScheduleResponse)
+def set_guard_off_days_schedule_alias(
+    guard_id: int,
+    payload: GuardOffDayScheduleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    from application.backend.app.api.v1.supervisor import set_guard_off_days_schedule
+    return set_guard_off_days_schedule(guard_id=guard_id, payload=payload, db=db, current_user=current_user)
+

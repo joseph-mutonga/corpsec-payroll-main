@@ -63,3 +63,31 @@ class RelieverAssignment(Base):
     covering_for_guard = relationship("Guard", foreign_keys=[covering_for_guard_id])
     site = relationship("Site")
     shift = relationship("Shift")
+
+
+class GuardOffDaySchedule(Base):
+    """
+    Monthly Scheduled Off-Days assigned to a guard by their Field Supervisor (or Admin).
+    Each guard is entitled to 4 required off-days in a calendar month.
+    The supervisor has the authority to decide the specific dates (consecutive or non-consecutive).
+    """
+    __tablename__ = "guard_off_day_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    guard_id = Column(Integer, ForeignKey("guards.id"), nullable=False, index=True)
+    supervisor_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    year = Column(Integer, nullable=False, index=True)
+    month = Column(Integer, nullable=False, index=True)
+    off_date = Column(Date, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint('guard_id', 'off_date', name='uq_guard_scheduled_off_date'),
+    )
+
+    guard = relationship("Guard", foreign_keys=[guard_id])
+    supervisor = relationship("User", foreign_keys=[supervisor_id])
+

@@ -6885,6 +6885,309 @@ window.toggleAmendPayFields = toggleAmendPayFields;
 window.updateAmendSiteSalaryHint = updateAmendSiteSalaryHint;
 window.handleAmendGuardSubmit = handleAmendGuardSubmit;
 
+// --- Supervisor Guard Off-Days Scheduling (4 Days / Month) ---
+let currentOffDaysGuardId = null;
+let currentSelectedOffDates = new Set(); // Stores strings "YYYY-MM-DD"
+
+async function openSetGuardOffDaysModal(guardId = null) {
+  currentOffDaysGuardId = guardId ? parseInt(guardId) : null;
+  currentSelectedOffDates.clear();
+
+  // Populate guards dropdown
+  const guardSelect = document.getElementById('set-offdays-guard-id');
+  if (guardSelect) {
+    let guardsList = [];
+    const currentUser = JSON.parse(localStorage.getItem('corpsec_user') || '{}');
+    if (currentUser.role === 'SUPERVISOR') {
+      try {
+        const res = await apiFetch('/supervisors/my-guards');
+        if (res.ok) guardsList = await res.json();
+      } catch (err) {
+        console.error('Failed to load supervisor guards:', err);
+      }
+    }
+    if (!guardsList || guardsList.length === 0) {
+      if (typeof loadGuards === 'function') await loadGuards();
+      guardsList = cachedGuards || [];
+    }
+
+    guardSelect.innerHTML = guardsList.map(g => 
+      `<option value="${g.id}" ${currentOffDaysGuardId === g.id ? 'selected' : ''}>${g.full_name} (${g.employee_number || 'ID:' + g.id})</option>`
+    ).join('');
+
+    if (currentOffDaysGuardId) {
+      guardSelect.value = String(currentOffDaysGuardId);
+    } else if (guardsList.length > 0) {
+      currentOffDaysGuardId = guardsList[0].id;
+    }
+  }
+
+  // Set year & month defaults to current
+  const now = new Date();
+  const yearInput = document.getElementById('set-offdays-year');
+  const monthSelect = document.getElementById('set-offdays-month');
+  if (yearInput && !yearInput.value) yearInput.value = now.getFullYear();
+  if (monthSelect && !monthSelect.value) monthSelect.value = now.getMonth() + 1;
+
+  // Load existing off-days from backend for this guard and period
+  await onGuardOrPeriodChangedForOffDays();
+
+  document.getElementById('modal-set-guard-off-days').style.display = 'flex';
+}
+
+function closeSetGuardOffDaysModal() {
+  document.getElementById('modal-set-guard-off-days').style.display = 'none';
+}
+
+async function onGuardOrPeriodChangedForOffDays() {
+  const guardSelect = document.getElementById('set-offdays-guard-id');
+  const yearInput = document.getElementById('set-offdays-year');
+  const monthSelect = document.getElementById('set-offdays-month');
+  if (!guardSelect || !yearInput || !monthSelect) return;
+
+  const guardId = parseInt(guardSelect.value);
+  const year = parseInt(yearInput.value) || new Date().getFullYear();
+  const month = parseInt(monthSelect.value) || (new Date().getMonth() + 1);
+  currentOffDaysGuardId = guardId;
+  currentSelectedOffDates.clear();
+
+  // Update header text
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const titleElem = document.getElementById('offdays-month-title');
+  if (titleElem) {
+    titleElem.innerText = `${monthNames[month - 1]} ${year} Calendar Grid`;
+  }
+
+  // Fetch already saved off-days for this period if any
+  if (guardId) {
+    try {
+      const res = await apiFetch(`/supervisors/guards/${guardId}/off-days?year=${year}&month=${month}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.off_dates && Array.isArray(data.off_dates)) {
+          data.off_dates.forEach(d => currentSelectedOffDates.add(typeof d === 'string' ? d.split('T')[0] : d));
+        }
+        const notesInput = document.getElementById('set-offdays-notes');
+        if (notesInput && data.notes) {
+          notesInput.value = data.notes;
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch existing off days:', err);
+    }
+  }
+
+  renderSetOffDaysCalendar(year, month);
+  updateOffDaysSelectionSummary();
+}
+
+function renderSetOffDaysCalendar(year, month) {
+  const container = document.getElementById('set-offdays-calendar-grid');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDayWeekday = new Date(year, month - 1, 1).getDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
+  const mondayOffset = (firstDayWeekday + 6) % 7; // Convert to Mon=0 ... Sun=6
+
+  // Pad blank cells before Day 1
+  for (let i = 0; i < mondayOffset; i++) {
+    const blank = document.createElement('div');
+    blank.style.cssText = 'height:38px; background:#F1F5F9; border-radius:6px; opacity:0.4;';
+    container.appendChild(blank);
+  }
+
+  // Render day cells
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isSelected = currentSelectedOffDates.has(dateStr);
+    const dayOfWeek = (mondayOffset + day - 1) % 7;
+    const isSunday = dayOfWeek === 6;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-calendar-day';
+    btn.setAttribute('data-date', dateStr);
+    btn.onclick = () => toggleOffDate(dateStr);
+
+    let bg = '#FFFFFF';
+    let color = isSunday ? '#DC2626' : '#1E293B';
+    let border = '1px solid #CBD5E1';
+    let fw = '600';
+    let badge = '';
+
+    if (isSelected) {
+      bg = '#4338CA';
+      color = '#FFFFFF';
+      border = '2px solid #312E81';
+      fw = '800';
+      badge = '<span style="display:block; font-size:9px; font-weight:800; background:rgba(255,255,255,0.25); border-radius:3px; padding:1px 2px; margin-top:1px;">OFF</span>';
+    }
+
+    btn.style.cssText = `height:42px; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:6px; background:${bg}; color:${color}; border:${border}; font-size:12px; font-weight:${fw}; cursor:pointer; transition:all 0.15s ease;`;
+    btn.innerHTML = `<span>${day}</span>${badge}`;
+    container.appendChild(btn);
+  }
+}
+
+function toggleOffDate(dateStr) {
+  if (currentSelectedOffDates.has(dateStr)) {
+    currentSelectedOffDates.delete(dateStr);
+  } else {
+    if (currentSelectedOffDates.size >= 4) {
+      alert('Quota reached: Exactly 4 off-days are required per month. Please uncheck a date before selecting another, or click Clear.');
+      return;
+    }
+    currentSelectedOffDates.add(dateStr);
+  }
+
+  const year = parseInt(document.getElementById('set-offdays-year').value);
+  const month = parseInt(document.getElementById('set-offdays-month').value);
+  renderSetOffDaysCalendar(year, month);
+  updateOffDaysSelectionSummary();
+}
+
+function applyOffDaysPreset(type) {
+  const year = parseInt(document.getElementById('set-offdays-year').value);
+  const month = parseInt(document.getElementById('set-offdays-month').value);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDayWeekday = new Date(year, month - 1, 1).getDay();
+  const mondayOffset = (firstDayWeekday + 6) % 7;
+
+  currentSelectedOffDates.clear();
+
+  if (type === 'sundays') {
+    // Pick the first 4 Sundays in the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dow = (mondayOffset + day - 1) % 7;
+      if (dow === 6) { // Sunday
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        currentSelectedOffDates.add(dateStr);
+        if (currentSelectedOffDates.size === 4) break;
+      }
+    }
+  } else if (type === 'mondays') {
+    // Pick the first 4 Mondays in the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dow = (mondayOffset + day - 1) % 7;
+      if (dow === 0) { // Monday
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        currentSelectedOffDates.add(dateStr);
+        if (currentSelectedOffDates.size === 4) break;
+      }
+    }
+  } else if (type === 'consecutive_mid') {
+    // Pick 4 consecutive days around the middle of the month (e.g. 10th - 13th)
+    const startDay = Math.min(10, daysInMonth - 3);
+    for (let i = 0; i < 4; i++) {
+      const day = startDay + i;
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      currentSelectedOffDates.add(dateStr);
+    }
+  }
+
+  renderSetOffDaysCalendar(year, month);
+  updateOffDaysSelectionSummary();
+}
+
+function updateOffDaysSelectionSummary() {
+  const count = currentSelectedOffDates.size;
+  const badge = document.getElementById('offdays-selected-count-badge');
+  const preview = document.getElementById('offdays-selected-preview');
+  const text = document.getElementById('offdays-selected-dates-text');
+
+  if (badge) {
+    badge.innerText = `${count} / 4 Days Selected`;
+    badge.style.background = count === 4 ? '#DCFCE7' : '#EEF2FF';
+    badge.style.color = count === 4 ? '#166534' : '#4338CA';
+  }
+
+  if (text) {
+    if (count === 0) {
+      text.innerText = 'None selected yet. Click any 4 dates on the calendar above.';
+      if (preview) {
+        preview.style.background = '#EFF6FF';
+        preview.style.borderColor = '#BFDBFE';
+        preview.style.color = '#1E40AF';
+      }
+    } else {
+      const sorted = Array.from(currentSelectedOffDates).sort();
+      text.innerText = sorted.join('  •  ');
+      if (preview) {
+        if (count === 4) {
+          preview.style.background = '#F0FDF4';
+          preview.style.borderColor = '#86EFAC';
+          preview.style.color = '#15803D';
+        } else {
+          preview.style.background = '#FEF3C7';
+          preview.style.borderColor = '#FCD34D';
+          preview.style.color = '#92400E';
+        }
+      }
+    }
+  }
+}
+
+async function handleSaveGuardOffDaysSubmit(e) {
+  e.preventDefault();
+  const guardId = parseInt(document.getElementById('set-offdays-guard-id').value);
+  const year = parseInt(document.getElementById('set-offdays-year').value);
+  const month = parseInt(document.getElementById('set-offdays-month').value);
+  const notes = document.getElementById('set-offdays-notes').value.trim();
+
+  if (!guardId) {
+    alert('Please select a guard personnel.');
+    return;
+  }
+  if (currentSelectedOffDates.size === 0) {
+    alert('Please select at least 1 off-day (standard is 4 off-days per month).');
+    return;
+  }
+  if (currentSelectedOffDates.size > 4) {
+    alert('A maximum of 4 off-days per month is allowed.');
+    return;
+  }
+
+  const off_dates = Array.from(currentSelectedOffDates).sort();
+  const btn = document.getElementById('btn-save-guard-offdays');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = '⏳ Saving Schedule...';
+  }
+
+  try {
+    const res = await apiFetch(`/supervisors/guards/${guardId}/off-days`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month, off_dates, notes })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || 'Failed to save off-days schedule');
+      return;
+    }
+    alert(`✅ Successfully scheduled ${off_dates.length} off-days for ${data.guard_name}!`);
+    closeSetGuardOffDaysModal();
+    if (typeof loadSupervisorAttendanceRoll === 'function') {
+      loadSupervisorAttendanceRoll();
+    }
+  } catch (err) {
+    alert('Error saving off-days: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '💾 Save 4 Off-Days Schedule';
+    }
+  }
+}
+
+window.openSetGuardOffDaysModal = openSetGuardOffDaysModal;
+window.closeSetGuardOffDaysModal = closeSetGuardOffDaysModal;
+window.onGuardOrPeriodChangedForOffDays = onGuardOrPeriodChangedForOffDays;
+window.applyOffDaysPreset = applyOffDaysPreset;
+window.handleSaveGuardOffDaysSubmit = handleSaveGuardOffDaysSubmit;
+
+
 
 
 
@@ -7213,10 +7516,11 @@ async function loadSupervisorAttendanceRoll() {
         <td>${r.site_name || 'Unassigned Site'}</td>
         <td>${r.shift_name || 'Day Shift'}</td>
         <td>
-          <select class="form-control supervisor-roll-status" data-guard-id="${r.guard_id}" data-shift-id="${r.shift_id || ''}" style="max-width:140px; padding:4px 8px; font-weight:700; ${st==='PRESENT'?'color:#166534; background:#DCFCE7;':st==='ABSENT'?'color:#991B1B; background:#FEE2E2;':st==='LATE'?'color:#92400E; background:#FEF3C7;':''}">
+          <select class="form-control supervisor-roll-status" data-guard-id="${r.guard_id}" data-shift-id="${r.shift_id || ''}" style="max-width:140px; padding:4px 8px; font-weight:700; ${st==='PRESENT'?'color:#166534; background:#DCFCE7;':st==='ABSENT'?'color:#991B1B; background:#FEE2E2;':st==='LATE'?'color:#92400E; background:#FEF3C7;':st==='OFF'?'color:#4338CA; background:#EEF2FF;':''}">
             <option value="PRESENT" ${st==='PRESENT'?'selected':''}>✅ PRESENT</option>
             <option value="ABSENT" ${st==='ABSENT'?'selected':''}>❌ ABSENT</option>
             <option value="LATE" ${st==='LATE'?'selected':''}>⚠️ LATE</option>
+            <option value="OFF" ${st==='OFF'?'selected':''}>🏖️ OFF</option>
             <option value="NOT_MARKED" ${st==='NOT_MARKED'?'selected':''}>⏳ NOT MARKED</option>
           </select>
         </td>
@@ -7231,6 +7535,9 @@ async function loadSupervisorAttendanceRoll() {
             </button>
             <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#334155; color:#fff; ${!isCurrentlyActive ? 'opacity:0.4; cursor:not-allowed;' : ''}" onclick="supervisorClockOutGuard(${r.guard_id})" ${!isCurrentlyActive ? 'disabled' : ''} title="Clock Out for this guard">
               🏁 Clock Out
+            </button>
+            <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#4338CA; color:#fff;" onclick="openSetGuardOffDaysModal(${r.guard_id})" title="Set 4 Monthly Off-Days for this guard">
+              📅 4 Off-Days
             </button>
             <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="viewGuardFile(${r.guard_id})" title="View Guard Personnel File">
               📄 File
