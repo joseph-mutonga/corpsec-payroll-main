@@ -83,7 +83,7 @@ function checkAuthStatus() {
           return;
         }
         updateUserProfileDisplay(u);
-      } catch (e) {}
+      } catch (e) { }
     }
     fetchCurrentAuthenticatedUser();
     startSessionHeartbeat();
@@ -154,7 +154,7 @@ async function sendHeartbeatPing() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 let isSubmittingLogin = false;
@@ -648,8 +648,8 @@ function updateUserProfileDisplay(userData) {
 
   const roleTitle = userData.role === 'ADMIN' ? 'System Admin' :
     (userData.role === 'SUPERVISOR' ? 'Field Supervisor' :
-    (userData.role === 'HR' ? 'HR Manager' :
-    (userData.role === 'GUARD' ? 'Security Guard' : (userData.role || 'Personnel'))));
+      (userData.role === 'HR' ? 'HR Manager' :
+        (userData.role === 'GUARD' ? 'Security Guard' : (userData.role || 'Personnel'))));
 
   const avatarRoles = document.querySelectorAll('.avatar-role');
   avatarRoles.forEach(el => {
@@ -677,8 +677,8 @@ function updateUserProfileDisplay(userData) {
   if (profTitle) {
     profTitle.innerText = userData.role === 'ADMIN' ? 'CorpSec System Administrator' :
       (userData.role === 'HR' ? 'CorpSec Human Resources Manager' :
-      (userData.role === 'SUPERVISOR' ? 'CorpSec Field Operations Supervisor' :
-      (userData.role === 'GUARD' ? 'CorpSec Security Guard' : 'CorpSec Security Personnel')));
+        (userData.role === 'SUPERVISOR' ? 'CorpSec Field Operations Supervisor' :
+          (userData.role === 'GUARD' ? 'CorpSec Security Guard' : 'CorpSec Security Personnel')));
   }
 
   const profEmail = document.getElementById('profile-modal-email');
@@ -691,22 +691,22 @@ function updateUserProfileDisplay(userData) {
   if (profRole) {
     profRole.innerText = userData.role === 'ADMIN' ? 'System Administrator (ADMIN)' :
       (userData.role === 'HR' ? 'Human Resources Manager (HR)' :
-      (userData.role === 'SUPERVISOR' ? 'Field Supervisor (SUPERVISOR)' :
-      (userData.role === 'GUARD' ? 'Security Guard (GUARD)' : userData.role)));
+        (userData.role === 'SUPERVISOR' ? 'Field Supervisor (SUPERVISOR)' :
+          (userData.role === 'GUARD' ? 'Security Guard (GUARD)' : userData.role)));
   }
 
   const profDept = document.getElementById('profile-modal-dept') || document.getElementById('profile-modal-department');
   if (profDept) {
     profDept.innerText = userData.role === 'ADMIN' ? 'Executive & Information Security' :
       (userData.role === 'HR' ? 'Human Capital & Statutory Payroll' :
-      (userData.role === 'SUPERVISOR' ? 'Field Security & Guard Operations' : 'Guarding Services Division'));
+        (userData.role === 'SUPERVISOR' ? 'Field Security & Guard Operations' : 'Guarding Services Division'));
   }
 
   const profClearance = document.getElementById('profile-modal-clearance');
   if (profClearance) {
     profClearance.innerText = userData.role === 'ADMIN' ? 'Tier 1 - Master System Administrator' :
       (userData.role === 'HR' ? 'Tier 2 - Personnel & Payroll Controller' :
-      (userData.role === 'SUPERVISOR' ? 'Tier 3 - Field Supervision Operations' : 'Tier 4 - Duty Guard Access'));
+        (userData.role === 'SUPERVISOR' ? 'Tier 3 - Field Supervision Operations' : 'Tier 4 - Duty Guard Access'));
   }
 
   const profLastLogin = document.getElementById('profile-modal-last-login');
@@ -853,7 +853,7 @@ function updateUserProfileDisplay(userData) {
     if (supReportsFilterWrap) supReportsFilterWrap.style.display = 'block';
     if (supReportsHeaderTitle) supReportsHeaderTitle.innerText = '📋 Field Supervisor Reports (PDF)';
     if (supReportsHeaderSub) supReportsHeaderSub.innerText = 'Operational site inspections, patrol summaries, and incident dossiers dispatched to System Administration in PDF format.';
-    try { populateSupervisorFilterOptions(); } catch (e) {}
+    try { populateSupervisorFilterOptions(); } catch (e) { }
   } else if (userData.role === 'SUPERVISOR') {
     if (supReportsFilterWrap) supReportsFilterWrap.style.display = 'none';
     if (supReportsHeaderTitle) supReportsHeaderTitle.innerText = '📋 My Field Operational Reports (PDF)';
@@ -890,7 +890,7 @@ function logout() {
         'Authorization': `Bearer ${oldToken}`
       },
       body: JSON.stringify({ session_id: parseInt(sessId) })
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   checkAuthStatus();
@@ -903,7 +903,7 @@ async function initApp() {
     const todayStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     subtitleEl.innerText = `Data summary for ${todayStr}`;
   }
-  
+
   // Retrieve live user record from database
   await fetchCurrentAuthenticatedUser();
   const user = getLoggedInUser();
@@ -1176,7 +1176,7 @@ async function loadDashboardData(forceReload = false) {
   }
   const statusSubtitle = document.getElementById('dashboard-hero-status-text');
   if (statusSubtitle) {
-    statusSubtitle.innerText = `Real-time command center • Last synchronized: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}`;
+    statusSubtitle.innerText = `Real-time command center • Last synchronized: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   }
 
   // 2. Fetch live baseline data directly from database
@@ -1380,7 +1380,7 @@ function renderDashboardSiteDeployment() {
     const required = Number(s.guards_required) || 1;
     const assigned = guards.filter(g => g.primary_site_id === s.id && g.status === 'ACTIVE');
     const assignedCount = assigned.length;
-    
+
     let coverageBadge = '';
     if (assignedCount >= required) {
       coverageBadge = `<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 100% Staffed</span>`;
@@ -1600,7 +1600,7 @@ async function loadGuards() {
     }
 
     if (!supervisorsCache || supervisorsCache.length === 0) {
-      apiFetch('/supervisors').then(r => r.json()).then(data => { if (Array.isArray(data)) supervisorsCache = data; }).catch(() => {});
+      apiFetch('/supervisors').then(r => r.json()).then(data => { if (Array.isArray(data)) supervisorsCache = data; }).catch(() => { });
     }
 
     renderAnalyticsSiteDistribution();
@@ -2357,8 +2357,8 @@ function closeGuardFileModal() {
 }
 
 function openAmendGuardModal(guardId) {
-  const g = currentViewedGuard && currentViewedGuard.id === guardId 
-    ? currentViewedGuard 
+  const g = currentViewedGuard && currentViewedGuard.id === guardId
+    ? currentViewedGuard
     : (cachedGuards.find(x => x.id === guardId) || currentViewedGuard);
 
   if (!g) {
@@ -2478,10 +2478,10 @@ async function handleAmendGuardSubmit(e) {
   const gender = document.getElementById('amend-guard-gender').value;
   const date_of_birth = document.getElementById('amend-guard-dob').value || null;
   const hire_date = document.getElementById('amend-guard-hire-date').value || null;
-  
+
   const site_id_val = document.getElementById('amend-guard-site-select').value;
   const site_id = site_id_val ? parseInt(site_id_val) : null;
-  
+
   const shift_id_val = document.getElementById('amend-guard-shift-select').value;
   const shift_id = shift_id_val ? parseInt(shift_id_val) : null;
 
@@ -2541,7 +2541,7 @@ async function handleAmendGuardSubmit(e) {
 
 async function loadSites() {
   try {
-    loadRegions().catch(() => {});
+    loadRegions().catch(() => { });
     const res = await apiFetch('/sites');
     const sites = await res.json();
     cachedSites = sites;
@@ -2555,7 +2555,7 @@ async function loadSites() {
           const tr = document.createElement('tr');
           const regName = s.region_name ? `<span class="badge" style="background:#F3E8FF; color:#6B21A8;">${s.region_name}</span>` : `<span style="font-size:11px; color:#94A3B8;">None</span>`;
           const basicSal = `KES ${(s.basic_salary || 15000).toLocaleString()}`;
-          const supBadge = s.supervisor_name 
+          const supBadge = s.supervisor_name
             ? `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:600;">👨‍💼 ${s.supervisor_name}</span>`
             : `<span style="font-size:11px; color:#94A3B8; font-style:italic;">Unassigned</span>`;
 
@@ -2983,7 +2983,7 @@ async function loadAttendance() {
         try {
           const sRes = await apiFetch('/sites');
           if (sRes.ok) cachedSites = await sRes.json();
-        } catch (e) {}
+        } catch (e) { }
       }
       if (cachedSites && cachedSites.length > 0) {
         const curVal = siteSelect.value;
@@ -3010,7 +3010,7 @@ async function loadAttendance() {
           displayAtts = atts.filter(a => assignedIds.has(a.guard_id));
         }
         displayAtts.slice(0, 6).forEach(a => {
-          const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
+          const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
           const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
           const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
           const guardName = a.guard_name ? `${a.guard_name} (${a.guard_employee_number || ''})` : (g ? `${g.full_name} (${g.employee_number})` : `Guard #${a.guard_id}`);
@@ -3077,7 +3077,7 @@ async function openManualAttendanceModal() {
       try {
         const res = await apiFetch('/guards');
         if (res.ok) cachedGuards = await res.json();
-      } catch (e) {}
+      } catch (e) { }
     }
     select.innerHTML = '';
     (cachedGuards || []).filter(g => g.status === 'ACTIVE').forEach(g => {
@@ -3255,8 +3255,8 @@ function filterAttendanceLogs() {
   }
 
   filtered.forEach(a => {
-    const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
-    const clockOut = a.actual_clock_out ? new Date(a.actual_clock_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-';
+    const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+    const clockOut = a.actual_clock_out ? new Date(a.actual_clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
     const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
     const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
     const guardName = a.guard_name || (g ? g.full_name : `Guard #${a.guard_id}`);
@@ -3301,7 +3301,7 @@ function openCorrectAttendanceModal(idOrIdx) {
   const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === record.guard_id) : null;
   const guardName = record.guard_name || (g ? g.full_name : 'Guard #' + record.guard_id);
   document.getElementById('correct-att-guard-info').innerText = `Guard: ${guardName} | Date: ${record.shift_date}`;
-  
+
   if (record.actual_clock_in) {
     document.getElementById('correct-att-clock-in').value = record.actual_clock_in.substring(0, 16);
   } else {
@@ -3489,10 +3489,10 @@ async function loadPayrollReview(targetPeriodId = null) {
               <button class="btn btn-secondary" style="padding:2px 6px; font-size:11px; height:auto;" title="View PAYE Tax Audit Breakdown" onclick="openPayeBreakdownModal(${idx})">ℹ️ View breakdown</button>
             </div>
           </td>
-          <td style="color:${unpLeaveDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${unpLeaveDed > 0 ? '700' : '400'};">KES ${unpLeaveDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-          <td style="color:${offDayDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${offDayDed > 0 ? '700' : '400'};">KES ${offDayDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-          <td style="color:${salAdvDed > 0 ? '#D97706' : '#64748B'}; font-weight:${salAdvDed > 0 ? '700' : '400'};">KES ${salAdvDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-          <td style="color:${damageDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${damageDed > 0 ? '700' : '400'};">KES ${damageDed.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+          <td style="color:${unpLeaveDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${unpLeaveDed > 0 ? '700' : '400'};">KES ${unpLeaveDed.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+          <td style="color:${offDayDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${offDayDed > 0 ? '700' : '400'};">KES ${offDayDed.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+          <td style="color:${salAdvDed > 0 ? '#D97706' : '#64748B'}; font-weight:${salAdvDed > 0 ? '700' : '400'};">KES ${salAdvDed.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+          <td style="color:${damageDed > 0 ? '#DC2626' : '#64748B'}; font-weight:${damageDed > 0 ? '700' : '400'};">KES ${damageDed.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
           <td style="color:#3B5EDB; font-weight:700;">KES ${Number(r.net_pay || 0).toLocaleString()}</td>
           <td><button class="btn btn-secondary" style="padding:4px 10px; font-size:12px; white-space:nowrap;" onclick="downloadSinglePayslip(${r.id})">📄 Payslip</button></td>
         `;
@@ -3525,13 +3525,13 @@ async function loadPayrollReview(targetPeriodId = null) {
 
     // Employer Statutory Liabilities Summary Card Metrics
     const empSummaryNssf = document.getElementById('employer-summary-nssf');
-    if (empSummaryNssf) empSummaryNssf.innerText = `KES ${totalEmpNssf.toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (empSummaryNssf) empSummaryNssf.innerText = `KES ${totalEmpNssf.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
     const empSummaryHousing = document.getElementById('employer-summary-housing');
-    if (empSummaryHousing) empSummaryHousing.innerText = `KES ${totalEmpHousing.toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (empSummaryHousing) empSummaryHousing.innerText = `KES ${totalEmpHousing.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
     const empSummaryTotal = document.getElementById('employer-summary-total');
-    if (empSummaryTotal) empSummaryTotal.innerText = `KES ${(totalEmpNssf + totalEmpHousing).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (empSummaryTotal) empSummaryTotal.innerText = `KES ${(totalEmpNssf + totalEmpHousing).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
   } catch (err) {
     console.error('loadPayrollReview error:', err);
     setPayrollMetricsZero();
@@ -3568,27 +3568,27 @@ function openPayeBreakdownModal(idx) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #E2E8F0; padding-bottom:8px;">
         <div>
           <h3 style="font-size:15px; font-weight:700; color:#0F172A; margin:0;">${rec.guard_name}</h3>
-          <div style="font-size:12px; color:#64748B;">Guard ID: ${rec.employee_number} | Gross Pay: KES ${gross.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+          <div style="font-size:12px; color:#64748B;">Guard ID: ${rec.employee_number} | Gross Pay: KES ${gross.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
         </div>
         <span class="status-badge active" style="font-size:11px; padding:4px 10px;">Audit Breakdown</span>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px; color:#334155;">
-        <div><strong>Taxable Income:</strong> <span style="color:#2563EB; font-weight:700;">KES ${taxable.toLocaleString('en-KE', {minimumFractionDigits:2})}</span> <span style="font-size:11px; color:#64748B;">(Gross − NSSF)</span></div>
+        <div><strong>Taxable Income:</strong> <span style="color:#2563EB; font-weight:700;">KES ${taxable.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span> <span style="font-size:11px; color:#64748B;">(Gross − NSSF)</span></div>
         <div><strong>Tax Band(s) Applied:</strong> <span style="color:#0F172A; font-weight:600;">${whichBand}</span></div>
-        <div><strong>Tax Before Relief:</strong> KES ${grossTax.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
-        <div><strong>Personal Relief:</strong> KES ${reliefConfigured.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+        <div><strong>Tax Before Relief:</strong> KES ${grossTax.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
+        <div><strong>Personal Relief:</strong> KES ${reliefConfigured.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
       </div>
 
       <div style="margin-top:14px; background:#FFF; border:1.5px solid ${netPaye > 0 ? '#3B82F6' : '#94A3B8'}; border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
         <div>
           <div style="font-weight:700; color:#0F172A; font-size:14px;">PAYE Payable:</div>
           <div style="font-size:11px; color:#64748B;">
-            Tax Before Relief (KES ${grossTax.toLocaleString('en-KE', {minimumFractionDigits:2})}) − Relief Applied (KES ${reliefApplied.toLocaleString('en-KE', {minimumFractionDigits:2})})
+            Tax Before Relief (KES ${grossTax.toLocaleString('en-KE', { minimumFractionDigits: 2 })}) − Relief Applied (KES ${reliefApplied.toLocaleString('en-KE', { minimumFractionDigits: 2 })})
           </div>
         </div>
         <div style="font-size:18px; font-weight:800; color:${netPaye > 0 ? '#1E3A8A' : '#059669'}; text-align:right;">
-          KES ${netPaye.toLocaleString('en-KE', {minimumFractionDigits:2})}
+          KES ${netPaye.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
           ${netPaye === 0 ? '<div style="font-size:11px; font-weight:600; color:#059669;">(relief exceeds tax owed)</div>' : ''}
         </div>
       </div>
@@ -3608,9 +3608,9 @@ function openPayeBreakdownModal(idx) {
         ${bands.length > 0 ? bands.map(b => `
           <tr>
             <td><strong>${b.band_name || 'Band ' + b.band_order}</strong></td>
-            <td>KES ${b.taxable_amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+            <td>KES ${b.taxable_amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
             <td><span class="status-badge active" style="font-size:11px;">${b.rate_percent}%</span></td>
-            <td>KES ${b.tax_amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+            <td>KES ${b.tax_amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
           </tr>
         `).join('') : `
           <tr>
@@ -3689,8 +3689,8 @@ async function loadPayments(selectedPeriodId = null) {
     }
     if (!activePeriod) {
       activePeriod = periods.find(p => p.year === curYear && p.month === curMonth) ||
-                     periods.find(p => p.status === 'CONFIRMED' || p.status === 'CALCULATED') ||
-                     periods[0];
+        periods.find(p => p.status === 'CONFIRMED' || p.status === 'CALCULATED') ||
+        periods[0];
     }
     currentPaymentsPeriodId = activePeriod.id;
 
@@ -3739,7 +3739,7 @@ async function loadPayments(selectedPeriodId = null) {
                     <span class="badge" style="background:#2563EB; color:#FFF; font-size:11px; padding:3px 8px; border-radius:12px;">UNPAID / SCHEDULED</span>
                   </div>
                   <div style="font-size:12px; color:#1E3A8A; margin-top:3px;">
-                    Net salary disbursements calculated for <strong>${recon.total_records_count} active workers</strong> (Total: <strong>KES ${recon.total_payroll_net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</strong>).
+                    Net salary disbursements calculated for <strong>${recon.total_records_count} active workers</strong> (Total: <strong>KES ${recon.total_payroll_net_pay.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</strong>).
                     Schedules are ready for advance review and bank export, pending batch release / M-Pesa payout to workers.
                   </div>
                 </div>
@@ -3779,10 +3779,10 @@ async function loadPayments(selectedPeriodId = null) {
       if (recon.unrouted_items && recon.unrouted_items.length > 0) {
         unroutedHtml = `
           <div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:10px; padding:14px; margin-bottom:16px; font-size:13px; color:#991B1B;">
-            ⚠️ <strong>${recon.unrouted_items.length} Unrouted Record(s) Flagged (Total: KES ${recon.total_unrouted_amount.toLocaleString('en-KE', {minimumFractionDigits:2})})</strong><br>
+            ⚠️ <strong>${recon.unrouted_items.length} Unrouted Record(s) Flagged (Total: KES ${recon.total_unrouted_amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })})</strong><br>
             The following guard(s) have incomplete bank or phone payment details and were excluded from disbursement schedules:
             <ul style="margin:6px 0 0 16px; padding:0;">
-              ${recon.unrouted_items.map(u => `<li><strong>${u.guard_name}</strong> (${u.employee_number}): KES ${u.net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})} — <em>${u.reason}</em></li>`).join('')}
+              ${recon.unrouted_items.map(u => `<li><strong>${u.guard_name}</strong> (${u.employee_number}): KES ${u.net_pay.toLocaleString('en-KE', { minimumFractionDigits: 2 })} — <em>${u.reason}</em></li>`).join('')}
             </ul>
           </div>
         `;
@@ -3807,22 +3807,22 @@ async function loadPayments(selectedPeriodId = null) {
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:20px;">
           <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-radius:12px; padding:14px;">
             <div style="font-size:11px; color:#64748B; font-weight:600;">Total Payroll Net Pay</div>
-            <div style="font-size:18px; font-weight:800; color:#0F172A;">KES ${recon.total_payroll_net_pay.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+            <div style="font-size:18px; font-weight:800; color:#0F172A;">KES ${recon.total_payroll_net_pay.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
             <div style="font-size:11px; color:#64748B;">${recon.total_records_count} active records</div>
           </div>
           <div style="background:#EFF6FF; border:1px solid #93C5FD; border-radius:12px; padding:14px;">
             <div style="font-size:11px; color:#1E40AF; font-weight:600;">Bank Schedule Sum</div>
-            <div style="font-size:18px; font-weight:800; color:#1E3A8A;">KES ${recon.total_bank_amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+            <div style="font-size:18px; font-weight:800; color:#1E3A8A;">KES ${recon.total_bank_amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
             <div style="font-size:11px; color:#1D4ED8;">${recon.bank_records_count} Bank guards</div>
           </div>
           <div style="background:#ECFDF5; border:1px solid #6EE7B7; border-radius:12px; padding:14px;">
             <div style="font-size:11px; color:#065F46; font-weight:600;">M-Pesa Schedule Sum</div>
-            <div style="font-size:18px; font-weight:800; color:#064E3B;">KES ${recon.total_mpesa_amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+            <div style="font-size:18px; font-weight:800; color:#064E3B;">KES ${recon.total_mpesa_amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
             <div style="font-size:11px; color:#047857;">${recon.mpesa_records_count} M-Pesa guards</div>
           </div>
           <div style="background:#FFFBEB; border:1px solid #FCD34D; border-radius:12px; padding:14px;">
             <div style="font-size:11px; color:#92400E; font-weight:600;">⏸️ Held Salaries (Protected)</div>
-            <div style="font-size:18px; font-weight:800; color:#B45309;">KES ${(recon.total_held_amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+            <div style="font-size:18px; font-weight:800; color:#B45309;">KES ${(recon.total_held_amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
             <div style="font-size:11px; color:#92400E;">${recon.held_records_count || 0} guard(s) on hold</div>
           </div>
           <div style="background:${isReconciled ? '#F0FDF4' : '#FEF2F2'}; border:1px solid ${isReconciled ? '#86EFAC' : '#FCA5A5'}; border-radius:12px; padding:14px;">
@@ -3874,7 +3874,7 @@ async function loadPayments(selectedPeriodId = null) {
         <td><code>${escapeHtml(item.bank_account)}</code></td>
         <td><span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">${daysWorked}</span></td>
         <td><span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">${offDays}</span></td>
-        <td><b style="color:#0F172A;">KES ${accruedPay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
+        <td><b style="color:#0F172A;">KES ${accruedPay.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</b></td>
         <td>${statusBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
@@ -3903,7 +3903,7 @@ async function loadPayments(selectedPeriodId = null) {
         <td><code>${escapeHtml(item.mpesa_number)}</code></td>
         <td><span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">${daysWorked}</span></td>
         <td><span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">${offDays}</span></td>
-        <td><b style="color:#0F172A;">KES ${accruedPay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
+        <td><b style="color:#0F172A;">KES ${accruedPay.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</b></td>
         <td>${statusBadge}</td>
         <td>
           <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#B45309; border-color:#FCD34D; background:#FFFBEB; font-weight:700;" onclick="openHoldSalaryModal(${item.payroll_record_id}, '${escapeHtml(item.guard_name)}', '${escapeHtml(item.employee_number)}', ${item.amount})" title="Place monthly salary on hold">
@@ -3927,7 +3927,7 @@ async function loadPayments(selectedPeriodId = null) {
         <td colspan="2" style="color:#DC2626; font-size:12px;">⚠️ ${escapeHtml(item.reason)}</td>
         <td><span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">${daysWorked}</span></td>
         <td><span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">${offDays}</span></td>
-        <td><b style="color:#DC2626;">KES ${accruedPay.toLocaleString('en-KE', {minimumFractionDigits:2})}</b></td>
+        <td><b style="color:#DC2626;">KES ${accruedPay.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</b></td>
         <td><span class="badge badge-inactive" style="background:#F59E0B; color:white;">EXCLUDED</span></td>
         <td><span style="font-size:11px; color:#94A3B8;">—</span></td>
       `;
@@ -3946,7 +3946,7 @@ async function loadPayments(selectedPeriodId = null) {
             <td><b>${escapeHtml(item.guard_name)}</b></td>
             <td><span class="badge" style="background:#EFF6FF; color:#1D4ED8;">${escapeHtml(item.payment_method)}</span></td>
             <td><code>${escapeHtml(item.account_number)}</code></td>
-            <td style="color:#B45309; font-weight:800;">KES ${item.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+            <td style="color:#B45309; font-weight:800;">KES ${item.amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
             <td style="max-width:260px; white-space:normal; font-size:12px; color:#92400E; background:#FEF3C7; padding:8px 12px; border-radius:6px;">
               <b>Reason:</b> ${escapeHtml(item.hold_reason || 'Pending clearance')}
             </td>
@@ -4063,7 +4063,7 @@ function openHoldSalaryModal(recordId, guardName, empNo, amount, defaultReason =
   const guardInfo = document.getElementById('hold-salary-guard-info');
   if (guardInfo) guardInfo.innerText = `${guardName} (${empNo})`;
   const amtInfo = document.getElementById('hold-salary-amount-info');
-  if (amtInfo) amtInfo.innerText = `Net Salary to Hold: KES ${Number(amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+  if (amtInfo) amtInfo.innerText = `Net Salary to Hold: KES ${Number(amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
   if (defaultReason) {
     const reasonEl = document.getElementById('hold-salary-reason');
     if (reasonEl) reasonEl.value = defaultReason;
@@ -4124,7 +4124,7 @@ function openReleaseSalaryHoldModal(recordId, guardName, empNo, amount, currentR
   const guardInfo = document.getElementById('release-salary-guard-info');
   if (guardInfo) guardInfo.innerText = `${guardName} (${empNo})`;
   const amtInfo = document.getElementById('release-salary-amount-info');
-  if (amtInfo) amtInfo.innerText = `Net Salary Approved for Payment: KES ${Number(amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+  if (amtInfo) amtInfo.innerText = `Net Salary Approved for Payment: KES ${Number(amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
   const reasonInfo = document.getElementById('release-salary-current-reason');
   if (reasonInfo) reasonInfo.innerText = `Current Hold Reason: ${currentReason || 'Administrative hold'}`;
 
@@ -4572,15 +4572,15 @@ function handleGlobalSearch(query) {
   }
 
   // Search live cached guards and sites
-  const guardMatches = cachedGuards.filter(g => 
-    (g.full_name || '').toLowerCase().includes(q) || 
-    (g.employee_number || '').toLowerCase().includes(q) || 
+  const guardMatches = cachedGuards.filter(g =>
+    (g.full_name || '').toLowerCase().includes(q) ||
+    (g.employee_number || '').toLowerCase().includes(q) ||
     (g.phone || '').includes(q)
   );
 
-  const siteMatches = cachedSites.filter(s => 
-    (s.site_name || '').toLowerCase().includes(q) || 
-    (s.client_name || '').toLowerCase().includes(q) || 
+  const siteMatches = cachedSites.filter(s =>
+    (s.site_name || '').toLowerCase().includes(q) ||
+    (s.client_name || '').toLowerCase().includes(q) ||
     (s.location || '').toLowerCase().includes(q)
   );
 
@@ -4654,13 +4654,13 @@ async function executePayrollRunConfirmed() {
   try {
     const periodId = await getLatestPeriodId();
     const res = await apiFetch(`/payroll/${periodId}/calculate`, { method: 'POST' });
-    
+
     if (res.ok) {
       const data = await res.json();
       const gross = data.total_gross_payroll || 0;
       const count = data.total_employees || cachedGuards.filter(g => g.status === 'ACTIVE').length || 0;
       const formatted = 'KES ' + gross.toLocaleString();
-      
+
       showToast(`Payroll calculated successfully for ${count} active guards! Total: ${formatted}`, 'success');
       loadPayrollReview();
     } else {
@@ -4737,7 +4737,7 @@ function closeExportReturnsModal() {
 document.addEventListener('click', (e) => {
   const notifMenu = document.getElementById('dropdown-notifications');
   const profileMenu = document.getElementById('dropdown-profile');
-  
+
   if (notifMenu && !e.target.closest('#dropdown-notifications') && !e.target.closest('[aria-label="Notifications"]')) {
     notifMenu.style.display = 'none';
   }
@@ -4939,11 +4939,11 @@ function renderAdminIncidentsTable() {
       const type = (i.incident_type || '').toLowerCase();
       const desc = (i.description || '').toLowerCase();
       return ref.includes(incidentSearchQuery) ||
-             guard.includes(incidentSearchQuery) ||
-             emp.includes(incidentSearchQuery) ||
-             site.includes(incidentSearchQuery) ||
-             type.includes(incidentSearchQuery) ||
-             desc.includes(incidentSearchQuery);
+        guard.includes(incidentSearchQuery) ||
+        emp.includes(incidentSearchQuery) ||
+        site.includes(incidentSearchQuery) ||
+        type.includes(incidentSearchQuery) ||
+        desc.includes(incidentSearchQuery);
     });
   }
 
@@ -5282,8 +5282,8 @@ async function openDamageDeductionForIncident(incidentId) {
   const inc = (allAdminIncidents || []).find(i => i.id === incidentId);
   if (!inc) return;
 
-  const itemName = inc.incident_type === 'Property Damage' 
-    ? `Damaged Property / Facility (${inc.site_name || 'Site'})` 
+  const itemName = inc.incident_type === 'Property Damage'
+    ? `Damaged Property / Facility (${inc.site_name || 'Site'})`
     : `Belonging / Property (${inc.incident_type})`;
   const desc = `Incident Ref ${inc.reference_number}: ${inc.description || ''}`;
   const incDate = inc.incident_date || new Date().toISOString().substring(0, 10);
@@ -5457,7 +5457,7 @@ async function loadUnpaidLeaveDeductions() {
         <td>📅 ${d.leave_start_date} to ${d.leave_end_date}</td>
         <td><strong>${d.days_deducted} Day${d.days_deducted > 1 ? 's' : ''}</strong></td>
         <td>KES ${d.daily_rate.toLocaleString()} / day</td>
-        <td style="color:#DC2626; font-weight:700;">KES ${d.amount.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="color:#DC2626; font-weight:700;">KES ${d.amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td><b>${d.period_name}</b></td>
         <td>${statusBadge}</td>
         <td><div style="display:flex; gap:6px;">${actions}</div></td>
@@ -5721,7 +5721,7 @@ function renderCurrentStatutoryRates(data) {
     if (hasUncapped) {
       capSubtitle.innerText = '1:1 Match (Uncapped)';
     } else {
-      capSubtitle.innerText = `1:1 Match (Up to KES ${totalCap.toLocaleString('en-KE', {maximumFractionDigits: 0})} Cap)`;
+      capSubtitle.innerText = `1:1 Match (Up to KES ${totalCap.toLocaleString('en-KE', { maximumFractionDigits: 0 })} Cap)`;
     }
   }
 
@@ -5744,8 +5744,8 @@ function renderCurrentStatutoryRates(data) {
               <tr>
                 <td><strong>${t.tier_name || 'Tier ' + t.tier_number}</strong></td>
                 <td><span class="status-badge active">${t.rate}%</span></td>
-                <td>KES ${t.lower_limit.toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
-                <td>${t.upper_limit ? 'KES ' + t.upper_limit.toLocaleString('en-KE', {minimumFractionDigits:2}) : '<em>Uncapped</em>'}</td>
+                <td>KES ${t.lower_limit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                <td>${t.upper_limit ? 'KES ' + t.upper_limit.toLocaleString('en-KE', { minimumFractionDigits: 2 }) : '<em>Uncapped</em>'}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -5768,7 +5768,7 @@ function renderCurrentStatutoryRates(data) {
           </div>
           <div style="display:flex; justify-content:space-between;">
             <span style="color:#64748B;">Statutory Minimum Floor:</span>
-            <span style="font-weight:700; color:#0F172A;">KES ${data.shif.minimum_floor.toLocaleString('en-KE', {minimumFractionDigits:2})}</span>
+            <span style="font-weight:700; color:#0F172A;">KES ${data.shif.minimum_floor.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       `;
@@ -5811,7 +5811,7 @@ function renderCurrentStatutoryRates(data) {
           <tbody>
             ${data.paye_bands.map((b, i) => `
               <tr>
-                <td><strong>Band ${b.band_order || (i+1)}</strong></td>
+                <td><strong>Band ${b.band_order || (i + 1)}</strong></td>
                 <td>KES ${b.lower_limit.toLocaleString('en-KE')} ${b.upper_limit ? 'to KES ' + b.upper_limit.toLocaleString('en-KE') : 'and above'}</td>
                 <td><span class="status-badge active">${b.rate}%</span></td>
               </tr>
@@ -5820,7 +5820,7 @@ function renderCurrentStatutoryRates(data) {
         </table>
         <div style="display:flex; justify-content:space-between; font-size:13px; background:#F8FAFC; padding:8px 12px; border-radius:8px; border:1px solid #E2E8F0;">
           <span style="color:#64748B;">Monthly Personal Relief:</span>
-          <strong style="color:#2563EB;">KES ${reliefVal.toLocaleString('en-KE', {minimumFractionDigits:2})}</strong>
+          <strong style="color:#2563EB;">KES ${reliefVal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</strong>
         </div>
       `;
     }
@@ -5909,7 +5909,7 @@ function renderNssfModalTiers() {
 
   container.innerHTML = editingNssfTiers.map((t, idx) => `
     <div style="display:grid; grid-template-columns:1fr 80px 100px 100px 32px; gap:8px; align-items:center;">
-      <input type="text" class="form-control" value="${t.tier_name || 'Tier ' + (idx+1)}" placeholder="Name" onchange="editingNssfTiers[${idx}].tier_name=this.value">
+      <input type="text" class="form-control" value="${t.tier_name || 'Tier ' + (idx + 1)}" placeholder="Name" onchange="editingNssfTiers[${idx}].tier_name=this.value">
       <input type="number" class="form-control" step="0.1" value="${t.rate}" placeholder="Rate %" onchange="editingNssfTiers[${idx}].rate=parseFloat(this.value)||0">
       <input type="number" class="form-control" value="${t.lower_limit || 0}" placeholder="Lower (KES)" onchange="editingNssfTiers[${idx}].lower_limit=parseFloat(this.value)||0">
       <input type="number" class="form-control" value="${t.upper_limit || ''}" placeholder="Cap (KES)" onchange="editingNssfTiers[${idx}].upper_limit=this.value ? parseFloat(this.value) : null">
@@ -5919,7 +5919,7 @@ function renderNssfModalTiers() {
 }
 
 function addNssfTierRow() {
-  const lastLower = editingNssfTiers.length > 0 ? (editingNssfTiers[editingNssfTiers.length-1].upper_limit || 108000) : 0;
+  const lastLower = editingNssfTiers.length > 0 ? (editingNssfTiers[editingNssfTiers.length - 1].upper_limit || 108000) : 0;
   editingNssfTiers.push({
     tier_name: `Tier ${editingNssfTiers.length + 1}`,
     rate: 6.0,
@@ -6121,7 +6121,7 @@ function renderPayeModalBands() {
 
   container.innerHTML = editingPayeBands.map((b, idx) => `
     <div style="display:grid; grid-template-columns:60px 110px 110px 90px 32px; gap:8px; align-items:center;">
-      <span style="font-size:12px; font-weight:700;">Band ${idx+1}</span>
+      <span style="font-size:12px; font-weight:700;">Band ${idx + 1}</span>
       <input type="number" class="form-control" value="${b.lower_limit || 0}" placeholder="From (KES)" onchange="editingPayeBands[${idx}].lower_limit=parseFloat(this.value)||0">
       <input type="number" class="form-control" value="${b.upper_limit || ''}" placeholder="To (Above)" onchange="editingPayeBands[${idx}].upper_limit=this.value ? parseFloat(this.value) : null">
       <input type="number" class="form-control" step="0.1" value="${b.rate}" placeholder="Rate %" onchange="editingPayeBands[${idx}].rate=parseFloat(this.value)||0">
@@ -6131,7 +6131,7 @@ function renderPayeModalBands() {
 }
 
 function addPayeBandRow() {
-  const lastUpper = editingPayeBands.length > 0 ? (editingPayeBands[editingPayeBands.length-1].upper_limit || 800000) : 0;
+  const lastUpper = editingPayeBands.length > 0 ? (editingPayeBands[editingPayeBands.length - 1].upper_limit || 800000) : 0;
   editingPayeBands.push({
     band_order: editingPayeBands.length + 1,
     lower_limit: lastUpper,
@@ -6310,7 +6310,7 @@ async function openAddSiteModal(presetClientName = '') {
       const supRes = await apiFetch('/supervisors');
       if (supRes.ok) supervisorsCache = await supRes.json();
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const supSelect = document.getElementById('new-site-supervisor-select');
   if (supSelect) {
@@ -6591,7 +6591,7 @@ async function openAddGuardModal() {
   await loadSites();
   const sel = document.getElementById('new-guard-site-select');
   if (sel && cachedSites) {
-    sel.innerHTML = '<option value="">No Assigned Site (Unassigned/Reliever)</option>' + cachedSites.map(s => `<option value="${s.id}">${s.site_name} (Default: KES ${(s.basic_salary||15000).toLocaleString()})</option>`).join('');
+    sel.innerHTML = '<option value="">No Assigned Site (Unassigned/Reliever)</option>' + cachedSites.map(s => `<option value="${s.id}">${s.site_name} (Default: KES ${(s.basic_salary || 15000).toLocaleString()})</option>`).join('');
   }
   const supSel = document.getElementById('new-guard-supervisor-select');
   if (supSel) {
@@ -6780,7 +6780,7 @@ async function openApproveOffDayModal(requestId) {
       const dStr = curr.toISOString().split('T')[0];
       const rowDiv = document.createElement('div');
       rowDiv.style.cssText = 'background:#FFF; border:1px solid #CBD5E1; padding:10px; border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:6px;';
-      
+
       const relOptions = availableRelieversList.map(r => `<option value="${r.id}">${r.full_name} (${r.employee_number})${r.is_reliever ? ' [Reliever]' : ''}</option>`).join('');
       const siteOptions = sites.map(s => `<option value="${s.id}">${s.site_name}</option>`).join('');
       const shiftOptions = shifts.map(sh => `<option value="${sh.id}">${sh.name} (${sh.start_time}-${sh.end_time})</option>`).join('');
@@ -6953,7 +6953,7 @@ async function openSetGuardOffDaysModal(guardId = null) {
       guardsList = cachedGuards || [];
     }
 
-    guardSelect.innerHTML = guardsList.map(g => 
+    guardSelect.innerHTML = guardsList.map(g =>
       `<option value="${g.id}" ${currentOffDaysGuardId === g.id ? 'selected' : ''}>${g.full_name} (${g.employee_number || 'ID:' + g.id})</option>`
     ).join('');
 
@@ -7272,9 +7272,9 @@ function renderSupervisorsTable() {
       <td>${sup.phone || '<span style="color:#94A3B8;">None</span>'}</td>
       <td><span class="badge ${sup.status === 'ACTIVE' ? 'badge-active' : 'badge-inactive'}">${sup.status}</span></td>
       <td>
-        ${sup.assigned_site_count > 0 
-          ? `<span class="badge" style="background:#F0FDF4; color:#15803D; font-weight:700;" title="${(sup.assigned_site_names || []).join(', ')}">🏢 ${sup.assigned_site_count} Site${sup.assigned_site_count === 1 ? '' : 's'}</span>`
-          : `<span style="font-size:11px; color:#94A3B8;">0 Sites</span>`}
+        ${sup.assigned_site_count > 0
+        ? `<span class="badge" style="background:#F0FDF4; color:#15803D; font-weight:700;" title="${(sup.assigned_site_names || []).join(', ')}">🏢 ${sup.assigned_site_count} Site${sup.assigned_site_count === 1 ? '' : 's'}</span>`
+        : `<span style="font-size:11px; color:#94A3B8;">0 Sites</span>`}
       </td>
       <td>
         <span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">
@@ -7322,7 +7322,7 @@ function closeAddSupervisorModal() {
   const modal = document.getElementById('modal-add-supervisor');
   if (modal) modal.style.display = 'none';
   // clear fields
-  ['new-sup-name','new-sup-email','new-sup-phone','new-sup-password'].forEach(id => {
+  ['new-sup-name', 'new-sup-email', 'new-sup-phone', 'new-sup-password'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -7388,7 +7388,7 @@ async function submitAddSupervisor(event) {
       }
       throw new Error(msg);
     }
-    
+
     showToast(`✅ Supervisor account created for ${data.full_name || email}! Default password: ${password}`, 'success');
     closeAddSupervisorModal();
     await loadSupervisors();
@@ -7534,7 +7534,7 @@ async function loadSupervisorAttendanceRoll() {
     records.forEach(r => {
       const tr = document.createElement('tr');
       const st = r.attendance_status || 'NOT_MARKED';
-      
+
       const isCurrentlyActive = Boolean(r.actual_clock_in && !r.actual_clock_out);
       const isCompleted = Boolean(r.actual_clock_in && r.actual_clock_out);
 
@@ -7558,12 +7558,12 @@ async function loadSupervisorAttendanceRoll() {
         <td>${r.site_name || 'Unassigned Site'}</td>
         <td>${r.shift_name || 'Day Shift'}</td>
         <td>
-          <select class="form-control supervisor-roll-status" data-guard-id="${r.guard_id}" data-shift-id="${r.shift_id || ''}" style="max-width:140px; padding:4px 8px; font-weight:700; ${st==='PRESENT'?'color:#166534; background:#DCFCE7;':st==='ABSENT'?'color:#991B1B; background:#FEE2E2;':st==='LATE'?'color:#92400E; background:#FEF3C7;':st==='OFF'?'color:#4338CA; background:#EEF2FF;':''}">
-            <option value="PRESENT" ${st==='PRESENT'?'selected':''}>✅ PRESENT</option>
-            <option value="ABSENT" ${st==='ABSENT'?'selected':''}>❌ ABSENT</option>
-            <option value="LATE" ${st==='LATE'?'selected':''}>⚠️ LATE</option>
-            <option value="OFF" ${st==='OFF'?'selected':''}>🏖️ OFF</option>
-            <option value="NOT_MARKED" ${st==='NOT_MARKED'?'selected':''}>⏳ NOT MARKED</option>
+          <select class="form-control supervisor-roll-status" data-guard-id="${r.guard_id}" data-shift-id="${r.shift_id || ''}" style="max-width:140px; padding:4px 8px; font-weight:700; ${st === 'PRESENT' ? 'color:#166534; background:#DCFCE7;' : st === 'ABSENT' ? 'color:#991B1B; background:#FEE2E2;' : st === 'LATE' ? 'color:#92400E; background:#FEF3C7;' : st === 'OFF' ? 'color:#4338CA; background:#EEF2FF;' : ''}">
+            <option value="PRESENT" ${st === 'PRESENT' ? 'selected' : ''}>✅ PRESENT</option>
+            <option value="ABSENT" ${st === 'ABSENT' ? 'selected' : ''}>❌ ABSENT</option>
+            <option value="LATE" ${st === 'LATE' ? 'selected' : ''}>⚠️ LATE</option>
+            <option value="OFF" ${st === 'OFF' ? 'selected' : ''}>🏖️ OFF</option>
+            <option value="NOT_MARKED" ${st === 'NOT_MARKED' ? 'selected' : ''}>⏳ NOT MARKED</option>
           </select>
         </td>
         <td>${clockDisplay}</td>
@@ -7869,7 +7869,7 @@ function renderCompanyDocumentsTable() {
       confBadge = '<span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">🏢 INTERNAL</span>';
     }
 
-    const sizeFormatted = doc.file_size_bytes ? (doc.file_size_bytes > 1048576 ? `${(doc.file_size_bytes/1048576).toFixed(1)} MB` : `${Math.round(doc.file_size_bytes/1024)} KB`) : '—';
+    const sizeFormatted = doc.file_size_bytes ? (doc.file_size_bytes > 1048576 ? `${(doc.file_size_bytes / 1048576).toFixed(1)} MB` : `${Math.round(doc.file_size_bytes / 1024)} KB`) : '—';
     const dateFormatted = doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '—';
 
     const safeTitle = (doc.title || '').replace(/'/g, "\\'");
@@ -8082,7 +8082,7 @@ function viewCompanyDocument(docId) {
   if (titleEl) titleEl.innerText = doc.title;
   if (subEl) subEl.innerText = `${doc.category} • Confidentiality: ${doc.confidentiality_level}`;
 
-  const sizeFormatted = doc.file_size_bytes ? (doc.file_size_bytes > 1048576 ? `${(doc.file_size_bytes/1048576).toFixed(1)} MB` : `${Math.round(doc.file_size_bytes/1024)} KB`) : 'Unknown Size';
+  const sizeFormatted = doc.file_size_bytes ? (doc.file_size_bytes > 1048576 ? `${(doc.file_size_bytes / 1048576).toFixed(1)} MB` : `${Math.round(doc.file_size_bytes / 1024)} KB`) : 'Unknown Size';
   const dateFormatted = doc.created_at ? new Date(doc.created_at).toLocaleString() : '—';
 
   let confBadge = '';
@@ -8581,9 +8581,9 @@ async function loadStaffMonitoringOverview() {
         <td><b>${escapeHtml(s.full_name || s.email)}</b><br><small style="color:#64748B;">${s.email}</small></td>
         <td><span class="badge" style="background:#F1F5F9; color:#0F172A; font-weight:700;">${s.role}</span></td>
         <td>
-          ${s.is_online 
-            ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Online</span>' 
-            : '<span class="badge" style="background:#F1F5F9; color:#64748B;">⚪ Offline</span>'}
+          ${s.is_online
+        ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Online</span>'
+        : '<span class="badge" style="background:#F1F5F9; color:#64748B;">⚪ Offline</span>'}
         </td>
         <td><b>${s.today_hours.toFixed(2)} hrs</b></td>
         <td><small>${s.last_login ? new Date(s.last_login).toLocaleString() : 'Never'}</small></td>
@@ -9893,9 +9893,9 @@ function renderAssetsTable(assets) {
         <td>${locationOrCustody}</td>
         <td style="text-align:right; white-space:nowrap;">
           ${a.status === 'ASSIGNED' ?
-            `<button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openReturnAssetModal('${a.id}', '${escapeHtml(a.asset_code)}', '${escapeHtml(a.name)}')">📥 Return</button>` :
-            `<button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openAllocateAssetModal('${a.id}')">🤝 Allocate</button>`
-          }
+        `<button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openReturnAssetModal('${a.id}', '${escapeHtml(a.asset_code)}', '${escapeHtml(a.name)}')">📥 Return</button>` :
+        `<button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openAllocateAssetModal('${a.id}')">🤝 Allocate</button>`
+      }
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openAssetMaintenanceModal('${a.id}')">🔧 Service</button>
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; margin-right:4px;" onclick="openEditAssetModal('${a.id}')">✏️ Edit</button>
           <button class="btn btn-secondary" style="font-size:11px; padding:3px 8px; color:#DC2626; border-color:#FCA5A5;" onclick="deleteAsset('${a.id}', '${escapeHtml(a.name)}')">🗑️</button>
@@ -9982,9 +9982,9 @@ function renderInventoryItemsTable(items) {
         <td style="text-align:center; background:rgba(37,99,235,0.04);">
           <div style="font-size:15px; font-weight:900; color:#1D4ED8;">${issued}</div>
           ${issued > 0 ?
-            `<button class="btn btn-secondary" style="font-size:10px; padding:2px 7px; margin-top:2px; background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; font-weight:700;" onclick="openInventoryCustodyModal('${item.id}')" title="Click to view all guards & staff holding this item">👥 View (${holdersCount})</button>` :
-            `<div style="font-size:10px; color:#94A3B8;">0 in field</div>`
-          }
+        `<button class="btn btn-secondary" style="font-size:10px; padding:2px 7px; margin-top:2px; background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; font-weight:700;" onclick="openInventoryCustodyModal('${item.id}')" title="Click to view all guards & staff holding this item">👥 View (${holdersCount})</button>` :
+        `<div style="font-size:10px; color:#94A3B8;">0 in field</div>`
+      }
         </td>
         <td style="text-align:center; background:rgba(5,150,105,0.04);">
           <div style="font-size:15px; font-weight:900; color:#059669;">${remaining}</div>
@@ -11357,7 +11357,7 @@ function populateFoundingDetails(founding) {
     const el = document.getElementById(id);
     if (el) el.innerText = txt || '-';
   };
-  setTxt('founding-date-val', founding.founding_date ? new Date(founding.founding_date).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : '-');
+  setTxt('founding-date-val', founding.founding_date ? new Date(founding.founding_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '-');
   setTxt('founding-city-val', founding.original_location || '-');
   setTxt('founding-guards-val', `${founding.initial_guards_count || 12} Trained Security Officers`);
   setTxt('founding-names-val', founding.founder_names || '-');
@@ -11383,7 +11383,7 @@ function renderMilestonesTimeline(milestones) {
   }
 
   container.innerHTML = milestones.map(m => {
-    const dateStr = m.milestone_date ? new Date(m.milestone_date).toLocaleDateString('en-GB', { month:'short', year:'numeric' }) : '';
+    const dateStr = m.milestone_date ? new Date(m.milestone_date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '';
     const categoryBadges = {
       'FOUNDING': '<span class="badge" style="background:#EFF6FF; color:#2563EB;">FOUNDING</span>',
       'EXPANSION': '<span class="badge" style="background:#ECFDF5; color:#059669;">EXPANSION</span>',
@@ -13372,15 +13372,15 @@ async function openStaffFileModal(staffId) {
         advTbody.innerHTML = staffAdvances.map(a => `
           <tr>
             <td><b>${a.advance_reference}</b></td>
-            <td><b>KES ${Number(a.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</b></td>
+            <td><b>KES ${Number(a.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></td>
             <td>${a.disbursement_date}</td>
             <td>${a.payment_method}</td>
             <td>${a.reference_number || '—'}</td>
             <td>${escapeHtml(a.reason || '—')}</td>
             <td>
               ${a.status === 'DEDUCTED'
-                ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED VIA PAYROLL</span>'
-                : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>'}
+            ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED VIA PAYROLL</span>'
+            : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>'}
             </td>
           </tr>
         `).join('');
@@ -13422,8 +13422,8 @@ async function openStaffFileModal(staffId) {
                   <td><small>${(d.locations && d.locations.length) ? escapeHtml(d.locations.join('; ')) : 'HQ Terminal'}</small></td>
                   <td>
                     ${d.status === 'ONLINE NOW'
-                      ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Online Now</span>'
-                      : '<span class="badge" style="background:#F1F5F9; color:#64748B;">Completed</span>'}
+                  ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">🟢 Online Now</span>'
+                  : '<span class="badge" style="background:#F1F5F9; color:#64748B;">Completed</span>'}
                   </td>
                 </tr>
               `).join('');
@@ -13564,14 +13564,14 @@ function renderGuardAdvancesRows(advances = []) {
   return advances.map(a => `
     <tr>
       <td><b>${a.advance_reference}</b></td>
-      <td><b>KES ${Number(a.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</b></td>
+      <td><b>KES ${Number(a.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></td>
       <td>${a.disbursement_date}</td>
       <td>${a.payment_method} ${a.reference_number ? `(${a.reference_number})` : ''}</td>
       <td>${escapeHtml(a.reason || '—')}</td>
       <td>
         ${a.status === 'DEDUCTED'
-          ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED VIA PAYROLL</span>'
-          : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>'}
+      ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED VIA PAYROLL</span>'
+      : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>'}
       </td>
     </tr>
   `).join('');
@@ -13603,7 +13603,7 @@ function renderGuardDamageDeductionsRows(records = []) {
         <td><b>#${d.id}</b></td>
         <td><b>${escapeHtml(d.item_name)}</b> ${d.item_tag ? `<span style="font-size:11px; color:#64748B;">(${escapeHtml(d.item_tag)})</span>` : ''}</td>
         <td style="max-width:220px; white-space:normal; font-size:11px; color:#475569;">${escapeHtml(d.damage_description)}</td>
-        <td style="color:#DC2626; font-weight:700;">KES ${Number(d.deduction_amount || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="color:#DC2626; font-weight:700;">KES ${Number(d.deduction_amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td>${d.incident_date ? String(d.incident_date).substring(0, 10) : '—'}</td>
         <td><span style="font-size:11px; color:#3B82F6; font-weight:600;">${escapeHtml(periodName)}</span></td>
         <td>${statusBadge}</td>
@@ -13701,7 +13701,7 @@ async function handleRecordDamageDeductionSubmit(event) {
     if (typeof currentTab !== 'undefined' && currentTab === 'incidents') {
       if (typeof loadAdminIncidents === 'function') loadAdminIncidents();
     } else if (typeof viewGuardFile === 'function') {
-      try { viewGuardFile(guardId); } catch(e) {}
+      try { viewGuardFile(guardId); } catch (e) { }
     }
   } catch (err) {
     console.error('handleRecordDamageDeductionSubmit error:', err);
@@ -13754,11 +13754,11 @@ async function loadSalaryAdvances() {
     if (kpiRes && kpiRes.ok) {
       const kpis = await kpiRes.json();
       const elDisb = document.getElementById('adv-kpi-disbursed');
-      if (elDisb) elDisb.innerText = `KES ${Number(kpis.total_amount_disbursed || 0).toLocaleString(undefined, {minimumFractionDigits:2})}`;
+      if (elDisb) elDisb.innerText = `KES ${Number(kpis.total_amount_disbursed || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
       const elDed = document.getElementById('adv-kpi-deducted');
-      if (elDed) elDed.innerText = `KES ${Number(kpis.total_amount_deducted || 0).toLocaleString(undefined, {minimumFractionDigits:2})}`;
+      if (elDed) elDed.innerText = `KES ${Number(kpis.total_amount_deducted || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
       const elPend = document.getElementById('adv-kpi-pending');
-      if (elPend) elPend.innerText = `KES ${Number(kpis.total_amount_pending || 0).toLocaleString(undefined, {minimumFractionDigits:2})}`;
+      if (elPend) elPend.innerText = `KES ${Number(kpis.total_amount_pending || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
       const elCount = document.getElementById('adv-kpi-count');
       if (elCount) elCount.innerText = String(kpis.total_advances_count || 0);
     }
@@ -13786,7 +13786,7 @@ function renderSalaryAdvancesTable(advances) {
     const typeBadge = isGuard
       ? '<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">🛡️ Guard</span>'
       : '<span class="badge" style="background:#F5F3FF; color:#7C3AED; font-weight:700;">👔 Staff</span>';
-    
+
     const statusBadge = adv.status === 'DEDUCTED'
       ? '<span class="badge" style="background:#ECFDF5; color:#059669; font-weight:700;">✅ DEDUCTED</span>'
       : '<span class="badge" style="background:#FEF3C7; color:#D97706; font-weight:700;">⏳ PENDING DEDUCTION</span>';
@@ -13804,7 +13804,7 @@ function renderSalaryAdvancesTable(advances) {
           <b>${escapeHtml(adv.recipient_name || 'Unknown')}</b>
           <br><small style="color:#64748B;">${escapeHtml(adv.recipient_number || '')}</small>
         </td>
-        <td style="font-weight:800; color:#0F172A;">KES ${Number(adv.amount).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(adv.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
         <td>${adv.disbursement_date}</td>
         <td>
           <b>${adv.payment_method}</b>
@@ -13875,7 +13875,7 @@ async function populateAdvanceModalDropdowns() {
       try {
         const gRes = await apiFetch('/guards');
         if (gRes.ok) cachedGuards = await gRes.json();
-      } catch (e) {}
+      } catch (e) { }
     }
     const activeGuards = (cachedGuards || []).filter(g => g.status === 'ACTIVE');
     guardSelect.innerHTML = '<option value="">-- Choose Security Guard --</option>' +
@@ -13889,7 +13889,7 @@ async function populateAdvanceModalDropdowns() {
       try {
         const sRes = await apiFetch('/staff');
         if (sRes.ok) allStaffMembers = await sRes.json();
-      } catch (e) {}
+      } catch (e) { }
     }
     const staffList = allStaffMembers || [];
     staffSelect.innerHTML = '<option value="">-- Choose Corporate Staff (HR/Supervisor/Admin) --</option>' +
@@ -13906,7 +13906,7 @@ async function populateAdvanceModalDropdowns() {
         periodSelect.innerHTML = '<option value="">Auto-detect by Disbursement Date</option>' +
           periods.map(p => `<option value="${p.id}">${escapeHtml(p.period_name)} (${p.status})</option>`).join('');
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 }
 
@@ -14254,7 +14254,7 @@ async function loadExpenses() {
       const tr = document.createElement('tr');
       const dateStr = exp.expense_date ? exp.expense_date.substring(0, 10) : '--';
       const isPetty = exp.is_petty_cash;
-      
+
       let typeBadge = '';
       if (exp.expense_type === 'PETTY_CASH') typeBadge = '<span class="badge" style="background:#FEF3C7; color:#92400E;">🪙 Petty Cash</span>';
       else if (exp.expense_type === 'RECURRING') typeBadge = '<span class="badge" style="background:#DBEAFE; color:#1E40AF;">🔄 Recurring</span>';
@@ -14267,7 +14267,7 @@ async function loadExpenses() {
         <td>${typeBadge}</td>
         <td><strong>${exp.payee || 'Direct Vendor'}</strong></td>
         <td style="font-size:12px; max-width:220px; white-space:normal;">${exp.description || '--'}</td>
-        <td style="font-weight:800; color:#0F172A;">KES ${Number(exp.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(exp.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td><span style="font-size:11px; color:#64748B;">${exp.payment_method}</span></td>
         <td><span style="font-family:monospace; font-weight:700; color:#3B5EDB;">${exp.receipt_number || 'N/A'}</span></td>
         <td style="font-size:11px; color:#64748B;">${exp.recorded_by_name || 'System Admin'}</td>
@@ -14342,27 +14342,27 @@ async function loadExpensesSummary() {
 
     // Metric cards
     const mTotal = document.getElementById('kpi-expenses-monthly-total');
-    if (mTotal) mTotal.innerText = `KES ${Number(monthlyTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (mTotal) mTotal.innerText = `KES ${Number(monthlyTotal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
     const lastMonthSubtext = document.getElementById('kpi-expenses-last-month-subtext');
     if (lastMonthSubtext) {
       const lastMonthTotal = s.total_expenses_last_month !== undefined ? s.total_expenses_last_month : 0;
       const thisMonthTotal = s.total_expenses_this_month !== undefined ? s.total_expenses_this_month : 0;
       if (s.selected_month === 'last_month') {
-        lastMonthSubtext.innerText = `This Month (Nov): KES ${Number(thisMonthTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+        lastMonthSubtext.innerText = `This Month (Nov): KES ${Number(thisMonthTotal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
       } else {
-        lastMonthSubtext.innerText = `Last Month (Oct): KES ${Number(lastMonthTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+        lastMonthSubtext.innerText = `Last Month (Oct): KES ${Number(lastMonthTotal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
       }
     }
 
     const mPetty = document.getElementById('kpi-petty-cash-balance');
-    if (mPetty) mPetty.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (mPetty) mPetty.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
     const mFloatMax = document.getElementById('kpi-petty-cash-float-max');
     if (mFloatMax) mFloatMax.innerText = `Float Max: KES ${Number(floatCap).toLocaleString()} (${pettyPct}% of cap)`;
 
     const mRecurring = document.getElementById('kpi-recurring-monthly-total');
-    if (mRecurring) mRecurring.innerText = `KES ${Number(recurringTotal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (mRecurring) mRecurring.innerText = `KES ${Number(recurringTotal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
     const mRecCount = document.getElementById('kpi-recurring-count');
     if (mRecCount) mRecCount.innerText = `Active recurring obligations`;
@@ -14383,13 +14383,13 @@ async function loadExpensesSummary() {
     if (floatPct) floatPct.innerText = `${pettyPct}%`;
 
     const statBal = document.getElementById('petty-stat-balance');
-    if (statBal) statBal.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (statBal) statBal.innerText = `KES ${Number(pettyBal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
     const statCap = document.getElementById('petty-stat-cap');
     if (statCap) statCap.innerText = `KES ${Number(floatCap).toLocaleString()}`;
     const statDis = document.getElementById('petty-stat-disbursed');
-    if (statDis) statDis.innerText = `KES ${Number(disbursed).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (statDis) statDis.innerText = `KES ${Number(disbursed).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
     const statTop = document.getElementById('petty-stat-topups');
-    if (statTop) statTop.innerText = `KES ${Number(s.petty_cash_topups_month || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+    if (statTop) statTop.innerText = `KES ${Number(s.petty_cash_topups_month || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
     // Render Category Distribution bars
     const distContainer = document.getElementById('category-distribution-container');
@@ -14436,7 +14436,7 @@ async function loadPettyCashBook() {
     allPettyCashTransactions = Array.isArray(pcData) ? pcData : (pcData.transactions || []);
     if (pcData.current_balance !== undefined) {
       const balEl = document.getElementById('petty-stat-balance');
-      if (balEl) balEl.innerText = `KES ${Number(pcData.current_balance).toLocaleString('en-KE', {minimumFractionDigits:2})}`;
+      if (balEl) balEl.innerText = `KES ${Number(pcData.current_balance).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
     }
 
     if (!tbody) return;
@@ -14454,8 +14454,8 @@ async function loadPettyCashBook() {
         ? '<span class="badge" style="background:#DCFCE7; color:#166534; font-weight:700;">🟢 FLOAT TOP-UP</span>'
         : '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">🔴 DISBURSEMENT</span>';
 
-      const inflow = isTopUp ? `+ KES ${Number(tx.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}` : '-';
-      const outflow = !isTopUp ? `- KES ${Number(tx.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}` : '-';
+      const inflow = isTopUp ? `+ KES ${Number(tx.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '-';
+      const outflow = !isTopUp ? `- KES ${Number(tx.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '-';
       const person = tx.source_or_recipient || tx.payee_or_custodian || '--';
       const desc = tx.reason || tx.description || '--';
       const ref = tx.voucher_ref || tx.reference_number || '--';
@@ -14468,7 +14468,7 @@ async function loadPettyCashBook() {
         <td style="font-size:12px;">${desc}</td>
         <td style="font-weight:700; color:#16A34A;">${inflow}</td>
         <td style="font-weight:700; color:#DC2626;">${outflow}</td>
-        <td style="font-weight:800; color:#0F172A;">KES ${Number(bal).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(bal).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td><span style="font-family:monospace; font-weight:700; color:#3B5EDB;">${ref}</span></td>
       `;
       tbody.appendChild(tr);
@@ -14501,7 +14501,7 @@ async function loadRecurringExpenses() {
       const monthlyEquiv = rec.monthly_normalized_amount || rec.monthly_equivalent || rec.amount;
       const freqBadge = `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${rec.recurrence_interval || rec.frequency || 'MONTHLY'}</span>`;
       const dueStr = rec.next_due_date ? rec.next_due_date.substring(0, 10) : 'Ongoing';
-      
+
       let dueBadge = '';
       if (rec.days_until_due !== null && rec.days_until_due !== undefined) {
         if (rec.days_until_due < 0) {
@@ -14540,10 +14540,10 @@ async function loadRecurringExpenses() {
         <td><span class="badge" style="background:#F8FAFC; border:1px solid #E2E8F0; color:#0F172A;">${rec.category}</span></td>
         <td><strong style="color:#1E3A5F; font-size:13px;">🏢 ${rec.payee || '--'}</strong></td>
         <td>
-          <div style="font-weight:700; color:#0F172A;">KES ${Number(rec.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</div>
+          <div style="font-weight:700; color:#0F172A;">KES ${Number(rec.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</div>
           <div style="margin-top:2px;">${freqBadge}</div>
         </td>
-        <td style="font-weight:800; color:#2563EB;">KES ${Number(monthlyEquiv).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="font-weight:800; color:#2563EB;">KES ${Number(monthlyEquiv).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td>${lastPaidHtml}</td>
         <td>
           <strong>📅 ${dueStr}</strong>
@@ -14978,7 +14978,7 @@ async function openPayRecurringExpenseModal(id) {
   const sumPayee = document.getElementById('rec-pay-summary-payee');
   if (sumPayee) sumPayee.innerText = rec.payee || '--';
   const sumAmt = document.getElementById('rec-pay-summary-amount');
-  if (sumAmt) sumAmt.innerText = `KES ${Number(rec.amount).toLocaleString('en-KE', {minimumFractionDigits:2})} / ${rec.recurrence_interval || 'MONTHLY'}`;
+  if (sumAmt) sumAmt.innerText = `KES ${Number(rec.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })} / ${rec.recurrence_interval || 'MONTHLY'}`;
   const sumDue = document.getElementById('rec-pay-summary-due');
   if (sumDue) sumDue.innerText = `Next Due Date: ${rec.next_due_date ? rec.next_due_date.substring(0, 10) : 'Not scheduled'}`;
 
@@ -15098,7 +15098,7 @@ async function openRecurringHistoryModal(id) {
       tr.innerHTML = `
         <td><strong>🗓️ ${p.expense_date ? p.expense_date.substring(0, 10) : '--'}</strong></td>
         <td><strong style="color:#1E3A5F;">🏢 ${p.payee}</strong></td>
-        <td style="font-weight:800; color:#0F172A;">KES ${Number(p.amount).toLocaleString('en-KE', {minimumFractionDigits:2})}</td>
+        <td style="font-weight:800; color:#0F172A;">KES ${Number(p.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
         <td><span class="badge" style="background:#F1F5F9; color:#475569;">${p.payment_method}</span></td>
         <td><span style="font-family:monospace; font-weight:700; color:#2563EB;">${p.receipt_number || '--'}</span></td>
         <td style="font-size:12px; color:#64748B;">${p.recorded_by_name || 'System Administrator'}</td>
@@ -15901,7 +15901,7 @@ async function handleSalaryAdvancesExcelUpload(e) {
               <span>✅</span> Successfully Recorded ${data.successful_records} Advances!
             </div>
             <div style="font-size:12px; color:#047857; margin-top:4px;">
-              Total amount: <b>KES ${Number(data.total_amount_processed || 0).toLocaleString('en-KE', {minimumFractionDigits:2})}</b>.<br>
+              Total amount: <b>KES ${Number(data.total_amount_processed || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</b>.<br>
               Status: <b>APPROVED</b> • These advances will be automatically deducted during monthly payroll calculation.
             </div>
           </div>
@@ -16661,7 +16661,7 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
       }
 
       const isOut = (myId && Number(m.user_id) === Number(myId)) ||
-                    (myEmail && m.sender_name && m.sender_name.toLowerCase().trim() === myEmail);
+        (myEmail && m.sender_name && m.sender_name.toLowerCase().trim() === myEmail);
       const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       const senderRoleColor = {
@@ -16680,7 +16680,7 @@ async function loadWhatsAppActiveMessages(isBackgroundPoll = false) {
       if (m.attachment_url) {
         const attachUrl = `${m.attachment_url}${m.attachment_url.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken || '')}`;
         const isImg = (m.attachment_type && m.attachment_type.startsWith('image/')) ||
-                      /\.(jpg|jpeg|png|gif|webp|svg)($|\?)/i.test(m.attachment_url || m.attachment_name || '');
+          /\.(jpg|jpeg|png|gif|webp|svg)($|\?)/i.test(m.attachment_url || m.attachment_name || '');
 
         if (isImg) {
           attachmentHtml = `
@@ -16992,7 +16992,7 @@ async function refreshAnonymousReportsCount() {
     if (!res.ok) return;
     const msgs = await res.json();
     const count = Array.isArray(msgs) ? msgs.length : 0;
-    
+
     // 1. Sidebar Nav Badge
     const navBadge = document.getElementById('anon-reports-nav-badge');
     if (navBadge) {
@@ -17306,7 +17306,7 @@ async function loadSupervisorReports() {
 
       // File size formatting
       const sizeStr = rep.file_size_bytes
-        ? (rep.file_size_bytes > 1048576 ? `${(rep.file_size_bytes/1048576).toFixed(1)} MB` : `${Math.round(rep.file_size_bytes/1024)} KB`)
+        ? (rep.file_size_bytes > 1048576 ? `${(rep.file_size_bytes / 1048576).toFixed(1)} MB` : `${Math.round(rep.file_size_bytes / 1024)} KB`)
         : 'PDF Doc';
 
       // Admin feedback column
