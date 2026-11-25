@@ -24,7 +24,14 @@
     isMuted: false,
     isOnHold: false,
     overviewData: null,
-    lookupDebounceTimer: null
+    lookupDebounceTimer: null,
+    sms: {
+      mode: 'ALL',
+      allGuards: [],
+      selectedGuardIds: new Set(),
+      siteId: null,
+      history: []
+    }
   };
 
   /* ==========================================================================
@@ -1046,6 +1053,7 @@
     else if (subTabId === 'reports') loadAnalyticsReports();
     else if (subTabId === 'recordings') loadCallRecordings();
     else if (subTabId === 'missed') loadMissedCalls();
+    else if (subTabId === 'sms') loadGuardSMSView();
     else if (subTabId === 'settings') renderSettingsView();
   };
 
@@ -1057,6 +1065,7 @@
     if (window.CallCenter.activeSubTab === 'missed') loadMissedCalls();
     if (window.CallCenter.activeSubTab === 'reports') loadAnalyticsReports();
     if (window.CallCenter.activeSubTab === 'recordings') loadCallRecordings();
+    if (window.CallCenter.activeSubTab === 'sms') loadGuardSMSView();
   }
 
   /* ==========================================================================
@@ -1967,6 +1976,486 @@
         b.style.color = isMatch ? '#FFFFFF' : '#475569';
       });
     }
+  };
+
+  /* ==========================================================================
+     20. Guard SMS Text Messaging & Carrier Dispatch Controller
+     ========================================================================== */
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  window.loadGuardSMSView = async function () {
+    try {
+      // 1. Fetch SMS Overview & KPI metrics
+      const overview = await callCenterFetch('/call-center/sms/overview');
+      if (overview) {
+        const totalSentEl = document.getElementById('sms-kpi-total-sent');
+        const deliveriesEl = document.getElementById('sms-kpi-deliveries');
+        const rateEl = document.getElementById('sms-kpi-rate');
+        const guardsEl = document.getElementById('sms-kpi-guards');
+
+        const totalSent = overview.total_messages_sent != null ? overview.total_messages_sent : (overview.total_sent || 0);
+        const deliveries = overview.total_guard_deliveries != null ? overview.total_guard_deliveries : (overview.delivered_count || 0);
+        const rate = overview.delivery_success_rate != null ? overview.delivery_success_rate : (overview.success_rate != null ? overview.success_rate : 100);
+        const activeGuards = overview.active_guards_registered != null ? overview.active_guards_registered : (overview.active_guards || 0);
+
+        if (totalSentEl) totalSentEl.innerText = totalSent;
+        if (deliveriesEl) deliveriesEl.innerText = deliveries;
+        if (rateEl) rateEl.innerText = `${rate}%`;
+        if (guardsEl) guardsEl.innerText = activeGuards;
+      }
+
+      // 2. Load active guards list for targeting
+      const guards = await callCenterFetch('/call-center/sms/guards');
+      if (Array.isArray(guards)) {
+        window.CallCenter.sms.allGuards = guards;
+        populateSMSSitesDropdown(guards);
+        renderSMSGuardsPicker();
+      }
+
+      // 3. Load SMS History
+      await loadGuardSMSHistory();
+    } catch (e) {
+      console.error('Error loading Guard SMS view:', e);
+    }
+  };
+
+  function populateSMSSitesDropdown(guards) {
+    const siteSelect = document.getElementById('sms-site-select');
+    if (!siteSelect) return;
+
+    const currentVal = siteSelect.value;
+    const siteMap = new Map();
+    (guards || []).forEach(g => {
+      if (g.site_id && g.site_name) {
+        siteMap.set(g.site_id, g.site_name);
+      }
+    });
+
+    let opts = '<option value="">-- Choose Client Site --</option>';
+    siteMap.forEach((name, id) => {
+      const selected = String(id) === String(currentVal) ? 'selected' : '';
+      opts += `<option value="${id}" ${selected}>${escapeHtml(name)}</option>`;
+    });
+    siteSelect.innerHTML = opts;
+  }
+
+  window.setGuardSMSMode = function (mode) {
+    window.CallCenter.sms.mode = mode;
+
+    const btnAll = document.getElementById('sms-mode-btn-all');
+    const btnSpecified = document.getElementById('sms-mode-btn-specified');
+    const btnSite = document.getElementById('sms-mode-btn-site');
+
+    const activeStyle = 'flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:2px solid #4338CA; background:#EEF2FF; color:#4338CA; cursor:pointer;';
+    const inactiveStyle = 'flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #CBD5E1; background:#F8FAFC; color:#64748B; cursor:pointer;';
+
+    if (btnAll) btnAll.style.cssText = mode === 'ALL' ? activeStyle : inactiveStyle;
+    if (btnSpecified) btnSpecified.style.cssText = mode === 'SPECIFIED' ? activeStyle : inactiveStyle;
+    if (btnSite) btnSite.style.cssText = mode === 'SITE' ? activeStyle : inactiveStyle;
+
+    const siteWrap = document.getElementById('sms-site-selector-wrap');
+    if (siteWrap) siteWrap.style.display = mode === 'SITE' ? 'block' : 'none';
+
+    const pickerControls = document.getElementById('sms-guard-picker-controls');
+    if (pickerControls) pickerControls.style.display = mode === 'SPECIFIED' ? 'flex' : 'none';
+
+    const searchWrap = document.getElementById('sms-guard-search-wrap');
+    if (searchWrap) searchWrap.style.display = mode === 'SPECIFIED' ? 'block' : 'none';
+
+    updateSMSTargetSummary();
+    renderSMSGuardsPicker();
+  };
+
+  function updateSMSTargetSummary() {
+    const summaryEl = document.getElementById('sms-target-summary-text');
+    if (!summaryEl) return;
+
+    const mode = window.CallCenter.sms.mode;
+    const allGuards = window.CallCenter.sms.allGuards || [];
+    const selectedIds = window.CallCenter.sms.selectedGuardIds || new Set();
+
+    if (mode === 'ALL') {
+      summaryEl.innerText = `Target: Broadcasting to All Active Guards (${allGuards.length} guards)`;
+    } else if (mode === 'SPECIFIED') {
+      summaryEl.innerText = `Target: Sending to ${selectedIds.size} specified guard(s)`;
+    } else if (mode === 'SITE') {
+      const siteSelect = document.getElementById('sms-site-select');
+      const siteName = siteSelect && siteSelect.selectedIndex > 0 ? siteSelect.options[siteSelect.selectedIndex].text : 'Selected Site';
+      summaryEl.innerText = `Target: Sending to guards deployed at ${siteName}`;
+    }
+  }
+
+  window.onSMSSiteChange = function () {
+    const siteSelect = document.getElementById('sms-site-select');
+    const val = siteSelect ? siteSelect.value : '';
+    window.CallCenter.sms.siteId = val ? parseInt(val) : null;
+    updateSMSTargetSummary();
+    renderSMSGuardsPicker();
+  };
+
+  function renderSMSGuardsPicker(filterText = '') {
+    const container = document.getElementById('sms-guards-picker-list');
+    const countSub = document.getElementById('sms-recipients-count-sub');
+    if (!container) return;
+
+    const mode = window.CallCenter.sms.mode || 'ALL';
+    let guards = window.CallCenter.sms.allGuards || [];
+    const selectedIds = window.CallCenter.sms.selectedGuardIds || new Set();
+
+    if (mode === 'SITE') {
+      if (!window.CallCenter.sms.siteId) {
+        container.innerHTML = `<div style="text-align:center; padding:28px 16px; color:#64748B;">
+          <div style="font-size:24px; margin-bottom:6px;">🏢</div>
+          <div>Please select a client site deployment from the dropdown on the left to view deployed guards.</div>
+        </div>`;
+        if (countSub) countSub.innerText = 'No client site selected';
+        return;
+      }
+      guards = guards.filter(g => g.site_id === window.CallCenter.sms.siteId);
+    }
+
+    const q = (filterText || document.getElementById('sms-guard-search-input')?.value || '').trim().toLowerCase();
+    if (q) {
+      guards = guards.filter(g => {
+        const name = (g.full_name || g.name || '').toLowerCase();
+        const empNo = (g.employee_number || '').toLowerCase();
+        const phone = (g.phone_formatted || g.phone || '').toLowerCase();
+        const site = (g.site_name || '').toLowerCase();
+        return name.includes(q) || empNo.includes(q) || phone.includes(q) || site.includes(q);
+      });
+    }
+
+    if (mode === 'ALL') {
+      if (countSub) countSub.innerText = `Broadcasting to all ${guards.length} registered active guards`;
+    } else if (mode === 'SPECIFIED') {
+      if (countSub) countSub.innerText = `${selectedIds.size} of ${window.CallCenter.sms.allGuards.length} guards selected`;
+    } else if (mode === 'SITE') {
+      if (countSub) countSub.innerText = `${guards.length} guard(s) deployed at this site`;
+    }
+
+    if (guards.length === 0) {
+      container.innerHTML = `<div style="text-align:center; padding:24px; color:#64748B;">No guards found matching selection.</div>`;
+      return;
+    }
+
+    if (mode === 'SPECIFIED') {
+      container.innerHTML = guards.map(g => {
+        const gId = g.id || g.guard_id;
+        const gName = g.full_name || g.name || 'Guard';
+        const gPhone = g.phone_formatted || g.phone || '--';
+        const empNo = g.employee_number || ('ID:' + gId);
+        const isChecked = selectedIds.has(gId);
+
+        return `
+          <label style="display:flex; align-items:center; gap:10px; padding:8px 12px; margin-bottom:6px; background:${isChecked ? '#F0FDF4' : '#FFFFFF'}; border:1px solid ${isChecked ? '#86EFAC' : '#E2E8F0'}; border-radius:8px; cursor:pointer;">
+            <input type="checkbox" value="${gId}" ${isChecked ? 'checked' : ''}
+              onchange="onSMSGuardCheckChange(${gId}, this.checked)"
+              style="width:16px; height:16px; accent-color:#4338CA; cursor:pointer;">
+            <div style="flex:1;">
+              <div style="font-weight:700; color:#1E293B; font-size:12px;">
+                ${escapeHtml(gName)}
+                <span style="color:#64748B; font-weight:normal; font-size:11px;">(${escapeHtml(empNo)})</span>
+              </div>
+              <div style="font-size:11px; color:#64748B;">📱 ${escapeHtml(gPhone)} • 🏢 ${escapeHtml(g.site_name || 'Unassigned')}</div>
+            </div>
+            ${isChecked ? '<span class="badge" style="background:#ECFDF5; color:#065F46; font-size:10px; font-weight:700;">Selected</span>' : ''}
+          </label>
+        `;
+      }).join('');
+    } else {
+      container.innerHTML = guards.map(g => {
+        const gId = g.id || g.guard_id;
+        const gName = g.full_name || g.name || 'Guard';
+        const gPhone = g.phone_formatted || g.phone || '--';
+        const empNo = g.employee_number || ('ID:' + gId);
+
+        return `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-bottom:6px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px;">
+          <div>
+            <div style="font-weight:700; color:#1E293B; font-size:12px;">
+              ${escapeHtml(gName)}
+              <span style="color:#64748B; font-weight:normal; font-size:11px;">(${escapeHtml(empNo)})</span>
+            </div>
+            <div style="font-size:11px; color:#64748B;">📱 ${escapeHtml(gPhone)} • 🏢 ${escapeHtml(g.site_name || 'Unassigned')}</div>
+          </div>
+          <span class="badge" style="background:#EEF2FF; color:#4338CA; font-size:10px; font-weight:700;">
+            ${mode === 'ALL' ? 'Broadcast' : 'Site Deployed'}
+          </span>
+        </div>
+      `;
+      }).join('');
+    }
+  }
+
+  window.filterSMSGuardsList = function (text) {
+    renderSMSGuardsPicker(text);
+  };
+
+  window.toggleSelectAllSMSGuards = function (selectAll) {
+    const guards = window.CallCenter.sms.allGuards || [];
+    if (selectAll) {
+      guards.forEach(g => window.CallCenter.sms.selectedGuardIds.add(g.id || g.guard_id));
+    } else {
+      window.CallCenter.sms.selectedGuardIds.clear();
+    }
+    updateSMSTargetSummary();
+    renderSMSGuardsPicker();
+  };
+
+  window.onSMSGuardCheckChange = function (guardId, isChecked) {
+    if (isChecked) {
+      window.CallCenter.sms.selectedGuardIds.add(guardId);
+    } else {
+      window.CallCenter.sms.selectedGuardIds.delete(guardId);
+    }
+    updateSMSTargetSummary();
+    const countSub = document.getElementById('sms-recipients-count-sub');
+    if (countSub) {
+      countSub.innerText = `${window.CallCenter.sms.selectedGuardIds.size} of ${window.CallCenter.sms.allGuards.length} guards selected`;
+    }
+  };
+
+  window.applySMSTemplate = function (type) {
+    const templates = {
+      emergency: {
+        text: 'ALERT: CorpSec Emergency muster drill initiated. All deployed personnel must immediately report readiness and post security status to Central Dispatch.',
+        category: 'EMERGENCY'
+      },
+      turnout: {
+        text: 'REMINDER: Incoming shift handover begins in 30 minutes. Complete physical post inspection and ensure site occurrence logbook is duly countersigned.',
+        category: 'SHIFT'
+      },
+      callback: {
+        text: 'URGENT DISPATCH: Contact CorpSec Central Dispatch operations desk immediately on +254711082143 regarding duty assignment.',
+        category: 'DISPATCH'
+      },
+      advance: {
+        text: 'FINANCE NOTICE: Your approved mid-month salary advance has been disbursed to your registered M-Pesa mobile number.',
+        category: 'PAYROLL'
+      }
+    };
+
+    const tmpl = templates[type];
+    if (!tmpl) return;
+
+    const textArea = document.getElementById('cc-sms-message-text');
+    const catSelect = document.getElementById('sms-category-select');
+
+    if (textArea) textArea.value = tmpl.text;
+    if (catSelect) catSelect.value = tmpl.category;
+    window.onSMSMessageTextInput(tmpl.text);
+  };
+
+  window.onSMSMessageTextInput = function (text) {
+    const len = (text || '').length;
+    const segments = Math.ceil(len / 160) || 1;
+    const counterEl = document.getElementById('sms-char-counter');
+    if (counterEl) {
+      counterEl.innerText = `${len} / ${segments * 160} chars (${segments} SMS segment${segments > 1 ? 's' : ''})`;
+    }
+  };
+
+  window.submitGuardSMS = async function () {
+    const textArea = document.getElementById('cc-sms-message-text');
+    const text = (textArea ? textArea.value : '').trim();
+
+    if (!text) {
+      if (typeof showToast === 'function') showToast('Please enter message text before transmitting.', 'warning');
+      return;
+    }
+
+    const mode = window.CallCenter.sms.mode || 'ALL';
+    const category = document.getElementById('sms-category-select')?.value || 'GENERAL';
+    let guardIds = [];
+    let siteId = null;
+
+    if (mode === 'SPECIFIED') {
+      guardIds = Array.from(window.CallCenter.sms.selectedGuardIds);
+      if (guardIds.length === 0) {
+        if (typeof showToast === 'function') showToast('Please select at least one guard from the checklist.', 'warning');
+        return;
+      }
+    } else if (mode === 'SITE') {
+      siteId = window.CallCenter.sms.siteId;
+      if (!siteId) {
+        if (typeof showToast === 'function') showToast('Please select a client site deployment.', 'warning');
+        return;
+      }
+    }
+
+    const btn = document.getElementById('btn-dispatch-guard-sms');
+    const label = document.getElementById('btn-dispatch-sms-label');
+    if (btn) btn.disabled = true;
+    if (label) label.innerText = 'Transmitting...';
+
+    try {
+      const payload = {
+        recipient_type: mode,
+        message_text: text,
+        category: category,
+        guard_ids: guardIds.length ? guardIds : null,
+        site_id: siteId ? parseInt(siteId) : null
+      };
+
+      const res = await callCenterFetch('/call-center/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res && (res.message_id || res.id || res.success)) {
+        if (typeof showToast === 'function') {
+          showToast(`✅ SMS broadcast transmitted successfully to ${res.total_recipients} guard(s)!`, 'success');
+        }
+        if (textArea) textArea.value = '';
+        window.onSMSMessageTextInput('');
+        await window.loadGuardSMSView();
+      } else {
+        throw new Error((res && res.detail) ? res.detail : 'SMS dispatch failed');
+      }
+    } catch (err) {
+      console.error('Error submitting Guard SMS:', err);
+      if (typeof showToast === 'function') {
+        showToast('SMS Dispatch failed: ' + (err.message || 'Unknown server error'), 'danger');
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+      if (label) label.innerText = 'Transmit SMS';
+    }
+  };
+
+  window.loadGuardSMSHistory = async function () {
+    const tbody = document.getElementById('sms-history-table-body');
+    if (!tbody) return;
+
+    try {
+      const history = await callCenterFetch('/call-center/sms/history?limit=50');
+      const list = Array.isArray(history) ? history : (history && history.items ? history.items : []);
+      window.CallCenter.sms.history = list;
+
+      const badge = document.getElementById('sms-history-count-badge');
+      if (badge) badge.innerText = `${list.length} dispatch${list.length === 1 ? '' : 'es'}`;
+
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#64748B;">No SMS text dispatches recorded yet. Use the composer above to transmit messages.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map(m => {
+        const dateStr = m.created_at ? new Date(m.created_at).toLocaleString() : '--';
+        let scopeBadge = '<span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">📢 All Guards</span>';
+        if (m.recipient_type === 'SPECIFIED') scopeBadge = `<span class="badge" style="background:#F0FDF4; color:#166534; font-weight:700;">🎯 Specified (${m.total_recipients})</span>`;
+        else if (m.recipient_type === 'SITE') scopeBadge = `<span class="badge" style="background:#FFFBEB; color:#92400E; font-weight:700;">🏢 Site Deployed</span>`;
+
+        let catBadge = `<span class="badge" style="background:#F1F5F9; color:#475569;">${escapeHtml(m.category || 'GENERAL')}</span>`;
+        if (m.category === 'EMERGENCY') catBadge = `<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">🚨 EMERGENCY</span>`;
+        else if (m.category === 'SHIFT') catBadge = `<span class="badge" style="background:#FEF3C7; color:#92400E; font-weight:700;">⏰ SHIFT</span>`;
+        else if (m.category === 'DISPATCH') catBadge = `<span class="badge" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">📞 DISPATCH</span>`;
+        else if (m.category === 'PAYROLL') catBadge = `<span class="badge" style="background:#ECFDF5; color:#065F46; font-weight:700;">💰 PAYROLL</span>`;
+
+        let statusBadge = '<span class="badge" style="background:#ECFDF5; color:#065F46; font-weight:700;">DELIVERED</span>';
+        if (m.status === 'SENT') statusBadge = '<span class="badge" style="background:#EFF6FF; color:#1E40AF; font-weight:700;">SENT</span>';
+        else if (m.status === 'FAILED') statusBadge = '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">FAILED</span>';
+
+        const rawText = m.message_text || '';
+        const textExcerpt = rawText.length > 55 ? (rawText.substring(0, 55) + '...') : rawText;
+
+        const refCode = m.reference_code || m.message_reference || ('SMS-' + m.id);
+        return `
+          <tr>
+            <td style="padding:10px 12px; font-weight:700; font-family:monospace; color:#4338CA;">${escapeHtml(refCode)}</td>
+            <td style="padding:10px 12px; white-space:nowrap; color:#475569;">${dateStr}</td>
+            <td style="padding:10px 12px;">${scopeBadge}</td>
+            <td style="padding:10px 12px;">${catBadge}</td>
+            <td style="padding:10px 12px; color:#1E293B; max-width:240px;" title="${escapeHtml(rawText)}">${escapeHtml(textExcerpt)}</td>
+            <td style="padding:10px 12px; font-weight:700; color:#1E293B;">${m.delivered_count} / ${m.total_recipients}</td>
+            <td style="padding:10px 12px;">${statusBadge}</td>
+            <td style="padding:10px 12px; color:#475569;">${escapeHtml(m.sender_name || 'System Dispatch')}</td>
+            <td style="padding:10px 12px; text-align:center;">
+              <button class="btn btn-secondary" onclick="viewSMSRecipients(${m.id})"
+                style="font-size:11px; padding:4px 8px; cursor:pointer;">
+                👁️ Audit
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('Error fetching SMS history:', err);
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:16px; color:#EF4444;">Failed to load SMS dispatch log.</td></tr>`;
+    }
+  };
+
+  window.viewSMSRecipients = async function (smsId) {
+    const modal = document.getElementById('modal-sms-recipients');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    const titleEl = document.getElementById('modal-sms-rec-title');
+    const subEl = document.getElementById('modal-sms-rec-sub');
+    const textEl = document.getElementById('modal-sms-rec-text');
+    const tbody = document.getElementById('modal-sms-rec-tbody');
+
+    if (titleEl) titleEl.innerText = `📨 SMS Delivery Audit (Batch #${smsId})`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:16px; color:#64748B;">Loading recipient records...</td></tr>`;
+
+    try {
+      const cached = (window.CallCenter.sms.history || []).find(x => x.id === smsId);
+      if (cached) {
+        if (textEl) textEl.innerText = cached.message_text || '--';
+        if (subEl) subEl.innerText = `Batch Ref: ${cached.reference_code || cached.message_reference || ''} • Sent: ${cached.created_at ? new Date(cached.created_at).toLocaleString() : ''} • Dispatcher: ${cached.sender_name || 'System'}`;
+      }
+
+      const res = await callCenterFetch(`/call-center/sms/${smsId}/recipients`);
+      if (!tbody) return;
+
+      if (res && typeof res === 'object') {
+        if (textEl && res.message_text) textEl.innerText = res.message_text;
+        if (subEl) subEl.innerText = `Batch Ref: ${res.message_reference || ''} • Sent: ${res.created_at || ''} • Dispatcher: ${res.sender_name || 'System'}`;
+      }
+
+      const recs = (res && Array.isArray(res.recipients)) ? res.recipients : (Array.isArray(res) ? res : []);
+      if (!recs.length) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:16px; color:#64748B;">No individual recipient records logged for this dispatch.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = recs.map(r => {
+        const stat = (r.status || r.delivery_status || 'DELIVERED').toUpperCase();
+        let badge = '<span class="badge" style="background:#ECFDF5; color:#065F46; font-weight:700;">DELIVERED</span>';
+        if (stat === 'SENT') badge = '<span class="badge" style="background:#EFF6FF; color:#1E40AF; font-weight:700;">SENT</span>';
+        else if (stat === 'FAILED') badge = '<span class="badge" style="background:#FEE2E2; color:#991B1B; font-weight:700;">FAILED</span>';
+
+        return `
+          <tr>
+            <td style="padding:8px 10px; font-weight:600; color:#1E293B;">
+              ${escapeHtml(r.guard_name || 'Guard')}
+              <div style="font-size:10px; color:#64748B; font-weight:normal;">${escapeHtml(r.employee_number || '')}</div>
+            </td>
+            <td style="padding:8px 10px; font-family:monospace; color:#334155;">${escapeHtml(r.phone_number || '')}</td>
+            <td style="padding:8px 10px; color:#475569;">${escapeHtml(r.site_name || 'Unassigned')}</td>
+            <td style="padding:8px 10px;">${badge}</td>
+            <td style="padding:8px 10px; font-family:monospace; font-size:11px; color:#64748B;">${escapeHtml(r.gateway_message_id || '--')}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('Error fetching SMS recipient details:', err);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:16px; color:#EF4444;">Failed to load recipient audit receipts.</td></tr>`;
+    }
+  };
+
+  window.closeSMSRecipientsModal = function () {
+    const modal = document.getElementById('modal-sms-recipients');
+    if (modal) modal.style.display = 'none';
   };
 
   /* ==========================================================================

@@ -155,3 +155,56 @@ class CallerContact(Base):
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, nullable=False)
 
+
+class GuardSMSMessage(Base):
+    """
+    Chronological dispatch log for SMS text messages transmitted to security guards.
+    Supports firm-wide broadcast ('ALL'), targeted individual guards ('SPECIFIED'), or site personnel ('SITE').
+    """
+    __tablename__ = "guard_sms_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_reference = Column(String(100), unique=True, index=True, nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sender_name = Column(String(100), nullable=True)
+    recipient_type = Column(String(30), default="ALL", nullable=False)  # ALL, SPECIFIED, SITE
+    site_id = Column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)
+    message_text = Column(Text, nullable=False)
+    category = Column(String(50), default="GENERAL", nullable=False)  # GENERAL, EMERGENCY, SHIFT, PAYROLL, DISPATCH
+    total_recipients = Column(Integer, default=0, nullable=False)
+    delivered_count = Column(Integer, default=0, nullable=False)
+    failed_count = Column(Integer, default=0, nullable=False)
+    status = Column(String(30), default="SENT", nullable=False)  # SENT, PARTIAL, FAILED
+    provider = Column(String(50), default="AFRICAS_TALKING", nullable=False)
+
+    created_at = Column(DateTime, default=datetime.datetime.now, index=True, nullable=False)
+
+    sender = relationship("User")
+    site = relationship("Site")
+    recipients = relationship("GuardSMSRecipient", back_populates="message", cascade="all, delete-orphan")
+
+
+class GuardSMSRecipient(Base):
+    """
+    Individual delivery status and audit trail per guard for a dispatched SMS message.
+    """
+    __tablename__ = "guard_sms_recipients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sms_message_id = Column(Integer, ForeignKey("guard_sms_messages.id", ondelete="CASCADE"), nullable=False)
+    guard_id = Column(Integer, ForeignKey("guards.id", ondelete="CASCADE"), nullable=False)
+    guard_name = Column(String(100), nullable=False)
+    employee_number = Column(String(50), nullable=False)
+    phone_number = Column(String(50), nullable=False)
+    site_name = Column(String(100), nullable=True)
+    status = Column(String(30), default="DELIVERED", nullable=False)  # SENT, DELIVERED, FAILED
+    gateway_message_id = Column(String(100), nullable=True)
+    cost = Column(Float, default=0.0, nullable=False)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+
+    message = relationship("GuardSMSMessage", back_populates="recipients")
+    guard = relationship("Guard")
+
+

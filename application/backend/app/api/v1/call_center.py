@@ -3,6 +3,7 @@ import re
 import uuid
 import datetime
 import urllib.request
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -40,11 +41,17 @@ from application.backend.app.schemas.call_center import (
     CallActionRequest,
     TransferRequest,
     SimulateCallRequest,
-    CallCenterOverviewResponse
+    CallCenterOverviewResponse,
+    GuardSMSSendRequest,
+    GuardSMSMessageResponse,
+    GuardSMSRecipientResponse,
+    GuardSMSOverviewResponse
 )
 from application.backend.app.services.voice_service import ws_manager, voice_service, format_e164
+from application.backend.app.services.sms_service import GuardSMSService
 
 router = APIRouter(prefix="/call-center", tags=["Call Centre System"])
+logger = logging.getLogger(__name__)
 
 RECORDINGS_STORAGE_DIR = os.path.join(os.getcwd(), "uploads", "call_recordings")
 os.makedirs(RECORDINGS_STORAGE_DIR, exist_ok=True)
@@ -2010,4 +2017,78 @@ async def call_recording_callback(
             })
 
     return {"status": "ok", "call_sid": call_sid, "recording_url": recording_url}
+
+
+# ==============================================================================
+# 9. GUARD SMS TEXT MESSAGING DISPATCH
+# ==============================================================================
+
+@router.get("/sms/overview", response_model=GuardSMSOverviewResponse)
+def get_guard_sms_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns overview KPI metrics for Guard SMS text messaging."""
+    return GuardSMSService.get_sms_overview_stats(db)
+
+
+@router.get("/sms/guards")
+def get_guards_for_sms_selector(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns active guards list with site and shift data for the SMS dispatch selector."""
+    return GuardSMSService.get_guards_for_selector(db)
+
+
+@router.post("/sms/send")
+def send_sms_to_guards(
+    payload: GuardSMSSendRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Sends SMS text messages to security guards.
+    Supports broadcast to all active guards ('ALL'), targeted individual guards ('SPECIFIED'), or site personnel ('SITE').
+    """
+    try:
+        result = GuardSMSService.send_guard_sms(
+            db=db,
+            sender=current_user,
+            message_text=payload.message_text,
+            recipient_type=payload.recipient_type,
+            guard_ids=payload.guard_ids,
+            site_id=payload.site_id,
+            category=payload.category or "GENERAL"
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error dispatching guard SMS: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"SMS dispatch failed: {str(e)}")
+
+
+@router.get("/sms/history")
+def get_guard_sms_history(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieves chronological dispatch history of SMS messages sent to guards."""
+    return GuardSMSService.get_guard_sms_history(db, limit=limit)
+
+
+@router.get("/sms/{sms_id}/recipients")
+def get_guard_sms_recipients(
+    sms_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieves detailed per-guard delivery audit receipts for an SMS batch."""
+    try:
+        return GuardSMSService.get_sms_recipients_detail(db, sms_id=sms_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
 

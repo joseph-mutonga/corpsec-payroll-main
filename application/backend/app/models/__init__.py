@@ -57,7 +57,9 @@ from application.backend.app.models.call_center import (
     AgentStatus,
     CallLog,
     CallNote,
-    CallerContact
+    CallerContact,
+    GuardSMSMessage,
+    GuardSMSRecipient
 )
 
 __all__ = [
@@ -70,6 +72,8 @@ __all__ = [
     "CallLog",
     "CallNote",
     "CallerContact",
+    "GuardSMSMessage",
+    "GuardSMSRecipient",
     "UserSession",
     "EmailOTP",
     "AnonymousMessage",

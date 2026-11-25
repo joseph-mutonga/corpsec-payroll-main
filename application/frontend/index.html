@@ -3796,6 +3796,13 @@
                 <span>Phone</span>
               </div>
             </div>
+            <div class="cc-sub-nav-item" data-subtab="sms" onclick="switchCallCenterSubTab('sms')">
+              <div class="cc-item-left">
+                <span class="cc-item-icon">💬</span>
+                <span>Guard SMS Dispatch</span>
+              </div>
+              <span class="cc-sub-nav-pill-badge" id="badge-cc-sms" style="background:#EEF2FF; color:#4338CA; font-weight:700;">SMS</span>
+            </div>
             <div class="cc-sub-nav-item" data-subtab="history" onclick="switchCallCenterSubTab('history')">
               <div class="cc-item-left">
                 <span class="cc-item-icon">🕒</span>
@@ -3956,6 +3963,10 @@
                       style="background:#FFFFFF; color:#1E1B4B; font-weight:700; border:none; padding:8px 16px;">
                       ⚡ Test Inbound Call Popup
                     </button>
+                    <button class="btn btn-secondary" onclick="switchCallCenterSubTab('sms')"
+                      style="background:#4338CA; color:#FFFFFF; font-weight:700; border:none; padding:8px 16px;">
+                      💬 Send Guard SMS
+                    </button>
                   </div>
                 </div>
 
@@ -3994,6 +4005,207 @@
                         <div style="padding:12px; color:#64748B; font-size:12px;">Loading recent calls...</div>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ================= Sub-View 1b: Guard SMS Text Messaging ================= -->
+              <div id="cc-view-sms" class="cc-subview" style="display:none;">
+                <!-- KPI Metric Strip -->
+                <div class="cc-kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom:20px;">
+                  <div class="cc-kpi-card" style="border-left: 4px solid #4338CA;">
+                    <div>
+                      <div class="cc-kpi-label">Total SMS Dispatches</div>
+                      <div class="cc-kpi-val" id="sms-kpi-total-sent">0</div>
+                    </div>
+                    <div class="cc-kpi-icon-badge" style="background:#EEF2FF; color:#4338CA;">💬</div>
+                  </div>
+                  <div class="cc-kpi-card" style="border-left: 4px solid #10B981;">
+                    <div>
+                      <div class="cc-kpi-label">Delivered Messages</div>
+                      <div class="cc-kpi-val" id="sms-kpi-deliveries">0</div>
+                    </div>
+                    <div class="cc-kpi-icon-badge" style="background:#ECFDF5; color:#10B981;">📨</div>
+                  </div>
+                  <div class="cc-kpi-card" style="border-left: 4px solid #3B82F6;">
+                    <div>
+                      <div class="cc-kpi-label">Delivery Success Rate</div>
+                      <div class="cc-kpi-val" id="sms-kpi-rate">100%</div>
+                    </div>
+                    <div class="cc-kpi-icon-badge" style="background:#EFF6FF; color:#3B82F6;">📊</div>
+                  </div>
+                  <div class="cc-kpi-card" style="border-left: 4px solid #F59E0B;">
+                    <div>
+                      <div class="cc-kpi-label">Active Duty Guards</div>
+                      <div class="cc-kpi-val" id="sms-kpi-guards">14</div>
+                    </div>
+                    <div class="cc-kpi-icon-badge" style="background:#FFFBEB; color:#F59E0B;">🛡️</div>
+                  </div>
+                </div>
+
+                <!-- 2-Column Composer & Selector -->
+                <div style="display:grid; grid-template-columns: 1.2fr 0.8fr; gap:20px; align-items:start;">
+                  <!-- Left: Compose & Dispatch Card -->
+                  <div class="cc-table-card" style="padding:22px; background:#fff; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; border-bottom:1px solid #F1F5F9; padding-bottom:14px;">
+                      <div>
+                        <h4 style="margin:0; font-size:16px; font-weight:800; color:#0F172A;">✉️ Compose Guard Text Message</h4>
+                        <p style="margin:4px 0 0 0; font-size:12px; color:#64748B;">Transmit instant SMS notifications directly to guard mobile numbers.</p>
+                      </div>
+                      <span class="badge" style="background:#ECFDF5; color:#065F46; font-size:11px; font-weight:700;">
+                        Gateway: Africa's Talking / CorpSec Carrier
+                      </span>
+                    </div>
+
+                    <!-- Target Selection Mode -->
+                    <div style="margin-bottom:16px;">
+                      <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:8px;">
+                        🎯 Target Audience / Recipient Scope
+                      </label>
+                      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button type="button" class="btn" id="sms-mode-btn-all" onclick="setGuardSMSMode('ALL')"
+                          style="flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:2px solid #4338CA; background:#EEF2FF; color:#4338CA; cursor:pointer;">
+                          📢 All Active Guards (Broadcast)
+                        </button>
+                        <button type="button" class="btn" id="sms-mode-btn-specified" onclick="setGuardSMSMode('SPECIFIED')"
+                          style="flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #CBD5E1; background:#F8FAFC; color:#64748B; cursor:pointer;">
+                          🎯 Specified Guards (Select)
+                        </button>
+                        <button type="button" class="btn" id="sms-mode-btn-site" onclick="setGuardSMSMode('SITE')"
+                          style="flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #CBD5E1; background:#F8FAFC; color:#64748B; cursor:pointer;">
+                          🏢 By Client Site
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Site Selector (hidden by default, shown when mode is SITE) -->
+                    <div id="sms-site-selector-wrap" style="display:none; margin-bottom:16px; padding:12px; background:#F8FAFC; border-radius:8px; border:1px solid #E2E8F0;">
+                      <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:6px;">Select Client Site Deployment</label>
+                      <select id="sms-site-select" onchange="onSMSSiteChange()"
+                        style="width:100%; padding:8px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:13px; background:#fff;">
+                        <option value="">-- Choose Client Site --</option>
+                      </select>
+                    </div>
+
+                    <!-- Category & Quick Templates -->
+                    <div style="margin-bottom:14px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:12px; font-weight:700; color:#334155;">⚡ Quick Dispatch Templates</label>
+                        <select id="sms-category-select" style="padding:4px 8px; border:1px solid #CBD5E1; border-radius:6px; font-size:11px; font-weight:600;">
+                          <option value="GENERAL">General Briefing</option>
+                          <option value="EMERGENCY">🚨 Emergency Alert</option>
+                          <option value="SHIFT">⏰ Shift Turnout</option>
+                          <option value="DISPATCH">📞 Urgent Callback</option>
+                          <option value="PAYROLL">💰 Payroll / Advances</option>
+                        </select>
+                      </div>
+                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" class="btn" onclick="applySMSTemplate('emergency')"
+                          style="font-size:11px; padding:5px 9px; background:#FEE2E2; color:#991B1B; border:1px solid #FCA5A5; border-radius:6px; cursor:pointer;">
+                          🚨 Emergency Muster Drill
+                        </button>
+                        <button type="button" class="btn" onclick="applySMSTemplate('turnout')"
+                          style="font-size:11px; padding:5px 9px; background:#FEF3C7; color:#92400E; border:1px solid #FCD34D; border-radius:6px; cursor:pointer;">
+                          ⏰ Shift Handover Reminder
+                        </button>
+                        <button type="button" class="btn" onclick="applySMSTemplate('callback')"
+                          style="font-size:11px; padding:5px 9px; background:#EFF6FF; color:#1D4ED8; border:1px solid #93C5FD; border-radius:6px; cursor:pointer;">
+                          📞 Call Central Dispatch
+                        </button>
+                        <button type="button" class="btn" onclick="applySMSTemplate('advance')"
+                          style="font-size:11px; padding:5px 9px; background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0; border-radius:6px; cursor:pointer;">
+                          💰 Advance Disbursed
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Message Body Textarea -->
+                    <div style="margin-bottom:14px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:12px; font-weight:700; color:#334155;">Message Content</label>
+                        <span id="sms-char-counter" style="font-size:11px; font-weight:600; color:#64748B;">0 / 160 chars (1 SMS segment)</span>
+                      </div>
+                      <textarea id="cc-sms-message-text" rows="4" placeholder="Type text message to send to guards..."
+                        oninput="onSMSMessageTextInput(this.value)"
+                        style="width:100%; padding:10px 14px; border:1px solid #CBD5E1; border-radius:8px; font-size:13px; line-height:1.5; resize:vertical; font-family:inherit;"></textarea>
+                    </div>
+
+                    <!-- Sender Info & Transmit Button -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#F8FAFC; padding:12px 16px; border-radius:10px; border:1px solid #E2E8F0;">
+                      <div style="font-size:12px; color:#475569;">
+                        <div><strong>Origin Sender ID:</strong> <span style="font-family:monospace; color:#4338CA;">CORPSEC_DSP</span> (+254 711 082 143)</div>
+                        <div id="sms-target-summary-text" style="color:#1E293B; font-weight:600; margin-top:2px;">Target: Broadcasting to All Active Guards</div>
+                      </div>
+                      <button id="btn-dispatch-guard-sms" class="btn btn-primary" onclick="submitGuardSMS()"
+                        style="background:#4338CA; border-color:#4338CA; font-weight:700; padding:10px 22px; font-size:13px; border-radius:8px; display:flex; align-items:center; gap:8px;">
+                        <span>📨</span>
+                        <span id="btn-dispatch-sms-label">Transmit SMS</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Right: Target Guard Picker / Details Card -->
+                  <div class="cc-table-card" style="padding:22px; background:#fff; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                      <div>
+                        <h4 style="margin:0; font-size:15px; font-weight:800; color:#0F172A;">👥 Recipient Guards Roster</h4>
+                        <div id="sms-recipients-count-sub" style="font-size:12px; color:#64748B; margin-top:2px;">Loading registered guards...</div>
+                      </div>
+                      <div id="sms-guard-picker-controls" style="display:none; gap:6px;">
+                        <button type="button" class="btn btn-secondary" onclick="toggleSelectAllSMSGuards(true)" style="font-size:11px; padding:3px 8px;">Select All</button>
+                        <button type="button" class="btn btn-secondary" onclick="toggleSelectAllSMSGuards(false)" style="font-size:11px; padding:3px 8px;">Clear</button>
+                      </div>
+                    </div>
+
+                    <!-- Search Filter for Guard Picker -->
+                    <div id="sms-guard-search-wrap" style="margin-bottom:12px; display:none;">
+                      <input type="text" id="sms-guard-search-input" placeholder="🔍 Search guard name, ID, phone..."
+                        onkeyup="filterSMSGuardsList(this.value)"
+                        style="width:100%; padding:6px 12px; border:1px solid #CBD5E1; border-radius:8px; font-size:12px;">
+                    </div>
+
+                    <!-- Scrollable Guard List Container -->
+                    <div id="sms-guards-picker-list" style="max-height:360px; overflow-y:auto; border:1px solid #E2E8F0; border-radius:8px; padding:8px; background:#FAFAFA;">
+                      <div style="text-align:center; padding:24px; color:#64748B;">Loading guards...</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Bottom: Sent SMS Dispatch History Table -->
+                <div class="cc-table-card" style="margin-top:24px; padding:20px; background:#fff; border-radius:14px; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <h4 style="margin:0; font-size:15px; font-weight:800; color:#0F172A;">📜 SMS Dispatch Log & Carrier Delivery Audit</h4>
+                      <span id="sms-history-count-badge" class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">0 dispatches</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <button class="btn btn-secondary" onclick="loadGuardSMSHistory()" style="font-size:12px; padding:5px 12px;">
+                        🔄 Refresh Log
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="data-table" style="width:100%; font-size:12px;">
+                      <thead>
+                        <tr style="background:#F8FAFC; text-align:left;">
+                          <th style="padding:10px 12px;">Ref #</th>
+                          <th style="padding:10px 12px;">Date / Time</th>
+                          <th style="padding:10px 12px;">Scope</th>
+                          <th style="padding:10px 12px;">Category</th>
+                          <th style="padding:10px 12px;">Message Text</th>
+                          <th style="padding:10px 12px;">Delivered / Total</th>
+                          <th style="padding:10px 12px;">Status</th>
+                          <th style="padding:10px 12px;">Dispatcher</th>
+                          <th style="padding:10px 12px; text-align:center;">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="sms-history-table-body">
+                        <tr>
+                          <td colspan="9" style="text-align:center; padding:24px; color:#64748B;">Loading SMS history...</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -13030,6 +13242,51 @@
         <button class="btn btn-secondary"
           onclick="document.getElementById('modal-add-contact').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="submitAddContact()" style="background:#22C55E;">Save Contact</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. View Guard SMS Delivery Recipients Modal -->
+  <div id="modal-sms-recipients" class="modal-overlay" style="display:none; z-index:10000;"
+    onclick="if(event.target===this) closeSMSRecipientsModal()">
+    <div class="modal-box" style="max-width:750px; width:92%; padding:24px; border-radius:18px; background:#FFFFFF;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #F1F5F9; padding-bottom:12px;">
+        <div>
+          <h4 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;" id="modal-sms-rec-title">📨 SMS Delivery Audit Receipts</h4>
+          <div style="font-size:12px; color:#64748B; margin-top:2px;" id="modal-sms-rec-sub">Detailed per-guard carrier delivery statuses</div>
+        </div>
+        <button onclick="closeSMSRecipientsModal()"
+          style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <!-- Message Text Box -->
+      <div style="background:#F8FAFC; padding:12px 14px; border-radius:10px; border:1px solid #E2E8F0; margin-bottom:16px;">
+        <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; margin-bottom:4px;">Transmitted Message Content</div>
+        <div id="modal-sms-rec-text" style="font-size:13px; color:#1E293B; line-height:1.4;">--</div>
+      </div>
+
+      <!-- Recipients Table -->
+      <div class="table-responsive" style="max-height:360px; overflow-y:auto; border:1px solid #E2E8F0; border-radius:10px;">
+        <table class="data-table" style="width:100%; font-size:12px;">
+          <thead>
+            <tr style="background:#F1F5F9; text-align:left;">
+              <th style="padding:8px 10px;">Guard Personnel</th>
+              <th style="padding:8px 10px;">Phone Number</th>
+              <th style="padding:8px 10px;">Client Site</th>
+              <th style="padding:8px 10px;">Delivery Status</th>
+              <th style="padding:8px 10px;">Gateway ID</th>
+            </tr>
+          </thead>
+          <tbody id="modal-sms-rec-tbody">
+            <tr>
+              <td colspan="5" style="text-align:center; padding:16px; color:#64748B;">Loading recipients...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button class="btn btn-secondary" onclick="closeSMSRecipientsModal()">Close</button>
       </div>
     </div>
   </div>

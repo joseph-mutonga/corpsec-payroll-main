@@ -219,3 +219,54 @@ class CallCenterOverviewResponse(BaseModel):
     recent_calls: List[CallLogResponse]
     active_queues: List[CallQueueResponse]
 
+
+# Guard SMS Text Messaging Schemas
+class GuardSMSSendRequest(BaseModel):
+    message_text: str
+    recipient_type: str = "ALL"  # "ALL", "SPECIFIED", "SITE"
+    guard_ids: Optional[List[int]] = None
+    site_id: Optional[int] = None
+    category: Optional[str] = "GENERAL"  # "GENERAL", "EMERGENCY", "SHIFT", "PAYROLL", "DISPATCH"
+
+
+class GuardSMSRecipientResponse(BaseModel):
+    id: int
+    guard_id: int
+    guard_name: str
+    employee_number: str
+    phone_number: str
+    site_name: Optional[str] = None
+    status: str
+    gateway_message_id: Optional[str] = None
+    cost: float = 0.0
+    error_message: Optional[str] = None
+    created_at: str
+
+
+class GuardSMSMessageResponse(BaseModel):
+    id: int
+    message_reference: str
+    sender_id: Optional[int] = None
+    sender_name: Optional[str] = None
+    recipient_type: str
+    site_id: Optional[int] = None
+    site_name: Optional[str] = None
+    message_text: str
+    category: str
+    total_recipients: int
+    delivered_count: int
+    failed_count: int
+    status: str
+    provider: str
+    created_at: str
+    date_formatted: Optional[str] = None
+
+
+class GuardSMSOverviewResponse(BaseModel):
+    total_messages_sent: int
+    total_guard_deliveries: int
+    total_recipients_targeted: int
+    delivery_success_rate: float
+    active_guards_registered: int
+
+
