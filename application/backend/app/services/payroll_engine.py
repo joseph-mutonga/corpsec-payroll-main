@@ -285,11 +285,18 @@ def calculate_guard_payroll(
 
     if basic_salary > 0:
         hourly_rate = basic_salary / 26.0 / 12.0
+        daily_rate_val = basic_salary / 26.0
     else:
         hourly_rate = daily_rate / 8.0 if daily_rate > 0 else 0.0
+        daily_rate_val = daily_rate
     
     if basic_salary > 0:
-        basic_pay = round(basic_salary * proration_factor, 2)
+        if regular_hours > 0:
+            basic_pay = round(min(regular_hours, 26.0 * 12.0) * hourly_rate * proration_factor, 2)
+        elif days_worked > 0:
+            basic_pay = round(min(days_worked, 26.0) * daily_rate_val * proration_factor, 2)
+        else:
+            basic_pay = round(basic_salary * proration_factor, 2)
     else:
         basic_pay = round(regular_hours * hourly_rate * proration_factor, 2)
         

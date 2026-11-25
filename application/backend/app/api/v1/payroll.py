@@ -254,14 +254,18 @@ def execute_payroll_calculation(
 
         if attendances:
             days_worked = len(attendances)
+            # Regular hours per shift attended capped at 12.0h (standard shift duration);
+            # Default to 12.0h if regular_hours was not recorded for a marked present shift
+            reg_hours = sum(min(a.regular_hours if a.regular_hours > 0 else 12.0, 12.0) for a in attendances)
         elif not period_has_attendance:
             # If no attendance has been captured across the entire period in the system,
             # active guards receive their standard contractual monthly baseline
             days_worked = contractual_target_days
+            reg_hours = contractual_target_days * 12.0  # 312.0 hours
         else:
             # Attendance is actively tracked for this period, but this guard had 0 shifts attended
             days_worked = 0
-        reg_hours = sum(a.regular_hours for a in attendances)
+            reg_hours = 0.0
 
         # Overtime calculation: ONLY include hours & pay from APPROVED OvertimeClaims up to eval_end_date
         att_ids = [a.id for a in attendances]
@@ -405,7 +409,12 @@ def execute_payroll_calculation(
         unworked_days = max(0, days_in_month - days_worked)
         excess_unworked_days = max(0, unworked_days - effective_allowed_off_days)
         excess_off_requests = max(0, off_day_count - allowed_off_days)
-        effective_deductible_days = max(excess_off_requests, excess_unworked_days)
+        unworked_shift_days = max(excess_off_requests, excess_unworked_days)
+
+        # Partial shift shortfall: when a guard attended a shift but worked fewer than 12 standard hours
+        shift_shortfall_hours = max(0.0, (days_worked * 12.0) - reg_hours) if attendances else 0.0
+        shift_shortfall_days = round(shift_shortfall_hours / 12.0, 4)
+        effective_deductible_days = unworked_shift_days + shift_shortfall_days
 
         # Reliever coverage deduction: check if any relievers were assigned to cover shifts for this regular guard
         reliever_covered_asgns = db.query(RelieverAssignment).filter(
