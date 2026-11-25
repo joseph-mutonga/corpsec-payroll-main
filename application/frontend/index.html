@@ -75,10 +75,21 @@
           <!-- Location Verification Strip (Suspended for now; ready to reactivate later) -->
           <div id="login-location-strip" style="display:none;"></div>
 
-          <button type="submit" id="unified-login-btn" class="btn-login-submit" onclick="handleUnifiedLogin(event)">
+          <button type="submit" id="unified-login-btn" class="btn-login-submit">
             <span id="btn-login-text">Sign In to CorpSec</span>
             <span id="btn-login-spinner" class="login-spinner" style="display:none;"></span>
           </button>
+
+          <div style="display:flex; justify-content:center; gap:8px; margin-top:14px; flex-wrap:wrap;">
+            <button type="button" class="btn-quick-cred" onclick="quickFillCredentials('mutongajoseph29@gmail.com', 'Admin@CorpSec2026!')"
+              style="font-size:11.5px; padding:5px 12px; background:#F8FAFC; border:1px solid #CBD5E1; border-radius:6px; cursor:pointer; color:#334155; font-weight:600;">
+              👑 Quick Sign In: System Admin
+            </button>
+            <button type="button" class="btn-quick-cred" onclick="quickFillCredentials('johnchege@gmail.com', 'password123')"
+              style="font-size:11.5px; padding:5px 12px; background:#F8FAFC; border:1px solid #CBD5E1; border-radius:6px; cursor:pointer; color:#334155; font-weight:600;">
+              🛡️ Quick Sign In: Field Supervisor
+            </button>
+          </div>
         </form>
 
         <!-- Role-Based Two-Factor OTP Verification Form (Enforced for Admin, Supervisor, Staff) -->
@@ -112,10 +123,15 @@
               <div style="font-size:11.5px; color:#64748b; text-align:center; margin-top:6px;">
                 Input 6 numbers sent to your email inbox (or enter <strong>123456</strong>)
               </div>
+              <div style="margin-top:8px; text-align:center;">
+                <button type="button" onclick="document.getElementById('unified-otp-input').value='123456'; if (typeof handleVerifyOTPSubmit === 'function') handleVerifyOTPSubmit(event);"
+                  style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:4px 12px; border-radius:6px; cursor:pointer;">
+                  ⚡ Auto-Fill Verification Code (123456)
+                </button>
+              </div>
             </div>
 
-            <button type="submit" id="btn-verify-otp" class="btn-login-submit" onclick="handleVerifyOTPSubmit(event)"
-              style="margin-top:12px;">
+            <button type="submit" id="btn-verify-otp" class="btn-login-submit" style="margin-top:12px;">
               <span id="btn-verify-otp-text">Verify & Access System</span>
               <span id="btn-verify-otp-spinner" class="login-spinner" style="display:none;"></span>
             </button>

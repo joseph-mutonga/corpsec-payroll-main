@@ -92,6 +92,14 @@ function checkAuthStatus() {
     authToken = '';
     localStorage.removeItem('corpsec_token');
     localStorage.removeItem('corpsec_user');
+    if (typeof handleBackToLogin === 'function') {
+      handleBackToLogin();
+    } else {
+      const loginForm = document.getElementById('unified-login-form');
+      const otpContainer = document.getElementById('unified-otp-container');
+      if (loginForm) loginForm.style.display = 'block';
+      if (otpContainer) otpContainer.style.display = 'none';
+    }
     if (loginOverlay) loginOverlay.style.display = 'flex';
     if (sidebar) sidebar.style.display = 'none';
     if (mainContent) mainContent.style.display = 'none';
@@ -576,6 +584,16 @@ function handleBackToLogin() {
   const otpContainer = document.getElementById('unified-otp-container');
   const alertEl = document.getElementById('unified-login-alert');
   const idInput = document.getElementById('unified-login-id');
+  const loginBtn = document.getElementById('unified-login-btn');
+  const btnText = document.getElementById('btn-login-text');
+  const btnSpinner = document.getElementById('btn-login-spinner');
+
+  isSubmittingLogin = false;
+  isVerifyingOTP = false;
+
+  if (loginBtn) loginBtn.disabled = false;
+  if (btnText) btnText.innerText = 'Sign In to CorpSec';
+  if (btnSpinner) btnSpinner.style.display = 'none';
 
   if (otpContainer) otpContainer.style.display = 'none';
   if (loginForm) loginForm.style.display = 'block';
@@ -859,6 +877,10 @@ function logout() {
   sessionStorage.removeItem('company_documents_vault_unlocked');
   sessionStorage.removeItem('guard_auth_token');
   sessionStorage.removeItem('guard_user');
+
+  if (typeof handleBackToLogin === 'function') {
+    handleBackToLogin();
+  }
 
   if (sessId && oldToken) {
     fetch(`${API_BASE}/auth/logout`, {
