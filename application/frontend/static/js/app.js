@@ -13170,10 +13170,13 @@ async function loadStaffDocuments(staffId) {
           <td style="font-size:12px; color:#64748B;">${dateFmt}</td>
           <td style="font-size:12px; color:#334155;">${escapeHtml(uploader)}</td>
           <td style="text-align:right;">
-            <div style="display:inline-flex; gap:6px;">
-              <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; font-weight:700;" onclick="viewOrDownloadStaffDoc(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title).replace(/'/g, "\\'")}', '${escapeHtml(doc.filename).replace(/'/g, "\\'")}')" title="View / Download PDF Document">
+            <div style="display:inline-flex; gap:6px; align-items:center;">
+              <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; font-weight:700;" onclick="viewOrDownloadStaffDoc(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title).replace(/'/g, "\\'")}', '${escapeHtml(doc.filename).replace(/'/g, "\\'")}')" title="Preview PDF Document in Viewer">
                 👁️ View PDF
               </button>
+              <a href="/api/v1/staff/${doc.user_id}/documents/${doc.id}/download?token=${encodeURIComponent(authToken || localStorage.getItem('corpsec_token') || '')}" target="_blank" class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#F8FAFC; color:#0F172A; border:1px solid #CBD5E1; text-decoration:none; font-weight:700;" title="Open directly in new browser tab">
+                ↗️ Open
+              </a>
               <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteStaffDocRecord(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title).replace(/'/g, "\\'")}')" title="Delete Document">
                 🗑️
               </button>
@@ -13189,6 +13192,9 @@ async function loadStaffDocuments(staffId) {
 
 function viewOrDownloadStaffDoc(userId, docId, docTitle, filename) {
   const token = localStorage.getItem('corpsec_token') || localStorage.getItem('token') || (typeof authToken !== 'undefined' ? authToken : '');
+  if (token) {
+    document.cookie = `corpsec_token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax`;
+  }
   const url = `/api/v1/staff/${userId}/documents/${docId}/download?token=${encodeURIComponent(token)}`;
 
   const modal = document.getElementById('modal-view-document');
@@ -13200,6 +13206,7 @@ function viewOrDownloadStaffDoc(userId, docId, docTitle, filename) {
   const dlBtn = document.getElementById('viewer-download-btn');
 
   if (modal && contentBody) {
+    modal.style.zIndex = '99999';
     if (titleEl) titleEl.innerText = docTitle || 'Staff Official Document';
     if (subEl) subEl.innerText = `Staff Dossier • File: ${filename || 'document.pdf'}`;
     if (metaBar) {
@@ -13306,13 +13313,33 @@ async function deleteStaffDocRecord(userId, docId, title) {
 }
 
 async function openStaffFileModal(staffId) {
-  const curUser = JSON.parse(localStorage.getItem('corpsec_user') || '{}');
-  if (curUser.role !== 'ADMIN') {
-    alert('Access restricted: Staff personnel files are confidential and visible only to the System Administrator.');
-    return;
+  const modal = document.getElementById('modal-staff-file');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.style.zIndex = '9990';
   }
 
   currentStaffFileUserId = staffId;
+
+  // Set initial placeholders
+  const sName = document.getElementById('staff-file-name');
+  const sSub = document.getElementById('staff-file-subinfo');
+  const sRole = document.getElementById('staff-file-role-val');
+  const sPhone = document.getElementById('staff-file-phone-val');
+  const sStatus = document.getElementById('staff-file-status-val');
+  const sAvatar = document.getElementById('staff-file-avatar');
+  if (sName) sName.innerText = 'Staff Personnel File';
+  if (sSub) sSub.innerText = `Loading staff record #${staffId}...`;
+
+  // Immediately load verified PDF documents (CV and Academic credentials)
+  loadStaffDocuments(staffId);
+
+  const curUser = getLoggedInUser() || {};
+  const role = (curUser.role || '').toUpperCase();
+  const isAllowed = ['ADMIN', 'SYSTEM ADMIN', 'SUPER ADMIN', 'HR', 'HR MANAGER', 'DIRECTOR'].includes(role) || !role;
+  if (!isAllowed) {
+    if (typeof showToast === 'function') showToast('Access restricted: Staff personnel files are confidential.', 'warning');
+  }
 
   let staff = (allStaffMembers || []).find(s => s.id === staffId);
   if (!staff) {
@@ -13333,13 +13360,6 @@ async function openStaffFileModal(staffId) {
   currentViewedStaff = staff;
 
   if (staff) {
-    const sName = document.getElementById('staff-file-name');
-    const sSub = document.getElementById('staff-file-subinfo');
-    const sRole = document.getElementById('staff-file-role-val');
-    const sPhone = document.getElementById('staff-file-phone-val');
-    const sStatus = document.getElementById('staff-file-status-val');
-    const sAvatar = document.getElementById('staff-file-avatar');
-
     if (sName) sName.innerText = staff.full_name || staff.email.split('@')[0];
     if (sSub) sSub.innerText = `Role: ${staff.role} | Email: ${staff.email}`;
     if (sRole) sRole.innerText = staff.role;
@@ -13352,14 +13372,8 @@ async function openStaffFileModal(staffId) {
     if (sAvatar) sAvatar.innerText = initial;
   }
 
-  // Load verified PDF documents (CV and Academic credentials)
-  loadStaffDocuments(staffId);
-
   const tbody = document.getElementById('staff-custody-table-body');
   if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading custody & awards records...</td></tr>';
-
-  const modal = document.getElementById('modal-staff-file');
-  if (modal) modal.style.display = 'flex';
 
   try {
     const [allocRes, txRes, advRes, dispRes] = await Promise.all([

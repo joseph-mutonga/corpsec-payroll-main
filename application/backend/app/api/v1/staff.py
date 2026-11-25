@@ -637,6 +637,7 @@ def list_staff_documents(
 
 
 @router.get("/{user_id}/documents/{doc_id}/download")
+@router.get("/{user_id}/documents/{doc_id}/pdf")
 def download_staff_document(
     user_id: int,
     doc_id: int,
@@ -666,7 +667,11 @@ def download_staff_document(
         doc.file_path,
         media_type="application/pdf",
         filename=doc.filename,
-        content_disposition_type="inline"
+        content_disposition_type="inline",
+        headers={
+            "Content-Disposition": f'inline; filename="{doc.filename}"',
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
     )
 
 
