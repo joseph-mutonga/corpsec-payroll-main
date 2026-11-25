@@ -17275,7 +17275,7 @@ async function loadSupervisorReports() {
       return;
     }
 
-    const curUser = currentUser || {};
+    const curUser = getLoggedInUser() || {};
     const isAdmin = (curUser.role === 'ADMIN' || curUser.role === 'Admin' || curUser.role === 'System Admin');
 
     tbody.innerHTML = reports.map(rep => {
