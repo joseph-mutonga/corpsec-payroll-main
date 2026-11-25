@@ -285,10 +285,27 @@ async function loadDashboard() {
         clockBtn.onclick = handleClockOut;
       } else {
         clockStatus.className = 'status-badge inactive';
-        clockStatus.innerText = '⚪ Day Off (No Shift Scheduled)';
-        clockBtn.className = 'btn-clock clock-in';
-        clockBtn.innerHTML = '▶ Clock In (Unrostered)';
-        clockBtn.onclick = () => handleClockIn(null);
+        if (data.is_today_off) {
+          clockStatus.style.background = '#ECFDF5';
+          clockStatus.style.color = '#065F46';
+          clockStatus.style.border = '1px solid #A7F3D0';
+          clockStatus.innerText = '🏖️ TODAY IS YOUR SCHEDULED OFF DAY';
+          clockBtn.className = 'btn-clock';
+          clockBtn.style.background = '#059669';
+          clockBtn.style.color = '#FFFFFF';
+          clockBtn.innerHTML = '🏖️ Scheduled Off Duty (Mandatory Rest Day)';
+          clockBtn.onclick = () => {
+            alert('🏖️ You are scheduled for a mandatory rest day today by your Field Supervisor.\n\nIf you were called in for an emergency unrostered shift, you may clock in.');
+            handleClockIn(null);
+          };
+        } else {
+          clockStatus.innerText = '⚪ Day Off (No Shift Scheduled)';
+          clockBtn.className = 'btn-clock clock-in';
+          clockBtn.style.background = '';
+          clockBtn.style.color = '';
+          clockBtn.innerHTML = '▶ Clock In (Unrostered)';
+          clockBtn.onclick = () => handleClockIn(null);
+        }
       }
     } else {
       document.getElementById('dash-site-name').innerText = shift.site_name || 'Assigned Site';
@@ -354,6 +371,9 @@ async function loadDashboard() {
       if (sgNoticeCard) sgNoticeCard.style.display = 'none';
       if (sgQaTile) sgQaTile.style.display = 'none';
     }
+
+    // Render Scheduled Off Days in Dashboard
+    renderScheduledOffDays(data);
 
   } catch (err) {
     console.error('Dashboard load error:', err);
@@ -837,6 +857,118 @@ async function loadProfile() {
 // -------------------------------------------------------------
 // 6. OFF DAYS MANAGEMENT FOR GUARDS
 // -------------------------------------------------------------
+function renderScheduledOffDays(data) {
+  const listEl = document.getElementById('dash-off-days-list');
+  const countBadge = document.getElementById('dash-off-days-count-badge');
+  const monthText = document.getElementById('dash-off-days-month-text');
+  const footerEl = document.getElementById('dash-off-days-footer');
+  const supNameEl = document.getElementById('dash-off-days-sup-name');
+  const notesEl = document.getElementById('dash-off-days-notes-text');
+  const leaveListEl = document.getElementById('leave-scheduled-off-days-list');
+  const leaveCountBadge = document.getElementById('leave-off-days-count-badge');
+
+  if (!listEl) return;
+
+  const count = data.off_days_count || 0;
+  const monthName = data.off_days_month_name || new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  if (monthText) monthText.innerText = monthName;
+
+  if (countBadge) {
+    countBadge.innerText = `${count} of 4 Days Scheduled`;
+    if (count >= 4) {
+      countBadge.style.background = '#ECFDF5';
+      countBadge.style.color = '#065F46';
+      countBadge.style.border = '1px solid #A7F3D0';
+    } else if (count > 0) {
+      countBadge.style.background = '#EEF2FF';
+      countBadge.style.color = '#4338CA';
+      countBadge.style.border = '1px solid #C7D2FE';
+    } else {
+      countBadge.style.background = '#FFFBEB';
+      countBadge.style.color = '#B45309';
+      countBadge.style.border = '1px solid #FDE68A';
+    }
+  }
+
+  if (leaveCountBadge) {
+    leaveCountBadge.innerText = `${count} of 4 Days Scheduled (${monthName})`;
+  }
+
+  const details = data.scheduled_off_days_details || [];
+  if (!details || details.length === 0) {
+    const emptyHtml = `
+      <div style="background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:10px; padding:16px; text-align:center;">
+        <div style="font-size:24px; margin-bottom:4px;">🏖️</div>
+        <div style="font-weight:600; font-size:13px; color:#475569;">No Off Days Scheduled Yet</div>
+        <div style="font-size:11px; color:#94A3B8; margin-top:4px;">
+          Your Field Supervisor will assign your 4 required monthly off days for ${monthName}.
+        </div>
+      </div>
+    `;
+    listEl.innerHTML = emptyHtml;
+    if (leaveListEl) leaveListEl.innerHTML = emptyHtml;
+    if (footerEl) footerEl.style.display = 'none';
+    return;
+  }
+
+  const renderPills = () => details.map((item, idx) => {
+    let badgeHtml = '';
+    let cardBorder = 'border:1px solid #E2E8F0;';
+    let cardBg = 'background:#FFFFFF;';
+
+    if (item.status === 'TODAY') {
+      badgeHtml = `<span class="status-badge" style="background:#10B981; color:#FFFFFF; font-weight:700; font-size:11px; padding:4px 8px; border-radius:6px; box-shadow:0 1px 3px rgba(16,185,129,0.3);">🏖️ TODAY • Off Duty</span>`;
+      cardBorder = 'border:2px solid #10B981;';
+      cardBg = 'background:#F0FDF4;';
+    } else if (item.status === 'COMPLETED') {
+      badgeHtml = `<span class="status-badge" style="background:#F1F5F9; color:#64748B; font-weight:600; font-size:11px; padding:4px 8px; border-radius:6px;">✓ Completed</span>`;
+      cardBg = 'background:#F8FAFC;';
+    } else {
+      badgeHtml = `<span class="status-badge" style="background:#EEF2FF; color:#4338CA; font-weight:700; font-size:11px; padding:4px 8px; border-radius:6px; border:1px solid #C7D2FE;">⏳ Upcoming</span>`;
+      cardBg = 'background:#FFFFFF;';
+    }
+
+    return `
+      <div style="${cardBg} ${cardBorder} border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; transition: all 0.2s ease;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:28px; height:28px; border-radius:50%; background:#EEF2FF; color:#4338CA; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center;">
+            ${idx + 1}
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:13px; color:#1E293B;">
+              ${item.formatted_date || item.off_date}
+            </div>
+            <div style="font-size:11px; color:#64748B;">
+              ${item.notes || 'Mandatory Scheduled Rest Day'}
+            </div>
+          </div>
+        </div>
+        <div>
+          ${badgeHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  listEl.innerHTML = renderPills();
+  if (leaveListEl) leaveListEl.innerHTML = renderPills();
+
+  if (data.off_days_supervisor_name || data.off_days_notes) {
+    if (footerEl) {
+      footerEl.style.display = 'block';
+      if (supNameEl) {
+        supNameEl.innerText = data.off_days_supervisor_name ? `Assigned by Field Supervisor: ${data.off_days_supervisor_name}` : 'Field Supervisor Assigned';
+      }
+      if (notesEl) {
+        notesEl.innerText = data.off_days_notes ? `Note: "${data.off_days_notes}"` : '';
+        notesEl.style.display = data.off_days_notes ? 'block' : 'none';
+      }
+    }
+  } else if (footerEl) {
+    footerEl.style.display = 'none';
+  }
+}
+
 async function loadOffDayAllowance() {
   const labelEl = document.getElementById('off-day-allowance-label');
   const badgeEl = document.getElementById('off-day-remaining-badge');
@@ -847,6 +979,68 @@ async function loadOffDayAllowance() {
   const month = now.getMonth() + 1;
 
   try {
+    // 1. Fetch supervisor-scheduled off days for the leave tab
+    try {
+      const schedRes = await apiFetch(`/guard-portal/off-days?year=${year}&month=${month}`);
+      if (schedRes.ok) {
+        const schedData = await schedRes.json();
+        const leaveListEl = document.getElementById('leave-scheduled-off-days-list');
+        const leaveBadge = document.getElementById('leave-off-days-count-badge');
+        if (leaveBadge) {
+          leaveBadge.innerText = `${schedData.total_off_days || 0} of 4 Days Scheduled`;
+        }
+        if (leaveListEl) {
+          const offDates = schedData.off_dates || [];
+          if (offDates.length === 0) {
+            leaveListEl.innerHTML = `
+              <div style="background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:10px; padding:16px; text-align:center;">
+                <div style="font-size:24px; margin-bottom:4px;">🏖️</div>
+                <div style="font-weight:600; font-size:13px; color:#475569;">No Off Days Scheduled Yet</div>
+                <div style="font-size:11px; color:#94A3B8; margin-top:4px;">
+                  Your Field Supervisor has not yet assigned your 4 required monthly off days for this month.
+                </div>
+              </div>
+            `;
+          } else {
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            leaveListEl.innerHTML = offDates.map((dStr, idx) => {
+              const dObj = new Date(dStr + 'T00:00:00');
+              const fmt = dObj.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+              let bHtml = '';
+              let cBorder = 'border:1px solid #E2E8F0;';
+              let cBg = 'background:#FFFFFF;';
+              if (dStr === todayStr) {
+                bHtml = '<span class="status-badge" style="background:#10B981; color:#fff; font-weight:700;">🏖️ TODAY • Off Duty</span>';
+                cBorder = 'border:2px solid #10B981;';
+                cBg = 'background:#F0FDF4;';
+              } else if (dStr < todayStr) {
+                bHtml = '<span class="status-badge" style="background:#F1F5F9; color:#64748B;">✓ Completed</span>';
+                cBg = 'background:#F8FAFC;';
+              } else {
+                bHtml = '<span class="status-badge" style="background:#EEF2FF; color:#4338CA; font-weight:700; border:1px solid #C7D2FE;">⏳ Upcoming</span>';
+              }
+              return `
+                <div style="${cBg} ${cBorder} border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:28px; height:28px; border-radius:50%; background:#EEF2FF; color:#4338CA; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center;">
+                      ${idx + 1}
+                    </div>
+                    <div>
+                      <div style="font-weight:700; font-size:13px; color:#1E293B;">${fmt}</div>
+                      <div style="font-size:11px; color:#64748B;">${schedData.notes || 'Mandatory Scheduled Rest Day'}</div>
+                    </div>
+                  </div>
+                  <div>${bHtml}</div>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load supervisor off-days for leave tab:', e);
+    }
+
     const res = await apiFetch(`/off-days/allowances?year=${year}&month=${month}`);
     if (!res.ok) return;
     const allowances = await res.json();

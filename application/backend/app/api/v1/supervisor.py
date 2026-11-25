@@ -13,7 +13,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import secrets
 
-from application.backend.app.api.deps import get_db, require_admin, require_admin_or_supervisor, require_admin_or_hr
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_supervisor, require_admin_or_hr, get_current_user
 from application.backend.app.core.security import get_password_hash
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
@@ -791,17 +791,25 @@ def get_guard_off_days_schedule(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_supervisor)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Retrieve scheduled monthly off-days for a guard.
-    Supervisors can only view off-days for guards under their supervision or assigned sites.
+    - Guards can view their own scheduled off-days.
+    - Supervisors can only view off-days for guards under their supervision or assigned sites.
+    - Admins can view off-days for any guard.
     """
     guard = db.query(Guard).filter(Guard.id == guard_id).first()
     if not guard:
         raise HTTPException(status_code=404, detail=f"Guard #{guard_id} not found.")
 
-    if current_user.role == UserRole.SUPERVISOR.value:
+    if current_user.role == UserRole.GUARD.value:
+        if current_user.guard_id != guard_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Guard Restriction: You are only authorized to view your own scheduled off-days."
+            )
+    elif current_user.role == UserRole.SUPERVISOR.value:
         if not is_guard_under_supervisor(db, guard.id, current_user.id, guard.primary_site_id):
             raise HTTPException(
                 status_code=403,

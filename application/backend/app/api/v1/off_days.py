@@ -433,7 +433,7 @@ def get_guard_off_days_schedule_alias(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_supervisor)
+    current_user: User = Depends(get_current_user)
 ):
     from application.backend.app.api.v1.supervisor import get_guard_off_days_schedule
     return get_guard_off_days_schedule(guard_id=guard_id, year=year, month=month, db=db, current_user=current_user)

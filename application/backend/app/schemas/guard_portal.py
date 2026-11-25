@@ -19,6 +19,13 @@ class GuardTodayShift(BaseModel):
     geofence_radius: Optional[float] = 200.0
 
 
+class ScheduledOffDayDetail(BaseModel):
+    off_date: date
+    formatted_date: str
+    status: str  # "TODAY", "UPCOMING", "COMPLETED"
+    notes: Optional[str] = None
+
+
 class GuardHomeResponse(BaseModel):
     guard_id: int
     employee_number: str
@@ -31,6 +38,13 @@ class GuardHomeResponse(BaseModel):
     is_super_guard: bool = False
     super_guard_site_id: Optional[int] = None
     super_guard_site_name: Optional[str] = None
+    scheduled_off_days: Optional[List[date]] = None
+    scheduled_off_days_details: Optional[List[ScheduledOffDayDetail]] = None
+    off_days_count: int = 0
+    off_days_month_name: Optional[str] = None
+    off_days_supervisor_name: Optional[str] = None
+    off_days_notes: Optional[str] = None
+    is_today_off: bool = False
 
 
 class ShiftInfoResponse(BaseModel):

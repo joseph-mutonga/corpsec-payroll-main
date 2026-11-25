@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from application.backend.app.services.pdf_service import generate_payslip_pdf
@@ -16,11 +16,13 @@ from application.backend.app.models.leave import LeaveRequest
 from application.backend.app.models.incident import Incident
 from application.backend.app.models.user import User
 from application.backend.app.models.audit import AuditLog
+from application.backend.app.models.off_day import GuardOffDaySchedule
+from application.backend.app.schemas.off_day import GuardOffDayScheduleResponse
 from application.backend.app.schemas.guard_portal import (
     GuardDashboardResponse, GuardHomeResponse, GuardTodayShift, ShiftInfoResponse, ClockInStatusResponse,
     LeaveRequestCreate, GuardLeaveCreate, LeaveRequestResponse,
     IncidentReportCreate, GuardIncidentCreate, IncidentReportResponse,
-    GuardPayslipResponse
+    GuardPayslipResponse, ScheduledOffDayDetail
 )
 
 router = APIRouter(prefix="", tags=["Guard Mobile Portal"])
@@ -44,6 +46,42 @@ def get_guard_portal_dashboard(
 
     today = date.today()
 
+    # Query scheduled off-days assigned by Field Supervisor for current month
+    month_schedules = db.query(GuardOffDaySchedule).filter(
+        GuardOffDaySchedule.guard_id == guard.id,
+        GuardOffDaySchedule.year == today.year,
+        GuardOffDaySchedule.month == today.month
+    ).order_by(GuardOffDaySchedule.off_date.asc()).all()
+
+    scheduled_dates = [s.off_date for s in month_schedules]
+    is_today_off = (today in scheduled_dates)
+
+    off_days_sup_name = None
+    off_days_notes = None
+    if month_schedules:
+        first_s = month_schedules[0]
+        off_days_notes = first_s.notes
+        if first_s.supervisor_id:
+            sup_user = db.query(User).filter(User.id == first_s.supervisor_id).first()
+            if sup_user:
+                off_days_sup_name = sup_user.full_name or sup_user.email
+
+    off_days_details = []
+    for s in month_schedules:
+        s_date = s.off_date
+        if s_date == today:
+            d_status = "TODAY"
+        elif s_date < today:
+            d_status = "COMPLETED"
+        else:
+            d_status = "UPCOMING"
+        off_days_details.append(ScheduledOffDayDetail(
+            off_date=s_date,
+            formatted_date=s_date.strftime("%a, %d %b %Y"),
+            status=d_status,
+            notes=s.notes
+        ))
+
     today_asgn = db.query(RosterAssignment).filter(
         RosterAssignment.guard_id == guard.id,
         RosterAssignment.shift_date == today
@@ -56,7 +94,24 @@ def get_guard_portal_dashboard(
 
     clocked_in = bool(today_att and today_att.actual_clock_in and not today_att.actual_clock_out)
 
-    if today_asgn and today_asgn.site_id and today_asgn.shift_id:
+    if is_today_off and not clocked_in:
+        # Today is a designated mandatory scheduled off-day set by supervisor
+        today_shift = GuardTodayShift(
+            site_name="Supervisor Scheduled Off Day",
+            shift_name="Mandatory Day Off (Rest Day)",
+            shift_id=None,
+            start_time="--:--",
+            end_time="--:--",
+            supervisor_name=off_days_sup_name or "Supervisor",
+            is_clocked_in=False,
+            is_scheduled=False,
+            attendance_id=today_att.id if today_att else None,
+            site_id=None,
+            site_latitude=None,
+            site_longitude=None,
+            geofence_radius=200.0
+        )
+    elif today_asgn and today_asgn.site_id and today_asgn.shift_id:
         site = db.query(Site).filter(Site.id == today_asgn.site_id).first()
         shift = db.query(Shift).filter(Shift.id == today_asgn.shift_id).first()
         today_shift = GuardTodayShift(
@@ -150,7 +205,62 @@ def get_guard_portal_dashboard(
         recent_notifications_count=0,
         is_super_guard=is_sg,
         super_guard_site_id=sg_site.id if sg_site else None,
-        super_guard_site_name=sg_site.site_name if sg_site else None
+        super_guard_site_name=sg_site.site_name if sg_site else None,
+        scheduled_off_days=scheduled_dates,
+        scheduled_off_days_details=off_days_details,
+        off_days_count=len(scheduled_dates),
+        off_days_month_name=today.strftime("%B %Y"),
+        off_days_supervisor_name=off_days_sup_name,
+        off_days_notes=off_days_notes,
+        is_today_off=is_today_off
+    )
+
+
+@router.get("/guard-portal/off-days", response_model=GuardOffDayScheduleResponse)
+@router.get("/portal/off-days", response_model=GuardOffDayScheduleResponse)
+def get_guard_portal_off_days(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    guard_user: User = Depends(require_guard)
+):
+    """Fetch scheduled off-days for the authenticated guard."""
+    guard = db.query(Guard).filter(Guard.id == guard_user.guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard profile not found")
+
+    target_year = year or date.today().year
+    target_month = month or date.today().month
+
+    schedules = db.query(GuardOffDaySchedule).filter(
+        GuardOffDaySchedule.guard_id == guard.id,
+        GuardOffDaySchedule.year == target_year,
+        GuardOffDaySchedule.month == target_month
+    ).order_by(GuardOffDaySchedule.off_date.asc()).all()
+
+    off_dates = [s.off_date for s in schedules]
+    latest = schedules[0] if schedules else None
+    notes = latest.notes if latest else None
+    created_at = latest.created_at if latest else None
+    updated_at = latest.updated_at if latest else None
+    sup_id = latest.supervisor_id if latest else None
+
+    sup_user = db.query(User).filter(User.id == sup_id).first() if sup_id else None
+    sup_name = (sup_user.full_name or sup_user.email) if sup_user else None
+
+    return GuardOffDayScheduleResponse(
+        guard_id=guard.id,
+        guard_name=guard.full_name,
+        employee_number=guard.employee_number,
+        year=target_year,
+        month=target_month,
+        off_dates=off_dates,
+        total_off_days=len(off_dates),
+        supervisor_id=sup_id or 0,
+        supervisor_name=sup_name,
+        notes=notes,
+        created_at=created_at,
+        updated_at=updated_at
     )
 
 
