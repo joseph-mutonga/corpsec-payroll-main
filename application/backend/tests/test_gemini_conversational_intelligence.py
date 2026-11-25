@@ -420,6 +420,38 @@ def test_calls_made_today_straight_forward_no_unnecessary_dumps(db_session: Sess
     assert "ATVId_" not in res
 
 
+def test_guards_present_today_straight_forward_no_unnecessary_dumps(db_session: Session):
+    """
+    Verifies that when asked 'how may guards are present today':
+    - The answer is straightforward and direct with today's date.
+    - It does not misreport yesterday's attendance as today.
+    - It does not dump '### ATTENDANCE DETAILS' or markdown tables.
+    - It does not dump '### DATABASE VERIFICATION' query time telemetry.
+    """
+    from application.backend.app.services.erp_analytics_service import AttendanceAnalyticsService
+    today_eat = AttendanceAnalyticsService.get_current_date_eat()
+    today_str = today_eat.strftime("%d %B %Y")
+
+    att_rep = AttendanceAnalyticsService.get_attendance_report(db_session)
+    assert att_rep["date_formatted"] == today_str
+    assert att_rep["guards_clocked_in"] == 0
+
+    t = AITelemetryService.get_system_telemetry(db_session, user_query="how may guards are present today", category="WORKFORCE", bypass_cache=True)
+    res = GeminiAIService.generate_grounded_fallback_analysis("how may guards are present today.", t)
+
+    assert "0 guards" in res or "0 guard" in res
+    assert today_str in res
+    assert "ATTENDANCE DETAILS" not in res
+    assert "DATABASE VERIFICATION" not in res
+    assert "| Employee Number |" not in res
+
+    # When user explicitly asks for attendance report, table is provided
+    res_rep = GeminiAIService.generate_grounded_fallback_analysis("show attendance report and details", t)
+    assert "ATTENDANCE REPORT" in res_rep
+    assert "ATTENDANCE DETAILS" in res_rep
+
+
+
 
 
 

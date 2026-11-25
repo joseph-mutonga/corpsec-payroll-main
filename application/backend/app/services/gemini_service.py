@@ -27,21 +27,21 @@ GEMINI_SYSTEM_INSTRUCTION = (
     "- Leave Requests & Operating Expenses.\n\n"
     "CRITICAL RULES:\n"
     "1. BE STRAIGHTFORWARD, DIRECT, AND CONCISE. Answer ONLY what the administrator explicitly asks. Do NOT add unrequested explanations, historical tables, past logs, or system telemetry dumps.\n"
-    "   - When the user asks a specific count or status question (e.g. 'how many calls we made today', 'who is on duty', 'how many guards clocked in', 'what are the total expenses'), answer THAT question directly and concisely in 1-2 straightforward sentences.\n"
+    "   - When the user asks a specific count or status question (e.g. 'how many calls we made today', 'who is on duty', 'how many guards clocked in', 'how many guards are present today', 'what are the total expenses'), answer THAT question directly and concisely in 1-2 straightforward sentences.\n"
     "   - NEVER dump large historical tables, past logs, or all-time records when the user asked about a specific period or count (such as 'today').\n"
+    "   - NEVER output markdown tables, raw logs, or verification blocks unless explicitly requested by the administrator.\n"
     "   - NEVER output 'RECENT CALL DETAIL RECORDS (CDRS)', historical call logs, or past message tables unless the user explicitly requests to 'list calls', 'show recent calls', 'show call logs', or 'show CDRs'.\n"
     "   - NEVER output '### DATABASE VERIFICATION' or query execution time (e.g., 'Query Execution Time: 119.06 ms') unless the administrator explicitly asks for query performance, latency, or database verification.\n"
     "2. NEVER dump server infrastructure hardware metrics (CPU, RAM, Disk, MySQL threads) unless the administrator specifically asks about server status, system health, or hardware infrastructure.\n"
     "3. GREETINGS: If the user simply says 'hello', 'hi', or similar greeting, reply warmly and concisely in 1-2 sentences stating you are ready to assist with all system operations (payment advances, assets/inventory, call centre, client invoices, contracts, guard attendance, or statutory payroll). Do NOT output server CPU/RAM telemetry.\n"
-    "4. ATTENDANCE & ON-DUTY QUESTIONS: When asked how many guards are present, who is on duty, who attended work, or for an attendance report:\n"
-    "   - Answer the question directly in the very first sentence (e.g., '1 guard clocked in today (1 currently on duty, 0 clocked out).')\n"
-    "   - Follow immediately by outputting the EXACT standardized ATTENDANCE REPORT provided in the grounding data verbatim:\n"
-    "     * ALWAYS preserve the exact headings: '### ATTENDANCE REPORT', '### ATTENDANCE DETAILS', and '### DATABASE VERIFICATION'.\n"
-    "     * Use standard markdown bullet lists ('- ') for all bullet points. NEVER use unicode bullet symbols ('•').\n"
-    "     * Output the table under '### ATTENDANCE DETAILS' as a standard Markdown table with pipe characters: '| Employee Number | Guard Name | Site | Clock In | Clock Out | Hours | Status |' followed by '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |' and each data row in '| ... |'.\n"
-    "     * NEVER wrap table rows in backticks (never output `| ... |`). All table rows must be raw markdown lines starting and ending with '|'.\n"
-    "   - NEVER confuse active registered guards (11) with physical attendance (1 or 4) or guards currently on duty.\n"
-    "   - State the exact breakdown: Total registered guards, Active guards, Guards who clocked in, Guards who clocked out, Currently on duty, Absent guards.\n"
+    "4. ATTENDANCE & ON-DUTY QUESTIONS:\n"
+    "   - When asked simple count or presence questions (e.g., 'how many guards are present today', 'who is on duty', 'who attended work', 'guards present today', 'are guards on duty'):\n"
+    "     * Answer directly, concisely, and straightforwardly in 1-2 sentences with today's verified numbers (e.g., '0 guards are currently clocked in or on duty today (25 November 2026), as no attendance records have been logged for today yet (of 14 active registered guards).' or 'X guards clocked in today (25 November 2026): Y currently on duty, Z clocked out (of 14 active registered guards).').\n"
+    "     * Do NOT dump markdown tables, '### ATTENDANCE REPORT', '### ATTENDANCE DETAILS', or '### DATABASE VERIFICATION' sections unless the administrator explicitly asks to 'generate an attendance report', 'show attendance table', 'list attendance details', or 'audit attendance'.\n"
+    "   - When the administrator explicitly asks for an attendance report, attendance breakdown, or table list:\n"
+    "     * State the summary in the first sentence, followed by the table under '### ATTENDANCE DETAILS' formatted with standard markdown pipes (| Employee Number | Guard Name | Site | Clock In | Clock Out | Hours | Status |).\n"
+    "   - NEVER confuse active registered guards with physical attendance or guards currently on duty.\n"
+    "   - ALWAYS use today's actual calendar date for 'today'. If no attendance punches have been logged yet for today, state 0 guards clocked in today. Never report a previous day's attendance as today.\n"
     "5. PAYMENT ADVANCES: When asked about salary or payment advances, provide exact verified figures (approved, deducted, pending, totals, and per-guard breakdown).\n"
     "6. ASSETS, INVENTORY & GUARD UNIFORMS CUSTODY:\n"
     "   - When asked about firm-wide assets, inventory, uniforms, supplies, or specific gear items (e.g. 'caps', 'boots', 'radios', 'raincoats'):\n"
@@ -163,14 +163,23 @@ class GeminiAIService:
                 "How can I assist you with specific records or reports?"
             )
 
-        # 2. Attendance & On-Duty queries -> return verified Section 9 Attendance Report
+        # 2. Attendance & On-Duty queries -> concise by default, table only if requested
         att_keywords = ["attendance", "present", "clock in", "clock-in", "clock out", "clock-out", "attended", "who is on duty", "guards on duty", "guards present", "who attended", "absent"]
         if any(w in p_lower for w in att_keywords):
+            clocked_in = ops.get("guards_clocked_in_today", 0)
+            on_duty = ops.get("guards_currently_on_duty", 0)
+            clocked_out = ops.get("guards_clocked_out_today", 0)
+            active_guards = ops.get("active_registered_guards", 14)
+            date_formatted = telemetry.get("attendance_analytics", {}).get("date_formatted") or AttendanceAnalyticsService.get_current_date_eat().strftime("%d %B %Y")
+
+            is_report_request = any(r in p_lower for r in ["report", "breakdown", "table", "details", "list", "audit", "all records", "all guards"])
+            if not is_report_request:
+                if clocked_in == 0:
+                    return f"0 guards are currently clocked in or on duty today ({date_formatted}), as no attendance records have been logged for today yet (of {active_guards} active registered guards)."
+                return f"{clocked_in} guard(s) clocked in today ({date_formatted}): {on_duty} currently on duty, {clocked_out} clocked out (of {active_guards} active registered guards)."
+
             std_att = telemetry.get("standardized_attendance_report")
             if std_att:
-                clocked_in = ops.get("guards_clocked_in_today", 4)
-                on_duty = ops.get("guards_currently_on_duty", 2)
-                clocked_out = ops.get("guards_clocked_out_today", 2)
                 lead = f"**Summary:** {clocked_in} guards clocked in today ({on_duty} currently on duty, {clocked_out} clocked out).\n\n"
                 return lead + std_att
 
@@ -484,7 +493,7 @@ class GeminiAIService:
             f"### 🛡️ CorpSec ERP Operational Status Overview ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n",
             "#### 👥 Workforce & Attendance",
             f"- **Active Registered Guards:** {ops.get('active_registered_guards', 11)}",
-            f"- **Today's Attendance:** {ops.get('guards_clocked_in_today', 4)} clocked in ({ops.get('guards_currently_on_duty', 3)} on duty, {ops.get('guards_clocked_out_today', 1)} clocked out, {ops.get('guards_absent_today', 7)} absent)",
+            f"- **Today's Attendance:** {ops.get('guards_clocked_in_today', 0)} clocked in ({ops.get('guards_currently_on_duty', 0)} on duty, {ops.get('guards_clocked_out_today', 0)} clocked out, {ops.get('guards_absent_today', 0)} absent)",
             f"- **Active Client Sites:** {ops.get('active_client_sites', 3)} sites monitored",
             f"- **Field Supervisors:** {ops.get('active_field_supervisors', 0)} active",
             "",
@@ -725,10 +734,10 @@ class GeminiAIService:
             fin = telemetry.get("financial_and_payroll", {})
             compact_ctx = {
                 "active_registered_guards": ops.get("active_registered_guards", 11),
-                "guards_currently_on_duty": ops.get("guards_currently_on_duty", 3),
-                "guards_clocked_in_today": ops.get("guards_clocked_in_today", 4),
-                "guards_clocked_out_today": ops.get("guards_clocked_out_today", 1),
-                "guards_absent_today": ops.get("guards_absent_today", 7),
+                "guards_currently_on_duty": ops.get("guards_currently_on_duty", 0),
+                "guards_clocked_in_today": ops.get("guards_clocked_in_today", 0),
+                "guards_clocked_out_today": ops.get("guards_clocked_out_today", 0),
+                "guards_absent_today": ops.get("guards_absent_today", 0),
                 "total_guards_registered": ops.get("total_guards_registered", 11),
                 "active_client_sites": ops.get("active_client_sites", 3),
                 "active_client_contracts": fin.get("active_client_contracts", 2),

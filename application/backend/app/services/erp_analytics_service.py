@@ -57,17 +57,11 @@ class AttendanceAnalyticsService:
         """
         t0 = time.perf_counter()
         today_eat = cls.get_current_date_eat()
+        latest_shift_date = db.query(func.max(Attendance.shift_date)).scalar()
         if target_date is not None:
             report_date = target_date
         else:
-            # Check if attendance records exist for today
-            has_today = db.query(Attendance.id).filter(Attendance.shift_date == today_eat).first() is not None
-            if has_today:
-                report_date = today_eat
-            else:
-                # If no punches logged yet for today, fall back to the most recent active operational shift date
-                latest_shift_date = db.query(func.max(Attendance.shift_date)).scalar()
-                report_date = latest_shift_date or today_eat
+            report_date = today_eat
         report_date_str = report_date.strftime("%d %B %Y")
         reporting_ts = cls.get_current_timestamp_eat()
 
@@ -175,6 +169,10 @@ class AttendanceAnalyticsService:
         if report_date < cls.get_current_date_eat():
             incomplete_count = on_duty_count
 
+        if report_date == today_eat and len(records) == 0:
+            latest_str = latest_shift_date.strftime("%d %B %Y") if latest_shift_date else "None"
+            warnings.append(f"No attendance punches logged yet for today ({report_date_str}). Most recent shift records were on {latest_str}.")
+
         q_time_ms = round((time.perf_counter() - t0) * 1000, 2)
 
         # Standardized Markdown Table
@@ -231,6 +229,8 @@ class AttendanceAnalyticsService:
             "records_count": len(records),
             "details_rows": details_rows,
             "warnings": warnings,
+            "latest_active_shift_date": str(latest_shift_date) if latest_shift_date else None,
+            "latest_active_shift_date_formatted": latest_shift_date.strftime("%d %B %Y") if latest_shift_date else None,
             "standardized_report": standardized_report
         }
 
