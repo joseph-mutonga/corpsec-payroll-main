@@ -13171,10 +13171,10 @@ async function loadStaffDocuments(staffId) {
           <td style="font-size:12px; color:#334155;">${escapeHtml(uploader)}</td>
           <td style="text-align:right;">
             <div style="display:inline-flex; gap:6px;">
-              <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; font-weight:700;" onclick="viewOrDownloadStaffDoc(${doc.user_id}, ${doc.id})" title="View / Download PDF Document">
+              <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; font-weight:700;" onclick="viewOrDownloadStaffDoc(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title).replace(/'/g, "\\'")}', '${escapeHtml(doc.filename).replace(/'/g, "\\'")}')" title="View / Download PDF Document">
                 👁️ View PDF
               </button>
-              <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteStaffDocRecord(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title)}')" title="Delete Document">
+              <button class="btn btn-danger" style="padding:4px 8px; font-size:11px; background:#EF4444; color:#fff; border:none;" onclick="deleteStaffDocRecord(${doc.user_id}, ${doc.id}, '${escapeHtml(doc.title).replace(/'/g, "\\'")}')" title="Delete Document">
                 🗑️
               </button>
             </div>
@@ -13187,10 +13187,50 @@ async function loadStaffDocuments(staffId) {
   }
 }
 
-function viewOrDownloadStaffDoc(userId, docId) {
-  const url = `/api/v1/staff/${userId}/documents/${docId}/download`;
-  window.open(url, '_blank');
+function viewOrDownloadStaffDoc(userId, docId, docTitle, filename) {
+  const token = localStorage.getItem('corpsec_token') || localStorage.getItem('token') || (typeof authToken !== 'undefined' ? authToken : '');
+  const url = `/api/v1/staff/${userId}/documents/${docId}/download?token=${encodeURIComponent(token)}`;
+
+  const modal = document.getElementById('modal-view-document');
+  const titleEl = document.getElementById('viewer-doc-title');
+  const subEl = document.getElementById('viewer-doc-sub');
+  const metaBar = document.getElementById('viewer-meta-bar');
+  const contentBody = document.getElementById('viewer-content-body');
+  const fsBtn = document.getElementById('viewer-fullscreen-btn');
+  const dlBtn = document.getElementById('viewer-download-btn');
+
+  if (modal && contentBody) {
+    if (titleEl) titleEl.innerText = docTitle || 'Staff Official Document';
+    if (subEl) subEl.innerText = `Staff Dossier • File: ${filename || 'document.pdf'}`;
+    if (metaBar) {
+      metaBar.innerHTML = `
+        <div><strong>Document:</strong> <span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">📑 Staff CV / Academic Document</span></div>
+        <div><strong>Filename:</strong> ${escapeHtml(filename || 'document.pdf')}</div>
+        <div><strong>Access:</strong> Verified Personnel Record</div>
+      `;
+    }
+    if (fsBtn) {
+      fsBtn.onclick = () => window.open(url, '_blank');
+    }
+    if (dlBtn) {
+      dlBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'staff_document.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+    }
+    contentBody.innerHTML = `
+      <iframe src="${url}" style="width:100%; height:100%; min-height:550px; border:none; display:block;" title="${escapeHtml(docTitle || 'Staff Document')}"></iframe>
+    `;
+    modal.style.display = 'flex';
+  } else {
+    window.open(url, '_blank');
+  }
 }
+window.viewOrDownloadStaffDoc = viewOrDownloadStaffDoc;
 
 async function handleStaffDocUpload(event) {
   event.preventDefault();

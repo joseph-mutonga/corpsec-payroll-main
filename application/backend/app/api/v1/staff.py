@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.orm import Session
 
-from application.backend.app.api.deps import get_db, require_admin
+from application.backend.app.api.deps import get_db, require_admin, get_current_user, require_admin_or_hr, require_admin_or_supervisor
 from application.backend.app.core.security import get_password_hash
 from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.audit import AuditLog
@@ -503,7 +503,7 @@ async def upload_staff_document(
     document_type: str = Form(...),
     title: str = Form(...),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """
     Upload and store official staff documents (CV/Resume, Academic Certificates, Credentials).
@@ -595,9 +595,20 @@ async def upload_staff_document(
 def list_staff_documents(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """List all verified PDF documents (CV, academic certificates) for a staff member."""
+    role_val = (current_user.role or "").upper()
+    is_admin_or_hr = role_val in [UserRole.ADMIN.value, UserRole.HR.value, "SYSTEM ADMIN", "SUPER ADMIN"]
+    is_supervisor = role_val == UserRole.SUPERVISOR.value
+    is_owner = current_user.id == user_id
+
+    if not (is_admin_or_hr or is_supervisor or is_owner):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative, HR or Supervisor privileges required to view personnel documents."
+        )
+
     staff_user = db.query(User).filter(User.id == user_id).first()
     if not staff_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
@@ -630,9 +641,20 @@ def download_staff_document(
     user_id: int,
     doc_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Preview or download a verified staff PDF document."""
+    role_val = (current_user.role or "").upper()
+    is_admin_or_hr = role_val in [UserRole.ADMIN.value, UserRole.HR.value, "SYSTEM ADMIN", "SUPER ADMIN"]
+    is_supervisor = role_val == UserRole.SUPERVISOR.value
+    is_owner = current_user.id == user_id
+
+    if not (is_admin_or_hr or is_supervisor or is_owner):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative, HR or Supervisor privileges required to access personnel documents."
+        )
+
     doc = db.query(StaffDocument).filter(StaffDocument.id == doc_id, StaffDocument.user_id == user_id).first()
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff document not found.")
@@ -653,7 +675,7 @@ def delete_staff_document(
     user_id: int,
     doc_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Delete a staff PDF document record and remove the stored file."""
     doc = db.query(StaffDocument).filter(StaffDocument.id == doc_id, StaffDocument.user_id == user_id).first()
