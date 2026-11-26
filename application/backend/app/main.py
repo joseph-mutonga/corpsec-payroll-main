@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from application.backend.app.core.config import settings
 from application.backend.app.core.database import engine, Base, sync_db_schema
 from application.backend.app.core.limiter import limiter, _rate_limit_exceeded_handler
+from application.backend.app.core.login_security import LoginSecurityMiddleware, login_security_store
 from slowapi.errors import RateLimitExceeded
 from application.backend.app.models import *
 from application.backend.app.api.v1 import (
@@ -78,6 +79,14 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoCacheStaticMiddleware)
+app.add_middleware(
+    LoginSecurityMiddleware,
+    store=login_security_store,
+    protected_paths=(
+        f"{settings.API_V1_STR}/auth/login",
+        f"{settings.API_V1_STR}/auth/login/guard",
+    ),
+)
 
 # Include API Routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)

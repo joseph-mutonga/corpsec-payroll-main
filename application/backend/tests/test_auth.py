@@ -27,20 +27,21 @@ def test_admin_login_invalid_password(client):
 
 
 def test_login_rate_limiting(client):
-    """Verify that rapid invalid login attempts trigger HTTP 429 Too Many Requests."""
+    """Verify that rapid invalid login attempts (>5 per 15 min) trigger HTTP 429 Too Many Requests."""
     from application.backend.app.core.limiter import limiter
     limiter.enabled = True
     try:
-        for _ in range(60):
+        for _ in range(5):
             client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
-        
-        # 61st attempt should be blocked with 429
+
+        # 6th attempt should be blocked with 429
         blocked_resp = client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
         assert blocked_resp.status_code == 429
         assert "Too many login attempts" in blocked_resp.json()["detail"]
         assert "Retry-After" in blocked_resp.headers
     finally:
         limiter.enabled = False
+        limiter.reset()
 
 
 def test_guard_login_success(client):
@@ -368,3 +369,166 @@ def test_production_email_hardening_and_otp_failure_handling(client, db, monkeyp
 
     resend_res = client.post("/api/v1/auth/resend-otp", json={"email": "otp_fail_sup@corpsec.co.ke"})
     assert resend_res.status_code == 503
+
+
+def test_login_security_middleware_ip_limit_5_per_15min(client):
+    """Layer 1: Middleware enforces 5 attempts per 15 minutes per IP with HTTP 429 + Retry-After."""
+    from application.backend.app.core.login_security import login_security_store
+
+    login_security_store.reset()
+    login_security_store.enabled = True
+    try:
+        ip_a = {"X-Forwarded-For": "203.0.113.10"}
+        ip_b = {"X-Forwarded-For": "203.0.113.11"}
+
+        # First 5 attempts from IP A reach the route (401 on wrong password)
+        for i in range(5):
+            r = client.post(
+                "/api/v1/auth/login",
+                json={"email": f"user{i}@corpsec.co.ke", "password": "WrongPassword!"},
+                headers=ip_a,
+            )
+            assert r.status_code == 401
+
+        # 6th attempt from IP A is blocked with HTTP 429 + Retry-After
+        blocked = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@corpsec.co.ke", "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
+            headers=ip_a,
+        )
+        assert blocked.status_code == 429
+        assert "Retry-After" in blocked.headers
+        assert int(blocked.headers["Retry-After"]) <= 900
+        assert "Too many login attempts" in blocked.json()["detail"]
+
+        # Different IP B is still permitted
+        ok = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@corpsec.co.ke", "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
+            headers=ip_b,
+        )
+        assert ok.status_code == 200
+    finally:
+        login_security_store.enabled = False
+        login_security_store.reset()
+
+
+def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
+    """Layer 2: Increasing delay after 3 failures, 15-min lockout after 5 failures, and reset on success."""
+    from application.backend.app.core import login_security
+
+    store = login_security.login_security_store
+    store.reset()
+    store.enabled = True
+    recorded_delays = []
+
+    async def fake_sleep(secs):
+        recorded_delays.append(secs)
+
+    # Patch asyncio.sleep used by middleware sleep_func when created / default
+    monkeypatch.setattr(login_security.asyncio, "sleep", fake_sleep)
+    try:
+        target_email = "admin@corpsec.co.ke"
+
+        # Verify delay schedule formula directly: 0s for 0..2 failures, then increasing 2s, 4s
+        assert store.compute_delay(0) == 0.0
+        assert store.compute_delay(1) == 0.0
+        assert store.compute_delay(2) == 0.0
+        assert store.compute_delay(3) == 2.0
+        assert store.compute_delay(4) == 4.0
+
+        # Attempts 1..3 from distinct IPs so IP rate limit does not trigger first
+        for idx in range(3):
+            r = client.post(
+                "/api/v1/auth/login",
+                json={"email": target_email, "password": "WrongPassword!"},
+                headers={"X-Forwarded-For": f"198.51.100.{idx + 1}"},
+            )
+            assert r.status_code == 401
+        assert recorded_delays == []
+
+        # Attempt 4 (after 3 failures) triggers delay (2.0s)
+        r4 = client.post(
+            "/api/v1/auth/login",
+            json={"email": target_email, "password": "WrongPassword!"},
+            headers={"X-Forwarded-For": "198.51.100.4"},
+        )
+        assert r4.status_code == 401
+        assert recorded_delays == [2.0]
+
+        # Attempt 5 (after 4 failures) triggers higher delay (4.0s), then locks account for 15 minutes
+        r5 = client.post(
+            "/api/v1/auth/login",
+            json={"email": target_email, "password": "WrongPassword!"},
+            headers={"X-Forwarded-For": "198.51.100.5"},
+        )
+        assert r5.status_code == 401
+        assert recorded_delays == [2.0, 4.0]
+
+        # Attempt 6 (even with the CORRECT password from a fresh IP) is locked out for 15 minutes
+        locked_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": target_email, "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
+            headers={"X-Forwarded-For": "198.51.100.6"},
+        )
+        assert locked_resp.status_code == 429
+        assert int(locked_resp.headers["Retry-After"]) >= 890
+        assert "temporarily locked" in locked_resp.json()["detail"].lower()
+
+        # Reset via expiry or clean state -> 3 failures followed by successful login resets counter
+        store.reset()
+        recorded_delays.clear()
+        for idx in range(3):
+            r = client.post(
+                "/api/v1/auth/login",
+                json={"email": target_email, "password": "WrongPassword!"},
+                headers={"X-Forwarded-For": f"198.51.100.{idx + 20}"},
+            )
+            assert r.status_code == 401
+        ok_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": target_email, "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
+            headers={"X-Forwarded-For": "198.51.100.25"},
+        )
+        assert ok_login.status_code == 200
+        is_locked, _, count_after = store.get_account_status(target_email)
+        assert is_locked is False
+        assert count_after == 0
+    finally:
+        store.enabled = False
+        store.reset()
+
+
+def test_login_generic_errors_no_enumeration(client, db):
+    """Layer 3: Unknown, wrong-password, and inactive accounts return identical generic errors."""
+    from application.backend.app.core.security import get_password_hash
+    from application.backend.app.models.user import User, UserRole, UserStatus
+
+    inactive_user = User(
+        email="inactive_enum_test@corpsec.co.ke",
+        phone="0799000999",
+        full_name="Inactive User",
+        password_hash=get_password_hash("CorrectPass@123"),
+        role=UserRole.HR.value,
+        status=UserStatus.SUSPENDED.value,
+    )
+    db.add(inactive_user)
+    db.commit()
+
+    unknown_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": "does_not_exist@corpsec.co.ke", "password": "SomePassword!"},
+    )
+    wrong_pw_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@corpsec.co.ke", "password": "WrongPassword!"},
+    )
+    inactive_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": "inactive_enum_test@corpsec.co.ke", "password": "CorrectPass@123"},
+    )
+
+    assert unknown_resp.status_code == wrong_pw_resp.status_code == inactive_resp.status_code == 401
+    assert unknown_resp.json() == wrong_pw_resp.json() == inactive_resp.json() == {
+        "detail": "Incorrect email or password"
+    }

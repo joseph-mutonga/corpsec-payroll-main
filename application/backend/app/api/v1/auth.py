@@ -27,6 +27,9 @@ from application.backend.app.services.otp_service import (
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Access Control"])
 
+# Precomputed bcrypt hash used when an identifier is not found to equalize login response timing
+_DUMMY_PASSWORD_HASH = get_password_hash("corpsec_dummy_timing_guard_2026")
+
 
 def check_user_credentials(user: User, password: str) -> bool:
     if not user or not user.password_hash:
@@ -182,7 +185,7 @@ def find_user_by_credential(db: Session, login_id: str) -> Optional[User]:
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("60/15minutes")
+@limiter.limit("5/15minutes")
 def login_for_access_token(
     request: Request,
     payload: LoginRequest,
@@ -192,15 +195,16 @@ def login_for_access_token(
     login_id = payload.email.strip()
     user = find_user_by_credential(db, login_id)
 
-    if not user or not check_user_credentials(user, payload.password):
-        audit_entry = AuditLog(
-            user_id=user.id if user else None,
+    if not user:
+        # Equalize bcrypt timing so attackers cannot enumerate existing usernames/emails
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
+        db.add(AuditLog(
+            user_id=None,
             user_name=payload.email,
             role="UNKNOWN",
             action="LOGIN_FAILED",
             reason="Invalid credentials"
-        )
-        db.add(audit_entry)
+        ))
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -208,10 +212,20 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if user.status != UserStatus.ACTIVE.value:
+    if not check_user_credentials(user, payload.password) or user.status != UserStatus.ACTIVE.value:
+        fail_reason = "Invalid credentials" if user.status == UserStatus.ACTIVE.value else f"Account status {user.status}"
+        db.add(AuditLog(
+            user_id=user.id,
+            user_name=payload.email,
+            role=user.role or "UNKNOWN",
+            action="LOGIN_FAILED",
+            reason=fail_reason
+        ))
+        db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Account is {user.status.lower()}. Please contact administrator."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user_name = user.full_name
@@ -325,7 +339,7 @@ def login_for_access_token(
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("60/15minutes")
+@limiter.limit("5/15minutes")
 def guard_login(
     request: Request,
     payload: GuardLoginRequest,
@@ -343,16 +357,17 @@ def guard_login(
     if not user and "@" in payload.guard_id:
         user = db.query(User).filter(User.email == payload.guard_id).first()
 
-    if not user or not check_user_credentials(user, payload.password):
+    if not user:
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Guard ID / Phone or Password"
         )
 
-    if user.status != UserStatus.ACTIVE.value:
+    if not check_user_credentials(user, payload.password) or user.status != UserStatus.ACTIVE.value:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guard account is inactive"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect Guard ID / Phone or Password"
         )
 
     user.last_login = datetime.now()

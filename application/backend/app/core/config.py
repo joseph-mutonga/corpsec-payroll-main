@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     OTP_EXPIRE_MINUTES: int = 5
     RESEND_API_KEY: Optional[str] = None
     SENDGRID_API_KEY: Optional[str] = None
+    REDIS_URL: Optional[str] = None
     ENVIRONMENT: str = "production"
 
     # Voice / Telephony (Africa's Talking & WebRTC)
