@@ -253,6 +253,16 @@ def sync_db_schema():
         from sqlalchemy import inspect as sa_inspect, text
         insp = sa_inspect(engine)
         existing_tables = insp.get_table_names()
+        if "users" in existing_tables:
+            existing_user_cols = [c["name"] for c in insp.get_columns("users")]
+            if "must_change_password" not in existing_user_cols:
+                with engine.connect() as db_conn:
+                    try:
+                        db_conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE;"))
+                        db_conn.commit()
+                    except Exception as ue:
+                        print(f"Notice adding column must_change_password to users: {ue}")
+
         if "payroll_records" in existing_tables:
             existing_cols = [c["name"] for c in insp.get_columns("payroll_records")]
             cols_to_add = [

@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     SMTP_FROM: str = "CorpSec Security <no-reply@corpsec.co.ke>"
     SMTP_TLS: bool = True
     OTP_EXPIRE_MINUTES: int = 5
+    RESEND_API_KEY: Optional[str] = None
+    SENDGRID_API_KEY: Optional[str] = None
+    ENVIRONMENT: str = "production"
 
     # Voice / Telephony (Africa's Talking & WebRTC)
     VOICE_PROVIDER: str = "AFRICAS_TALKING"

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from application.backend.app.api.deps import get_db, get_current_user
+from application.backend.app.api.deps import get_db, get_current_user, require_admin
 from application.backend.app.core.config import settings
 from application.backend.app.core.security import verify_password, get_password_hash, create_access_token
 from application.backend.app.core.limiter import limiter
@@ -15,11 +15,14 @@ from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.user_session import UserSession
 from application.backend.app.models.email_otp import EmailOTP
 from application.backend.app.schemas.auth import (
-    LoginRequest, GuardLoginRequest, ChangePasswordRequest, TokenResponse, UserResponse,
-    HeartbeatRequest, SessionLocationUpdateRequest, OTPVerifyRequest, OTPResendRequest
+    LoginRequest, GuardLoginRequest, ChangePasswordRequest, SetNewPasswordRequest, TokenResponse, UserResponse,
+    HeartbeatRequest, SessionLocationUpdateRequest, OTPVerifyRequest, OTPResendRequest,
+    ForgotPasswordRequest, ForgotPasswordResponse
 )
 from application.backend.app.services.otp_service import (
-    requiresOTPVerification, createAndSendOTP, verifyOTPCode, generateSecureOTP
+    requiresOTPVerification, createAndSendOTP, createAndSendOTPWithStatus, verifyOTPCode, generateSecureOTP,
+    mask_email_address, generate_temporary_password, send_password_reset_email, get_email_transport_status,
+    _get_smtp_config
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Access Control"])
@@ -30,7 +33,11 @@ def check_user_credentials(user: User, password: str) -> bool:
         return False
     if verify_password(password, user.password_hash):
         return True
-    
+
+    # Enforce strict verification when a temporary emailed password was issued
+    if getattr(user, "must_change_password", False):
+        return False
+
     # In test environment, enforce strict password verification
     if os.getenv("TESTING") == "1":
         return False
@@ -59,6 +66,46 @@ def check_user_credentials(user: User, password: str) -> bool:
             user.password_hash = get_password_hash(password)
             return True
     return False
+
+
+def _dispatch_otp_or_503(
+    db: Session,
+    user: User,
+    request: Request,
+    audit_action: str,
+    audit_reason: str
+) -> str:
+    """Create and send an OTP synchronously; raise 503 and void OTP if email delivery fails."""
+    otp_record, _, sent, err_msg = createAndSendOTPWithStatus(db, user, request)
+    masked_email = mask_email_address(user.email)
+    ip_addr = request.client.host if request.client else None
+
+    if not sent:
+        otp_record.is_used = True
+        db.add(AuditLog(
+            user_id=user.id,
+            user_name=user.email,
+            role=user.role,
+            action="OTP_EMAIL_FAILED",
+            reason=f"OTP email delivery failed for {masked_email}: {err_msg or 'SMTP/API unavailable'}",
+            ip_address=ip_addr
+        ))
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Unable to send verification code email to {masked_email}. Please try again or contact your administrator."
+        )
+
+    db.add(AuditLog(
+        user_id=user.id,
+        user_name=user.email,
+        role=user.role,
+        action=audit_action,
+        reason=audit_reason,
+        ip_address=ip_addr
+    ))
+    db.commit()
+    return masked_email
 
 
 def find_user_by_credential(db: Session, login_id: str) -> Optional[User]:
@@ -116,7 +163,8 @@ def find_user_by_credential(db: Session, login_id: str) -> Optional[User]:
         (Guard.employee_number == emp_num) | 
         (Guard.employee_number == login_id.upper()) | 
         (Guard.email == login_id) | 
-        (Guard.phone == login_id)
+        (Guard.phone == login_id) |
+        (Guard.full_name.ilike(login_id))
     ).first()
     if guard:
         user = db.query(User).filter(User.guard_id == guard.id).first()
@@ -191,22 +239,13 @@ def login_for_access_token(
         enforce_otp = False
 
     if enforce_otp:
-        otp_record, otp_code = createAndSendOTP(db, user, request)
-
-        email_parts = user.email.split("@")
-        masked_user = email_parts[0][0] + "***" + (email_parts[0][-1] if len(email_parts[0]) > 1 else "")
-        masked_email = f"{masked_user}@{email_parts[1]}" if len(email_parts) > 1 else user.email
-
-        audit_entry = AuditLog(
-            user_id=user.id,
-            user_name=user.email,
-            role=user.role,
-            action="OTP_DISPATCHED",
-            reason=f"Two-factor OTP dispatched to {masked_email} for role {user.role}",
-            ip_address=ip_addr
+        masked_email = _dispatch_otp_or_503(
+            db,
+            user,
+            request,
+            audit_action="OTP_DISPATCHED",
+            audit_reason=f"Two-factor OTP dispatched to {mask_email_address(user.email)} for role {user.role}"
         )
-        db.add(audit_entry)
-        db.commit()
 
         return TokenResponse(
             access_token=None,
@@ -218,6 +257,7 @@ def login_for_access_token(
             full_name=user_name,
             session_id=None,
             otp_required=True,
+            must_change_password=bool(getattr(user, "must_change_password", False)),
             message=f"A 6-digit verification code has been dispatched to {masked_email}. Enter the code (or verification code 123456) to complete login."
         )
 
@@ -272,6 +312,7 @@ def login_for_access_token(
         full_name=user_name,
         session_id=user_session.id,
         otp_required=False,
+        must_change_password=bool(getattr(user, "must_change_password", False)),
         message="Guard sign-in successful."
     )
 
@@ -374,7 +415,8 @@ def guard_login(
         guard_id=user.guard_id,
         email=user.email,
         full_name=user_name,
-        session_id=user_session.id
+        session_id=user_session.id,
+        must_change_password=bool(getattr(user, "must_change_password", False))
     )
 
 
@@ -492,6 +534,7 @@ def verify_otp(
         full_name=user_name,
         session_id=user_session.id,
         otp_required=False,
+        must_change_password=bool(getattr(user, "must_change_password", False)),
         message="Two-factor verification successful. Welcome back!"
     )
 
@@ -534,22 +577,13 @@ def resend_otp(
             "email": user.email
         }
 
-    otp_record, otp_code = createAndSendOTP(db, user, request)
-
-    email_parts = user.email.split("@")
-    masked_user = email_parts[0][0] + "***" + (email_parts[0][-1] if len(email_parts[0]) > 1 else "")
-    masked_email = f"{masked_user}@{email_parts[1]}" if len(email_parts) > 1 else user.email
-
-    audit_entry = AuditLog(
-        user_id=user.id,
-        user_name=user.email,
-        role=user.role,
-        action="OTP_RESENT",
-        reason=f"Two-factor OTP re-dispatched to {masked_email}",
-        ip_address=request.client.host if request.client else None
+    masked_email = _dispatch_otp_or_503(
+        db,
+        user,
+        request,
+        audit_action="OTP_RESENT",
+        audit_reason=f"Two-factor OTP re-dispatched to {mask_email_address(user.email)}"
     )
-    db.add(audit_entry)
-    db.commit()
 
     return {
         "status": "SUCCESS",
@@ -753,7 +787,8 @@ def change_password(
             detail="Current password incorrect"
         )
     current_user.password_hash = get_password_hash(payload.new_password)
-    
+    current_user.must_change_password = False
+
     audit_entry = AuditLog(
         user_id=current_user.id,
         user_name=current_user.email,
@@ -764,3 +799,152 @@ def change_password(
     db.add(audit_entry)
     db.commit()
     return {"status": "SUCCESS", "message": "Password changed successfully"}
+
+
+@router.post("/set-new-password")
+def set_new_password_after_reset(
+    request: Request,
+    payload: SetNewPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows an authenticated user who signed in with an emailed temporary password
+    (must_change_password=True) to set and confirm their own chosen password.
+    """
+    if not getattr(current_user, "must_change_password", False):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending temporary password reset for this account. Use Change Password instead."
+        )
+
+    current_user.password_hash = get_password_hash(payload.new_password)
+    current_user.must_change_password = False
+
+    ip_addr = request.client.host if request.client else None
+    audit_entry = AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="PASSWORD_SETUP_COMPLETED",
+        reason="User created and confirmed custom password after email password recovery",
+        ip_address=ip_addr
+    )
+    db.add(audit_entry)
+    db.commit()
+    return {"status": "SUCCESS", "message": "Your new password has been saved. Redirecting..."}
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    responses={
+        400: {"description": "No valid email address registered for this account"},
+        403: {"description": "Account is inactive or suspended"},
+        404: {"description": "Account not found"},
+        429: {"description": "Too many password reset requests"},
+        503: {"description": "Email delivery failed"}
+    }
+)
+@limiter.limit("15/15minutes")
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a new temporary password for ANY active user (Admin, HR, Supervisor, Staff, Guard)
+    and send it to their registered email address.
+    """
+    login_id = (payload.username or "").strip()
+    user = find_user_by_credential(db, login_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found matching that username, email, phone number, or Guard ID."
+        )
+
+    if (user.status or "").upper() != UserStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account is {(user.status or 'inactive').lower()}. Please contact your administrator."
+        )
+
+    target_email = (user.email or "").strip()
+    if (not target_email or "@" not in target_email) and user.guard and user.guard.email:
+        target_email = user.guard.email.strip()
+
+    if not target_email or "@" not in target_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid email address is registered for this account. Please contact your administrator."
+        )
+
+    display_name = user.full_name or (user.guard.full_name if user.guard else None) or target_email.split("@")[0].replace(".", " ").title()
+    new_password = generate_temporary_password(10)
+    masked_email = mask_email_address(target_email)
+
+    sent, err_msg = send_password_reset_email(
+        email=target_email,
+        new_password=new_password,
+        user_name=display_name,
+        login_hint=user.email
+    )
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not send password reset email to {masked_email}: {err_msg or 'SMTP error'}"
+        )
+
+    # Persist updated password hash and require user to set their own password after signing in
+    user.password_hash = get_password_hash(new_password)
+    user.must_change_password = True
+    ip_addr = request.client.host if request.client else None
+    audit_entry = AuditLog(
+        user_id=user.id,
+        user_name=user.email,
+        role=user.role,
+        action="FORGOT_PASSWORD_RESET",
+        reason=f"Temporary password generated and emailed to {masked_email} via Forgot Password",
+        ip_address=ip_addr
+    )
+    db.add(audit_entry)
+    db.commit()
+
+    return ForgotPasswordResponse(
+        status="SUCCESS",
+        message=f"A new password has been sent to {masked_email}. Please check your email inbox to sign in.",
+        masked_email=masked_email,
+        role=user.role
+    )
+
+
+@router.get("/email-health")
+def email_transport_health(
+    verify: bool = False,
+    admin: User = Depends(require_admin)
+):
+    """Admin-only diagnostic endpoint checking OTP and password-reset email readiness."""
+    status_info = get_email_transport_status()
+    if verify and status_info["smtp_configured"]:
+        import smtplib, ssl
+        cfg = _get_smtp_config()
+        try:
+            ctx = ssl.create_default_context()
+            if cfg["port"] == 465:
+                with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=10, context=ctx) as s:
+                    s.ehlo()
+                    if cfg["user"] and cfg["password"]:
+                        s.login(cfg["user"], cfg["password"])
+            else:
+                with smtplib.SMTP(cfg["host"], cfg["port"], timeout=10) as s:
+                    s.ehlo()
+                    if cfg["use_tls"]:
+                        s.starttls(context=ctx)
+                        s.ehlo()
+                    if cfg["user"] and cfg["password"]:
+                        s.login(cfg["user"], cfg["password"])
+            status_info["live_smtp_check"] = "OK"
+        except Exception as exc:
+            status_info["live_smtp_check"] = f"FAILED: {exc}"
+    return status_info

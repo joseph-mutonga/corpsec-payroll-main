@@ -26,6 +26,13 @@ from application.backend.app.api.v1 import (
 Base.metadata.create_all(bind=engine)
 sync_db_schema()
 
+from application.backend.app.services.otp_service import get_email_transport_status
+_mail_status = get_email_transport_status()
+if _mail_status["ready"]:
+    print(f"[MAILER] Production email transport ready (SMTP={_mail_status['smtp_host']}:{_mail_status['smtp_port']}, From={_mail_status['from_address']})")
+else:
+    print("[MAILER WARNING] No SMTP or HTTPS email provider configured! OTP & password-reset emails will fail until SMTP_HOST/SMTP_USER/SMTP_PASSWORD or RESEND_API_KEY are set.")
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

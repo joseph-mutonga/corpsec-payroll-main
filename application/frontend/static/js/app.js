@@ -242,64 +242,22 @@ async function handleUnifiedLogin(e) {
       return;
     }
 
-    // Role-based automatic dispatch:
-    if (data.role === 'GUARD') {
-      // Security Guard Account: Save guard session and redirect to Mobile Guard Portal
-      sessionStorage.setItem('guard_auth_token', data.access_token);
-      sessionStorage.setItem('guard_user', JSON.stringify(data));
-      localStorage.setItem('guard_auth_token', data.access_token);
-      localStorage.setItem('guard_user', JSON.stringify(data));
-
-      if (btnText) btnText.innerText = 'Guard Verified! Redirecting...';
-      if (alertEl) {
-        alertEl.className = 'login-alert-banner alert-success';
-        alertEl.innerHTML = '✅ <strong>Guard Credentials Confirmed:</strong> Redirecting to Mobile Guard Portal...';
-        alertEl.style.display = 'block';
-      }
-
-      setTimeout(() => {
-        window.location.href = '/portal';
-      }, 400);
-      return;
-    }
-
-    if (data.session_id) {
-      localStorage.setItem('corpsec_session_id', data.session_id);
-    }
-
-    // Administrator / Supervisor / HR Account:
-    if (!data.access_token || data.access_token === 'null' || data.access_token === 'undefined') {
+    // If user signed in with an emailed temporary password, force setting a custom password first
+    if (data.must_change_password) {
       if (btn) btn.disabled = false;
       if (btnText) btnText.innerText = 'Sign In to CorpSec';
       if (btnSpinner) btnSpinner.style.display = 'none';
+      openSetNewPasswordView(data);
       return;
     }
 
-    authToken = data.access_token;
-    localStorage.setItem('corpsec_token', authToken);
-    localStorage.setItem('corpsec_user', JSON.stringify(data));
-    startSessionHeartbeat();
-
-    updateUserProfileDisplay(data);
-
-    if (alertEl) {
-      alertEl.className = 'login-alert-banner alert-success';
-      alertEl.innerHTML = '✅ <strong>Welcome, Administrator:</strong> Initializing management hub...';
-      alertEl.style.display = 'block';
-    }
-
-    setTimeout(() => {
-      const loginOverlay = document.getElementById('unified-login-overlay');
-      const sidebar = document.getElementById('sidebar');
-      const mainContent = document.getElementById('main-content');
-      if (loginOverlay) loginOverlay.style.display = 'none';
-      if (sidebar) sidebar.style.display = '';
-      if (mainContent) mainContent.style.display = '';
-      if (btn) btn.disabled = false;
-      if (btnText) btnText.innerText = 'Sign In to CorpSec';
-      if (btnSpinner) btnSpinner.style.display = 'none';
-      initApp();
-    }, 350);
+    completeAuthenticatedSession(data, alertEl, {
+      btn,
+      btnText,
+      btnSpinner,
+      defaultBtnLabel: 'Sign In to CorpSec'
+    });
+    return;
 
   } catch (err) {
     if (btn) btn.disabled = false;
@@ -481,37 +439,22 @@ async function handleVerifyOTPSubmit(e) {
       return;
     }
 
-    // Two-factor OTP verification successful!
-    if (btnText) btnText.innerText = 'Verified! Accessing System...';
-
-    // Store tokens and complete session initialization
-    authToken = data.access_token;
-    localStorage.setItem('corpsec_token', authToken);
-    localStorage.setItem('corpsec_user', JSON.stringify(data));
-    if (data.session_id) {
-      localStorage.setItem('corpsec_session_id', data.session_id);
-    }
-    startSessionHeartbeat();
-    updateUserProfileDisplay(data);
-
-    if (alertEl) {
-      alertEl.className = 'login-alert-banner alert-success';
-      alertEl.innerHTML = `✅ <strong>Identity Confirmed:</strong> Welcome, ${data.full_name || 'CorpSec Administrator'}! Initializing management workspace...`;
-      alertEl.style.display = 'block';
-    }
-
-    setTimeout(() => {
-      const loginOverlay = document.getElementById('unified-login-overlay');
-      const sidebar = document.getElementById('sidebar');
-      const mainContent = document.getElementById('main-content');
-      if (loginOverlay) loginOverlay.style.display = 'none';
-      if (sidebar) sidebar.style.display = '';
-      if (mainContent) mainContent.style.display = '';
+    // If user signed in with an emailed temporary password, require setting their own password before entering
+    if (data.must_change_password) {
       if (btn) btn.disabled = false;
       if (btnText) btnText.innerText = 'Verify & Access System';
       if (btnSpinner) btnSpinner.style.display = 'none';
-      initApp();
-    }, 400);
+      openSetNewPasswordView(data);
+      return;
+    }
+
+    // Two-factor OTP verification successful!
+    completeAuthenticatedSession(data, alertEl, {
+      btn,
+      btnText,
+      btnSpinner,
+      defaultBtnLabel: 'Verify & Access System'
+    });
 
   } catch (err) {
     if (btn) btn.disabled = false;
@@ -577,11 +520,306 @@ async function handleResendOTP() {
   }
 }
 
+let isSubmittingForgotPassword = false;
+let pendingPasswordSetup = null;
+let isSettingNewPassword = false;
+
+function toggleInputPassword(inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  if (btnEl) btnEl.innerText = isPass ? '🙈' : '👁️';
+}
+
+function completeAuthenticatedSession(data, alertEl, btnOpts = {}) {
+  const { btn, btnText, btnSpinner, defaultBtnLabel = 'Sign In to CorpSec' } = btnOpts;
+
+  if (!data || !data.access_token || data.access_token === 'null' || data.access_token === 'undefined') {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.innerText = defaultBtnLabel;
+    if (btnSpinner) btnSpinner.style.display = 'none';
+    return;
+  }
+
+  if ((data.role || '').toUpperCase() === 'GUARD') {
+    sessionStorage.setItem('guard_auth_token', data.access_token);
+    sessionStorage.setItem('guard_user', JSON.stringify(data));
+    localStorage.setItem('guard_auth_token', data.access_token);
+    localStorage.setItem('guard_user', JSON.stringify(data));
+
+    if (btnText) btnText.innerText = 'Guard Verified! Redirecting...';
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-success';
+      alertEl.innerHTML = '✅ <strong>Guard Credentials Confirmed:</strong> Redirecting to Mobile Guard Portal...';
+      alertEl.style.display = 'block';
+    }
+
+    setTimeout(() => {
+      window.location.href = '/portal';
+    }, 400);
+    return;
+  }
+
+  authToken = data.access_token;
+  localStorage.setItem('corpsec_token', authToken);
+  localStorage.setItem('corpsec_user', JSON.stringify(data));
+  if (data.session_id) {
+    localStorage.setItem('corpsec_session_id', data.session_id);
+  }
+  startSessionHeartbeat();
+  updateUserProfileDisplay(data);
+
+  if (btnText) btnText.innerText = 'Verified! Accessing System...';
+  if (alertEl) {
+    alertEl.className = 'login-alert-banner alert-success';
+    alertEl.innerHTML = `✅ <strong>Identity Confirmed:</strong> Welcome, ${escapeHtml(data.full_name || 'CorpSec User')}! Initializing management workspace...`;
+    alertEl.style.display = 'block';
+  }
+
+  setTimeout(() => {
+    const loginOverlay = document.getElementById('unified-login-overlay');
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('main-content');
+    const setPassContainer = document.getElementById('unified-set-password-container');
+    if (setPassContainer) setPassContainer.style.display = 'none';
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (sidebar) sidebar.style.display = '';
+    if (mainContent) mainContent.style.display = '';
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.innerText = defaultBtnLabel;
+    if (btnSpinner) btnSpinner.style.display = 'none';
+    initApp();
+  }, 400);
+}
+
+function openSetNewPasswordView(data) {
+  pendingPasswordSetup = data;
+  const loginForm = document.getElementById('unified-login-form');
+  const otpContainer = document.getElementById('unified-otp-container');
+  const forgotContainer = document.getElementById('unified-forgot-password-container');
+  const setPassContainer = document.getElementById('unified-set-password-container');
+  const alertEl = document.getElementById('unified-login-alert');
+  const newPassInput = document.getElementById('set-new-password');
+  const confirmPassInput = document.getElementById('set-confirm-password');
+
+  if (loginForm) loginForm.style.display = 'none';
+  if (otpContainer) otpContainer.style.display = 'none';
+  if (forgotContainer) forgotContainer.style.display = 'none';
+  if (setPassContainer) setPassContainer.style.display = 'block';
+  if (newPassInput) newPassInput.value = '';
+  if (confirmPassInput) confirmPassInput.value = '';
+
+  if (alertEl) {
+    alertEl.className = 'login-alert-banner alert-info';
+    alertEl.innerHTML = '🔐 <strong>Temporary Password Verified:</strong> Create your own new password and repeat it to confirm.';
+    alertEl.style.display = 'block';
+  }
+  if (newPassInput) setTimeout(() => newPassInput.focus(), 50);
+}
+
+async function handleSetNewPasswordSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (isSettingNewPassword) return;
+
+  const newPassInput = document.getElementById('set-new-password');
+  const confirmPassInput = document.getElementById('set-confirm-password');
+  const alertEl = document.getElementById('unified-login-alert');
+  const btn = document.getElementById('btn-set-password-submit');
+  const btnText = document.getElementById('btn-set-password-text');
+  const btnSpinner = document.getElementById('btn-set-password-spinner');
+
+  if (!pendingPasswordSetup || !pendingPasswordSetup.access_token) {
+    handleBackToLogin();
+    return;
+  }
+
+  const newPassword = newPassInput ? newPassInput.value : '';
+  const confirmPassword = confirmPassInput ? confirmPassInput.value : '';
+
+  if (newPassword.length < 6) {
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'New password must be at least 6 characters long.';
+      alertEl.style.display = 'block';
+    }
+    if (newPassInput) newPassInput.focus();
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Passwords do not match. Please enter the exact same password in both fields.';
+      alertEl.style.display = 'block';
+    }
+    if (confirmPassInput) confirmPassInput.focus();
+    return;
+  }
+
+  isSettingNewPassword = true;
+  if (alertEl) alertEl.style.display = 'none';
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.innerText = 'Saving New Password...';
+  if (btnSpinner) btnSpinner.style.display = 'inline-block';
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/set-new-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${pendingPasswordSetup.access_token}`
+      },
+      body: JSON.stringify({
+        new_password: newPassword,
+        confirm_password: confirmPassword
+      })
+    });
+    const result = await res.json();
+
+    if (!res.ok) {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.innerText = '✅ Save Password & Continue';
+      if (btnSpinner) btnSpinner.style.display = 'none';
+      if (alertEl) {
+        alertEl.className = 'login-alert-banner alert-error';
+        alertEl.innerText = result.detail || 'Could not save new password. Please try again.';
+        alertEl.style.display = 'block';
+      }
+      return;
+    }
+
+    const sessionData = { ...pendingPasswordSetup, must_change_password: false };
+    pendingPasswordSetup = null;
+    completeAuthenticatedSession(sessionData, alertEl, {
+      btn,
+      btnText,
+      btnSpinner,
+      defaultBtnLabel: '✅ Save Password & Continue'
+    });
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.innerText = '✅ Save Password & Continue';
+    if (btnSpinner) btnSpinner.style.display = 'none';
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Network error while saving password: ' + err.message;
+      alertEl.style.display = 'block';
+    }
+  } finally {
+    isSettingNewPassword = false;
+  }
+}
+
+function openForgotPasswordView() {
+  const loginForm = document.getElementById('unified-login-form');
+  const otpContainer = document.getElementById('unified-otp-container');
+  const forgotContainer = document.getElementById('unified-forgot-password-container');
+  const setPassContainer = document.getElementById('unified-set-password-container');
+  const alertEl = document.getElementById('unified-login-alert');
+  const loginIdVal = document.getElementById('unified-login-id')?.value.trim() || '';
+  const forgotInput = document.getElementById('forgot-password-username');
+
+  if (loginForm) loginForm.style.display = 'none';
+  if (otpContainer) otpContainer.style.display = 'none';
+  if (setPassContainer) setPassContainer.style.display = 'none';
+  if (forgotContainer) forgotContainer.style.display = 'block';
+  if (alertEl) alertEl.style.display = 'none';
+
+  if (forgotInput) {
+    if (loginIdVal && !forgotInput.value.trim()) {
+      forgotInput.value = loginIdVal;
+    } else if (loginIdVal) {
+      forgotInput.value = loginIdVal;
+    }
+    setTimeout(() => forgotInput.focus(), 50);
+  }
+}
+
+async function handleForgotPasswordSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (isSubmittingForgotPassword) return;
+
+  const usernameInput = document.getElementById('forgot-password-username');
+  const alertEl = document.getElementById('unified-login-alert');
+  const btn = document.getElementById('btn-forgot-password-submit');
+  const btnText = document.getElementById('btn-forgot-password-text');
+  const btnSpinner = document.getElementById('btn-forgot-password-spinner');
+
+  const username = usernameInput ? usernameInput.value.trim() : '';
+  if (!username) {
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Please enter your username, email, phone number, or Guard ID.';
+      alertEl.style.display = 'block';
+    }
+    if (usernameInput) usernameInput.focus();
+    return;
+  }
+
+  isSubmittingForgotPassword = true;
+  if (alertEl) alertEl.style.display = 'none';
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.innerText = 'Sending Password to Email...';
+  if (btnSpinner) btnSpinner.style.display = 'inline-block';
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.className = 'login-alert-banner alert-error';
+        alertEl.innerText = data.detail || 'Could not reset password for that username.';
+        alertEl.style.display = 'block';
+      }
+      return;
+    }
+
+    // Switch back to login form, keep username filled, clear old password, show success banner
+    handleBackToLogin();
+    const loginIdEl = document.getElementById('unified-login-id');
+    const loginPassEl = document.getElementById('unified-login-password');
+    if (loginIdEl) loginIdEl.value = username;
+    if (loginPassEl) loginPassEl.value = '';
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-success';
+      alertEl.innerHTML = `✅ <strong>Password Sent:</strong> ${escapeHtml(data.message || 'Check your email inbox for your new password.')}`;
+      alertEl.style.display = 'block';
+    }
+    if (loginPassEl) setTimeout(() => loginPassEl.focus(), 100);
+  } catch (err) {
+    if (alertEl) {
+      alertEl.className = 'login-alert-banner alert-error';
+      alertEl.innerText = 'Network error while requesting password reset: ' + err.message;
+      alertEl.style.display = 'block';
+    }
+  } finally {
+    isSubmittingForgotPassword = false;
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.innerText = '📧 Send Password to Email';
+    if (btnSpinner) btnSpinner.style.display = 'none';
+  }
+}
+
+window.openForgotPasswordView = openForgotPasswordView;
+window.handleForgotPasswordSubmit = handleForgotPasswordSubmit;
+window.openSetNewPasswordView = openSetNewPasswordView;
+window.handleSetNewPasswordSubmit = handleSetNewPasswordSubmit;
+window.toggleInputPassword = toggleInputPassword;
+
 function handleBackToLogin() {
   clearInterval(otpResendTimer);
   pendingOTPAuth = null;
+  pendingPasswordSetup = null;
   const loginForm = document.getElementById('unified-login-form');
   const otpContainer = document.getElementById('unified-otp-container');
+  const forgotContainer = document.getElementById('unified-forgot-password-container');
+  const setPassContainer = document.getElementById('unified-set-password-container');
   const alertEl = document.getElementById('unified-login-alert');
   const idInput = document.getElementById('unified-login-id');
   const loginBtn = document.getElementById('unified-login-btn');
@@ -590,12 +828,16 @@ function handleBackToLogin() {
 
   isSubmittingLogin = false;
   isVerifyingOTP = false;
+  isSubmittingForgotPassword = false;
+  isSettingNewPassword = false;
 
   if (loginBtn) loginBtn.disabled = false;
   if (btnText) btnText.innerText = 'Sign In to CorpSec';
   if (btnSpinner) btnSpinner.style.display = 'none';
 
   if (otpContainer) otpContainer.style.display = 'none';
+  if (forgotContainer) forgotContainer.style.display = 'none';
+  if (setPassContainer) setPassContainer.style.display = 'none';
   if (loginForm) loginForm.style.display = 'block';
   if (alertEl) alertEl.style.display = 'none';
 
@@ -13441,19 +13683,16 @@ async function openStaffFileModal(staffId) {
       }
     }
 
-    // Fetch system hours & activity logs for System Admin
+    // Fetch system hours & session logs for System Admin
     const hoursSection = document.getElementById('staff-location-hours-section');
-    const activitySection = document.getElementById('staff-activity-trail-section');
 
     if (curUser.role === 'ADMIN') {
       if (hoursSection) hoursSection.style.display = 'block';
-      if (activitySection) activitySection.style.display = 'block';
 
       try {
-        const [dailyRes, sessRes, actRes] = await Promise.all([
+        const [dailyRes, sessRes] = await Promise.all([
           apiFetch(`/staff/${staffId}/daily-hours`).catch(() => ({ ok: false })),
-          apiFetch(`/staff/${staffId}/sessions`).catch(() => ({ ok: false })),
-          apiFetch(`/staff/${staffId}/activity`).catch(() => ({ ok: false }))
+          apiFetch(`/staff/${staffId}/sessions`).catch(() => ({ ok: false }))
         ]);
 
         let isStaffOnlineNow = false;
@@ -13519,27 +13758,6 @@ async function openStaffFileModal(staffId) {
             if (firstSess.is_active) isStaffOnlineNow = true;
             if (firstSess.location_name) lastKnownLocation = firstSess.location_name;
           }
-        }
-
-        if (actRes && actRes.ok) {
-          const actData = await actRes.json();
-          const aBody = document.getElementById('staff-activity-table-body') || document.getElementById('staff-activity-body');
-          if (aBody) {
-            aBody.innerHTML = !actData.length
-              ? '<tr><td colspan="5" style="text-align:center; padding:20px; color:#64748B;">No activity logs recorded.</td></tr>'
-              : actData.map(a => `
-                <tr>
-                  <td><small style="color:#64748B;">${a.timestamp ? new Date(a.timestamp).toLocaleString() : '—'}</small></td>
-                  <td><b>${escapeHtml(a.action)}</b></td>
-                  <td><span class="badge" style="background:#F1F5F9; color:#334155; font-size:11px;">${escapeHtml(a.target_entity || 'System')}</span></td>
-                  <td><small>${escapeHtml(a.details || 'Standard operation executed')}</small></td>
-                  <td><code>${escapeHtml(a.ip_address || 'Internal')}</code></td>
-                </tr>
-              `).join('');
-          }
-
-          const actBadge = document.getElementById('staff-activity-count-badge');
-          if (actBadge) actBadge.innerText = `${actData.length} Actions Logged`;
         }
 
         // Update Top Metrics Cards

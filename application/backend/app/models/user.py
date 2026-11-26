@@ -30,6 +30,7 @@ class User(Base):
     
     role = Column(String(255), default=UserRole.GUARD.value, nullable=False)
     status = Column(String(255), default=UserStatus.ACTIVE.value, nullable=False)
+    must_change_password = Column(Boolean, default=False, nullable=False)
     
     guard_id = Column(Integer, ForeignKey("guards.id", use_alter=True, name="fk_users_guard_id"), nullable=True)
     

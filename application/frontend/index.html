@@ -12,12 +12,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
   <link rel="stylesheet" href="/static/css/styles.css?v=20261119_v3">
-  <link rel="stylesheet" href="/static/css/call-center.css?v=20261125_v12">
-  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261125_v12">
-  <script src="/static/js/app.js?v=20261125_v12"></script>
-  <script src="/static/js/silent-updater.js?v=20261125_v12"></script>
-  <script src="/static/js/call-center.js?v=20261125_v12"></script>
-  <script src="/static/js/ai-assistant.js?v=20261125_v12"></script>
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261126_v15">
+  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261126_v15">
+  <script src="/static/js/app.js?v=20261126_v15"></script>
+  <script src="/static/js/silent-updater.js?v=20261126_v15"></script>
+  <script src="/static/js/call-center.js?v=20261126_v15"></script>
+  <script src="/static/js/ai-assistant.js?v=20261126_v15"></script>
 </head>
 
 <body>
@@ -48,20 +48,23 @@
         <form id="unified-login-form" onsubmit="handleUnifiedLogin(event)">
           <div class="login-field-group">
             <div class="login-field-label">
-              <label for="unified-login-id">Identity Credential</label>
-              <span class="label-helper-hint">Email, Guard ID (CS-XXXXX), or Phone</span>
+              <label for="unified-login-id">Username / Identity Credential</label>
+              <span class="label-helper-hint">Username, Email, Guard ID (CS-XXXXX), or Phone</span>
             </div>
             <div class="login-input-wrapper">
               <span class="input-icon">👤</span>
               <input type="text" id="unified-login-id" class="login-text-input"
-                placeholder="e.g. admin@corpsec.co.ke or CS-00431" required autocomplete="username">
+                placeholder="e.g. username, email@corpsec.co.ke or CS-00431" required autocomplete="username">
             </div>
           </div>
 
           <div class="login-field-group">
             <div class="login-field-label">
               <label for="unified-login-password">Password</label>
-              <span class="label-helper-hint">Bcrypt Encrypted Verification</span>
+              <button type="button" id="btn-forgot-password-link" onclick="openForgotPasswordView()"
+                style="background:none; border:none; color:#38BDF8; font-size:12px; font-weight:700; cursor:pointer; padding:0; text-decoration:underline;">
+                🔑 Forgot Password?
+              </button>
             </div>
             <div class="login-input-wrapper">
               <span class="input-icon">🔒</span>
@@ -80,7 +83,14 @@
             <span id="btn-login-spinner" class="login-spinner" style="display:none;"></span>
           </button>
 
-          <div style="display:flex; justify-content:center; gap:8px; margin-top:14px; flex-wrap:wrap;">
+          <div style="text-align:center; margin-top:12px;">
+            <button type="button" onclick="openForgotPasswordView()"
+              style="background:none; border:none; color:#94A3B8; font-size:12px; font-weight:600; cursor:pointer; padding:4px 8px;">
+              Forgot your password? <span style="color:#38BDF8; text-decoration:underline;">Send a new password to your email</span>
+            </button>
+          </div>
+
+          <div style="display:flex; justify-content:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
             <button type="button" class="btn-quick-cred" onclick="quickFillCredentials('mutongajoseph29@gmail.com', 'Admin@CorpSec2026!')"
               style="font-size:11.5px; padding:5px 12px; background:#F8FAFC; border:1px solid #CBD5E1; border-radius:6px; cursor:pointer; color:#334155; font-weight:600;">
               👑 Quick Sign In: System Admin
@@ -145,6 +155,96 @@
               <button type="button" onclick="handleBackToLogin()"
                 style="background:none; border:none; color:#64748b; font-weight:500; cursor:pointer; padding:4px 0;">
                 ← Back to Login
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Forgot Password / Email Password Recovery Form (Available to All Roles & Users) -->
+        <div id="unified-forgot-password-container" style="display:none;">
+          <div style="text-align:center; margin-bottom:18px;">
+            <div style="font-size:32px; margin-bottom:6px;">🔑</div>
+            <h2 style="font-size:18px; font-weight:800; color:#F8FAFC; margin:0 0 6px 0;">Reset Password via Email</h2>
+            <p style="font-size:12.5px; color:#94A3B8; margin:0; line-height:1.5;">
+              Enter your username, email, phone number, or Guard ID. A new password will be sent directly to your registered email address.
+            </p>
+          </div>
+
+          <form id="unified-forgot-password-form" onsubmit="handleForgotPasswordSubmit(event)">
+            <div class="login-field-group">
+              <div class="login-field-label">
+                <label for="forgot-password-username">Username / Credential</label>
+                <span class="label-helper-hint">Username, Email, CS-XXXXX, or Phone</span>
+              </div>
+              <div class="login-input-wrapper">
+                <span class="input-icon">👤</span>
+                <input type="text" id="forgot-password-username" class="login-text-input"
+                  placeholder="Enter your username, email, or Guard ID" required autocomplete="username">
+              </div>
+            </div>
+
+            <button type="submit" id="btn-forgot-password-submit" class="btn-login-submit">
+              <span id="btn-forgot-password-text">📧 Send Password to Email</span>
+              <span id="btn-forgot-password-spinner" class="login-spinner" style="display:none;"></span>
+            </button>
+
+            <div style="text-align:center; margin-top:16px;">
+              <button type="button" onclick="handleBackToLogin()"
+                style="background:none; border:none; color:#94A3B8; font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 8px;">
+                ← Back to Sign In
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Set Custom New Password Form (Shown after signing in with emailed password) -->
+        <div id="unified-set-password-container" style="display:none;">
+          <div style="text-align:center; margin-bottom:18px;">
+            <div style="font-size:32px; margin-bottom:6px;">🔐</div>
+            <h2 style="font-size:18px; font-weight:800; color:#F8FAFC; margin:0 0 6px 0;">Set Your New Password</h2>
+            <p style="font-size:12.5px; color:#94A3B8; margin:0; line-height:1.5;">
+              Please enter the password you want to use and repeat it below to confirm.
+            </p>
+          </div>
+
+          <form id="unified-set-password-form" onsubmit="handleSetNewPasswordSubmit(event)">
+            <div class="login-field-group">
+              <div class="login-field-label">
+                <label for="set-new-password">New Password</label>
+                <span class="label-helper-hint">Minimum 6 characters</span>
+              </div>
+              <div class="login-input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="set-new-password" class="login-text-input"
+                  placeholder="Enter your desired new password" minlength="6" required autocomplete="new-password">
+                <button type="button" class="btn-toggle-password" onclick="toggleInputPassword('set-new-password', this)"
+                  aria-label="Toggle new password visibility">👁️</button>
+              </div>
+            </div>
+
+            <div class="login-field-group">
+              <div class="login-field-label">
+                <label for="set-confirm-password">Confirm New Password</label>
+                <span class="label-helper-hint">Repeat password to confirm</span>
+              </div>
+              <div class="login-input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="set-confirm-password" class="login-text-input"
+                  placeholder="Repeat your new password" minlength="6" required autocomplete="new-password">
+                <button type="button" class="btn-toggle-password" onclick="toggleInputPassword('set-confirm-password', this)"
+                  aria-label="Toggle confirm password visibility">👁️</button>
+              </div>
+            </div>
+
+            <button type="submit" id="btn-set-password-submit" class="btn-login-submit">
+              <span id="btn-set-password-text">✅ Save Password &amp; Continue</span>
+              <span id="btn-set-password-spinner" class="login-spinner" style="display:none;"></span>
+            </button>
+
+            <div style="text-align:center; margin-top:16px;">
+              <button type="button" onclick="handleBackToLogin()"
+                style="background:none; border:none; color:#94A3B8; font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 8px;">
+                ← Back to Sign In
               </button>
             </div>
           </form>
@@ -11485,46 +11585,6 @@
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
-
-      <!-- SECTION: Full Activity Audit Trail (Everything person did in system) -->
-      <div id="staff-activity-trail-section"
-        style="border:1px solid #CBD5E1; border-radius:12px; padding:20px; background:#F8FAFC; margin-bottom:16px;">
-        <div
-          style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-          <div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <h4 style="font-size:15px; font-weight:800; color:#0F172A; margin:0;">📜 Complete User Activity Trail</h4>
-              <span class="badge"
-                style="background:#EFF6FF; color:#1E40AF; font-size:10px; font-weight:800; border:1px solid #BFDBFE;">AUDIT
-                LOG</span>
-            </div>
-            <p style="font-size:12px; color:#64748B; margin:2px 0 0 0;">Comprehensive chronological record of all
-              actions, approvals, roster updates, deductions, and edits performed by this person in the system.</p>
-          </div>
-          <span class="badge" id="staff-activity-count-badge"
-            style="background:#E2E8F0; color:#334155; font-weight:700;">0 Actions Logged</span>
-        </div>
-
-        <div class="table-responsive">
-          <table class="data-table" style="font-size:12px;">
-            <thead>
-              <tr>
-                <th style="min-width:130px;">TIMESTAMP</th>
-                <th>ACTION EXECUTED</th>
-                <th>TARGET ENTITY</th>
-                <th>DETAILS &amp; MODIFICATIONS</th>
-                <th>IP ADDRESS</th>
-              </tr>
-            </thead>
-            <tbody id="staff-activity-table-body">
-              <tr>
-                <td colspan="5" style="text-align:center; padding:20px; color:#64748B;">Loading user activity trail...
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
 
