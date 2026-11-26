@@ -273,32 +273,6 @@ async function handleUnifiedLogin(e) {
   }
 }
 
-function quickFillCredentials(id, pass, autoSubmit = true) {
-  const idInput = document.getElementById('unified-login-id');
-  const passInput = document.getElementById('unified-login-password');
-  const alertEl = document.getElementById('unified-login-alert');
-  const btn = document.getElementById('unified-login-btn');
-  const btnText = document.getElementById('btn-login-text');
-  const btnSpinner = document.getElementById('btn-login-spinner');
-
-  if (alertEl) alertEl.style.display = 'none';
-  if (btn) btn.disabled = false;
-  if (btnText) btnText.innerText = 'Sign In to CorpSec';
-  if (btnSpinner) btnSpinner.style.display = 'none';
-
-  if (idInput && passInput) {
-    idInput.value = id;
-    passInput.value = pass;
-    idInput.focus();
-    if (autoSubmit) {
-      setTimeout(() => {
-        handleUnifiedLogin();
-      }, 80);
-    }
-  }
-}
-
-window.quickFillCredentials = quickFillCredentials;
 window.handleUnifiedLogin = handleUnifiedLogin;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.handleVerifyOTPSubmit = handleVerifyOTPSubmit;

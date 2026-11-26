@@ -133,7 +133,7 @@ def require_admin_or_supervisor(current_user: User = Depends(get_current_user)) 
 
 def require_admin_or_hr(current_user: User = Depends(get_current_user)) -> User:
     role_val = (current_user.role or "").upper()
-    if role_val not in [UserRole.ADMIN.value, UserRole.HR.value, "SYSTEM ADMIN", "SUPER ADMIN"]:
+    if role_val not in [UserRole.ADMIN.value, UserRole.HR.value, "HR MANAGER", "SYSTEM ADMIN", "SUPER ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrative privileges required (Admin or HR)."

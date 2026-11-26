@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from application.backend.app.api.deps import get_db, require_admin, get_current_user
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, get_current_user
 from application.backend.app.core.security import get_password_hash
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
@@ -422,9 +422,9 @@ def deactivate_guard(
     guard_id: int,
     payload: GuardDeactivateRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    actor: User = Depends(require_admin_or_hr)
 ):
-    """Deactivate a guard profile."""
+    """Deactivate a guard profile (Admin or HR)."""
     guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
@@ -446,9 +446,9 @@ def deactivate_guard(
         user_acc.status = UserStatus.SUSPENDED.value
 
     audit_entry = AuditLog(
-        user_id=admin.id,
-        user_name=admin.email,
-        role=admin.role,
+        user_id=actor.id,
+        user_name=actor.email,
+        role=actor.role,
         action="DEACTIVATE_GUARD",
         target_entity="Guard",
         target_id=str(guard.id),
@@ -462,12 +462,13 @@ def deactivate_guard(
 
 
 @router.post("/{guard_id}/reactivate", response_model=GuardResponse)
+@router.post("/{guard_id}/activate", response_model=GuardResponse)
 def reactivate_guard(
     guard_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    actor: User = Depends(require_admin_or_hr)
 ):
-    """Reactivate a previously deactivated guard profile."""
+    """Reactivate a previously deactivated guard profile (Admin or HR)."""
     guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
@@ -484,13 +485,13 @@ def reactivate_guard(
         user_acc.status = UserStatus.ACTIVE.value
 
     audit_entry = AuditLog(
-        user_id=admin.id,
-        user_name=admin.email,
-        role=admin.role,
+        user_id=actor.id,
+        user_name=actor.email,
+        role=actor.role,
         action="REACTIVATE_GUARD",
         target_entity="Guard",
         target_id=str(guard.id),
-        reason="Administrative reactivation"
+        reason=f"Administrative reactivation ({actor.role})"
     )
     db.add(audit_entry)
     db.commit()

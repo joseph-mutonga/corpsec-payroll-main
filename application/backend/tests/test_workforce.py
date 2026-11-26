@@ -100,6 +100,93 @@ def test_deactivate_and_reactivate_guard(client, db):
     assert reactivate_resp.json()["status"] == "ACTIVE"
 
 
+def test_hr_can_deactivate_and_activate_guard(client, db):
+    from application.backend.app.core.security import create_access_token, get_password_hash
+    from application.backend.app.models.user import User, UserRole, UserStatus
+
+    hr_user = db.query(User).filter(User.email == "hr_guard_toggle@corpsec.co.ke").first()
+    if not hr_user:
+        hr_user = User(
+            email="hr_guard_toggle@corpsec.co.ke",
+            phone="0788112233",
+            full_name="Sarah HR",
+            password_hash=get_password_hash("HrPass@123"),
+            role=UserRole.HR.value,
+            status=UserStatus.ACTIVE.value,
+        )
+        db.add(hr_user)
+        db.commit()
+        db.refresh(hr_user)
+
+    sup_user = db.query(User).filter(User.email == "sup_guard_toggle@corpsec.co.ke").first()
+    if not sup_user:
+        sup_user = User(
+            email="sup_guard_toggle@corpsec.co.ke",
+            phone="0788112244",
+            full_name="Field Supervisor",
+            password_hash=get_password_hash("SupPass@123"),
+            role=UserRole.SUPERVISOR.value,
+            status=UserStatus.ACTIVE.value,
+        )
+        db.add(sup_user)
+        db.commit()
+        db.refresh(sup_user)
+
+    hr_token = create_access_token(
+        subject=hr_user.id,
+        role=hr_user.role,
+        data={"sub": str(hr_user.id), "role": hr_user.role, "email": hr_user.email}
+    )
+    hr_headers = {"Authorization": f"Bearer {hr_token}"}
+
+    sup_token = create_access_token(
+        subject=sup_user.id,
+        role=sup_user.role,
+        data={"sub": str(sup_user.id), "role": sup_user.role, "email": sup_user.email}
+    )
+    sup_headers = {"Authorization": f"Bearer {sup_token}"}
+
+    guards = client.get("/api/v1/guards", headers=hr_headers).json()
+    target = next(g for g in guards if g["status"] == "ACTIVE")
+
+    # Supervisor remains forbidden
+    sup_resp = client.post(
+        f"/api/v1/guards/{target['id']}/deactivate",
+        json={"reason": "Unauthorized attempt"},
+        headers=sup_headers
+    )
+    assert sup_resp.status_code == 403
+
+    # HR can deactivate guard
+    deact_resp = client.post(
+        f"/api/v1/guards/{target['id']}/deactivate",
+        json={"reason": "HR contract termination"},
+        headers=hr_headers
+    )
+    assert deact_resp.status_code == 200
+    assert deact_resp.json()["status"] == "INACTIVE"
+    assert deact_resp.json()["deactivation_reason"] == "HR contract termination"
+
+    # Linked guard user account is suspended while inactive
+    linked_user = db.query(User).filter(User.guard_id == target["id"]).first()
+    if linked_user:
+        db.refresh(linked_user)
+        assert linked_user.status == UserStatus.SUSPENDED.value
+
+    # HR can reactivate guard via /reactivate or /activate
+    act_resp = client.post(
+        f"/api/v1/guards/{target['id']}/activate",
+        headers=hr_headers
+    )
+    assert act_resp.status_code == 200
+    assert act_resp.json()["status"] == "ACTIVE"
+    assert act_resp.json()["deactivation_reason"] is None
+
+    if linked_user:
+        db.refresh(linked_user)
+        assert linked_user.status == UserStatus.ACTIVE.value
+
+
 def test_list_sites(client):
     headers = get_admin_headers(client)
     response = client.get("/api/v1/sites", headers=headers)
