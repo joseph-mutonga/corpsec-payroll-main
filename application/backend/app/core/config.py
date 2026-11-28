@@ -2,6 +2,7 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from application.backend.app.core import timezone as _kenya_tz  # noqa: F401
 
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))

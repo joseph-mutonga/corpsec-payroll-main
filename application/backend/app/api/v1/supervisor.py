@@ -15,6 +15,7 @@ import secrets
 
 from application.backend.app.api.deps import get_db, require_admin, require_admin_or_supervisor, require_admin_or_hr, get_current_user
 from application.backend.app.core.security import get_password_hash
+from application.backend.app.core.timezone import now_eat, today_eat
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.user import User, UserRole, UserStatus
@@ -451,7 +452,7 @@ def get_supervisor_guards_attendance(
     - If user is SUPERVISOR: returns guards assigned to this supervisor directly or via assigned sites.
     - If user is ADMIN: returns all guards, or guards filtered by supervisor_id if specified.
     """
-    target_date = shift_date or date.today()
+    target_date = shift_date or today_eat()
     query = db.query(Guard).filter(Guard.status == "ACTIVE")
 
     target_sup_id = current_user.id if current_user.role == UserRole.SUPERVISOR.value else supervisor_id
@@ -559,7 +560,7 @@ def supervisor_mark_attendance(
                 shift_duration = first_shift.duration_hours
 
         resolved_site_id = guard.primary_site_id
-        now = datetime.now()
+        now = now_eat()
 
         att = db.query(Attendance).filter(
             Attendance.guard_id == guard.id,
@@ -640,8 +641,8 @@ def supervisor_guard_clock_in(
                 detail=f"Guard '{guard.full_name}' is not assigned to your supervision or sites."
             )
 
-    today = date.today()
-    now = datetime.now()
+    today = today_eat()
+    now = now_eat()
 
     # 1. Automatically close any stale unclosed shifts from previous days
     auto_close_past_unclosed_shifts(db, guard.id, today)
@@ -747,8 +748,8 @@ def supervisor_guard_clock_out(
                 detail=f"Guard '{guard.full_name}' is not assigned to your supervision or sites."
             )
 
-    today = date.today()
-    now = datetime.now()
+    today = today_eat()
+    now = now_eat()
 
     att = db.query(Attendance).filter(
         Attendance.guard_id == guard.id,
@@ -835,8 +836,9 @@ def get_guard_off_days_schedule(
                 detail="Supervisor Mandate Restriction: You are only authorized to view off-days for guards under your supervision or assigned sites."
             )
 
-    target_year = year or date.today().year
-    target_month = month or date.today().month
+    now_local = now_eat()
+    target_year = year or now_local.year
+    target_month = month or now_local.month
 
     schedules = db.query(GuardOffDaySchedule).filter(
         GuardOffDaySchedule.guard_id == guard_id,
@@ -921,7 +923,7 @@ def set_guard_off_days_schedule(
                 detail=f"Date {d.strftime('%Y-%m-%d')} does not belong to {payload.year}-{payload.month:02d}."
             )
 
-    now = datetime.now()
+    now = now_eat()
 
     # Find previous scheduled off days for this month to detect removed days
     previous_schedules = db.query(GuardOffDaySchedule).filter(

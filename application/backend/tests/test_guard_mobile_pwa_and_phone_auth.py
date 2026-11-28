@@ -101,6 +101,8 @@ def test_guard_portal_has_no_corpsec_logo_image_and_no_admin_assets(client):
     assert "portal-force-password-section" in html
     assert "portal-forgot-box" not in html
     assert "togglePortalForgotBox" not in html
+    assert "download-launcher" not in html
+    assert "Windows PC Launcher" not in html
 
     sw_resp = client.get("/guard-sw.js")
     assert sw_resp.status_code == 200

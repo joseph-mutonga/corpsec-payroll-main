@@ -2,6 +2,7 @@ import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from application.backend.app.core.database import Base
+from application.backend.app.core.timezone import now_eat
 
 
 class UserSession(Base):
@@ -12,8 +13,8 @@ class UserSession(Base):
     session_token = Column(String(255), nullable=True, index=True)
     
     # Login & Geolocation info
-    login_time = Column(DateTime, default=datetime.datetime.now, nullable=False, index=True)
-    last_activity = Column(DateTime, default=datetime.datetime.now, nullable=False, index=True)
+    login_time = Column(DateTime, default=now_eat, nullable=False, index=True)
+    last_activity = Column(DateTime, default=now_eat, nullable=False, index=True)
     logout_time = Column(DateTime, nullable=True)
     
     latitude = Column(Float, nullable=True)

@@ -7,6 +7,9 @@ _workspace_root = os.path.abspath(os.path.join(_current_dir, "../../../"))
 if _workspace_root not in sys.path:
     sys.path.insert(0, _workspace_root)
 
+from application.backend.app.core.timezone import configure_kenya_timezone
+configure_kenya_timezone()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware

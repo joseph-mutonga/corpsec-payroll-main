@@ -7,6 +7,7 @@ from application.backend.app.services.pdf_service import generate_payslip_pdf
 from application.backend.app.api.v1.payslips import build_payslip_dict
 
 from application.backend.app.api.deps import get_db, require_guard
+from application.backend.app.core.timezone import now_eat, today_eat
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.shift import Shift
@@ -44,7 +45,7 @@ def get_guard_portal_dashboard(
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard profile not found")
 
-    today = date.today()
+    today = today_eat()
 
     # Query scheduled off-days assigned by Field Supervisor for current month
     month_schedules = db.query(GuardOffDaySchedule).filter(
@@ -244,8 +245,9 @@ def get_guard_portal_off_days(
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard profile not found")
 
-    target_year = year or date.today().year
-    target_month = month or date.today().month
+    now_local = now_eat()
+    target_year = year or now_local.year
+    target_month = month or now_local.month
 
     schedules = db.query(GuardOffDaySchedule).filter(
         GuardOffDaySchedule.guard_id == guard.id,
@@ -339,15 +341,15 @@ def report_site_incident(
     guard = db.query(Guard).filter(Guard.id == guard_user.guard_id).first()
     site_id = getattr(payload, 'site_id', None) or (guard.primary_site_id if guard and guard.primary_site_id else 1)
 
-    now = datetime.now()
+    now = now_eat()
     count_inc = db.query(Incident).count() + 1
     ref_num = f"INC-{now.year}-{count_inc:04d}"
     while db.query(Incident).filter(Incident.reference_number == ref_num).first():
         count_inc += 1
         ref_num = f"INC-{now.year}-{count_inc:04d}"
 
-    inc_date = getattr(payload, 'incident_date', None) or date.today()
-    inc_time = getattr(payload, 'incident_time', None) or datetime.now().strftime("%H:%M")
+    inc_date = getattr(payload, 'incident_date', None) or now.date()
+    inc_time = getattr(payload, 'incident_time', None) or now.strftime("%H:%M")
 
     inc = Incident(
         reference_number=ref_num,

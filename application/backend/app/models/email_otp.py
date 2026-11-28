@@ -2,6 +2,7 @@ import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from application.backend.app.core.database import Base
+from application.backend.app.core.timezone import now_eat
 
 
 class EmailOTP(Base):
@@ -18,13 +19,13 @@ class EmailOTP(Base):
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False, nullable=False)
     attempts = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    created_at = Column(DateTime, default=now_eat, nullable=False)
 
     user = relationship("User", backref="email_otps")
 
     def is_expired(self) -> bool:
         """Check if OTP has expired."""
-        return datetime.datetime.now() > self.expires_at
+        return now_eat() > self.expires_at
 
     def is_valid(self) -> bool:
         """Check if OTP is valid for use."""

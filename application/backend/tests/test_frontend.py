@@ -29,6 +29,8 @@ def test_top_bar_buttons_and_modals_existence(client):
     assert 'onclick="toggleNotificationsDropdown(event)"' in html
     assert 'onclick="toggleProfileDropdown(event)"' in html
     assert 'onclick="openRunPayrollModal()"' in html
+    assert 'id="nav-item-download-app"' not in html
+    assert 'id="settings-download-app-card"' in html
 
     # Check modals exist in HTML
     assert 'id="modal-search"' in html

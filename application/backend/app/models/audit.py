@@ -1,13 +1,14 @@
 import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from application.backend.app.core.database import Base
+from application.backend.app.core.timezone import now_eat
 
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.datetime.now, nullable=False, index=True)
+    timestamp = Column(DateTime, default=now_eat, nullable=False, index=True)
     
     user_id = Column(Integer, nullable=True)
     user_name = Column(String(255), nullable=False)

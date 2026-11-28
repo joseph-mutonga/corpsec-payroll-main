@@ -2,6 +2,7 @@ import datetime
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text
 from sqlalchemy.orm import relationship
 from application.backend.app.core.database import Base
+from application.backend.app.core.timezone import now_eat
 
 
 class Attendance(Base):
@@ -22,7 +23,7 @@ class Attendance(Base):
     status = Column(String(255), default="PRESENT", nullable=False)  # PRESENT, ABSENT, LATE, OFF
     notes = Column(Text, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    created_at = Column(DateTime, default=now_eat, nullable=False)
 
     guard = relationship("Guard", back_populates="attendances")
     shift = relationship("Shift")
@@ -71,7 +72,7 @@ class OvertimeClaim(Base):
     approved_by = Column(String(255), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    created_at = Column(DateTime, default=now_eat, nullable=False)
 
     guard = relationship("Guard")
     attendance = relationship("Attendance")

@@ -7,6 +7,7 @@ from sqlalchemy import or_
 
 from application.backend.app.api.deps import get_db, get_current_user, require_admin
 from application.backend.app.core.config import settings
+from application.backend.app.core.timezone import now_eat
 from application.backend.app.core.phone import normalize_kenyan_phone, kenyan_phone_variants
 from application.backend.app.core.security import verify_password, get_password_hash, create_access_token
 from application.backend.app.core.limiter import limiter
@@ -311,15 +312,15 @@ def login_for_access_token(
     # -------------------------------------------------------------------------
     # OTP Bypassed for Guard Role: Immediate Session & JWT Token Issuance
     # -------------------------------------------------------------------------
-    user.last_login = datetime.now()
+    user.last_login = now_eat()
     loc_desc = payload.location_name
     if not loc_desc and payload.latitude is not None and payload.longitude is not None:
         loc_desc = f"GPS: {payload.latitude:.5f}, {payload.longitude:.5f}"
 
     user_session = UserSession(
         user_id=user.id,
-        login_time=datetime.now(),
-        last_activity=datetime.now(),
+        login_time=now_eat(),
+        last_activity=now_eat(),
         latitude=payload.latitude,
         longitude=payload.longitude,
         accuracy=payload.accuracy,
@@ -429,7 +430,7 @@ def guard_login(
             detail="Incorrect Guard ID / Phone or Password"
         )
 
-    user.last_login = datetime.now()
+    user.last_login = now_eat()
     
     ip_addr = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent", "")[:500] if request.headers else None
@@ -440,8 +441,8 @@ def guard_login(
 
     user_session = UserSession(
         user_id=user.id,
-        login_time=datetime.now(),
-        last_activity=datetime.now(),
+        login_time=now_eat(),
+        last_activity=now_eat(),
         latitude=payload.latitude,
         longitude=payload.longitude,
         accuracy=payload.accuracy,
@@ -547,7 +548,7 @@ def verify_otp(
         )
 
     # Valid OTP: record session, audit, and issue final JWT access token
-    user.last_login = datetime.now()
+    user.last_login = now_eat()
     user_agent = request.headers.get("user-agent", "")[:500] if request.headers else None
     
     loc_desc = payload.location_name
@@ -556,8 +557,8 @@ def verify_otp(
 
     user_session = UserSession(
         user_id=user.id,
-        login_time=datetime.now(),
-        last_activity=datetime.now(),
+        login_time=now_eat(),
+        last_activity=now_eat(),
         latitude=payload.latitude,
         longitude=payload.longitude,
         accuracy=payload.accuracy,
@@ -670,7 +671,7 @@ def session_heartbeat(
     current_user: User = Depends(get_current_user)
 ):
     """Track active session duration and optional location updates."""
-    now = datetime.now()
+    now = now_eat()
     query = db.query(UserSession).filter(
         UserSession.user_id == current_user.id,
         UserSession.is_active == True
@@ -746,8 +747,8 @@ def update_session_location(
     if not sess:
         sess = UserSession(
             user_id=current_user.id,
-            login_time=datetime.now(),
-            last_activity=datetime.now(),
+            login_time=now_eat(),
+            last_activity=now_eat(),
             latitude=payload.latitude,
             longitude=payload.longitude,
             accuracy=payload.accuracy,
@@ -763,7 +764,7 @@ def update_session_location(
         sess.longitude = payload.longitude
         sess.accuracy = payload.accuracy
         sess.location_name = loc_desc
-        sess.last_activity = datetime.now()
+        sess.last_activity = now_eat()
 
     audit = AuditLog(
         user_id=current_user.id,
@@ -791,8 +792,8 @@ def logout_user(
 
     for s in active_sessions:
         s.is_active = False
-        s.logout_time = datetime.now()
-        s.last_activity = datetime.now()
+        s.logout_time = now_eat()
+        s.last_activity = now_eat()
 
     audit = AuditLog(
         user_id=current_user.id,

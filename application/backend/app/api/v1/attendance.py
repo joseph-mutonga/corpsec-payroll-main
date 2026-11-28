@@ -7,6 +7,7 @@ from application.backend.app.api.deps import (
     get_db, require_admin, require_guard, get_current_user,
     require_admin_or_supervisor
 )
+from application.backend.app.core.timezone import now_eat, today_eat
 from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.shift import Shift
@@ -110,8 +111,8 @@ def clock_in(
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard profile not found")
 
-    today = date.today()
-    now = datetime.now()
+    today = today_eat()
+    now = now_eat()
 
     check_period_not_locked(db, today)
 
@@ -216,8 +217,8 @@ def clock_out(
     guard_user: User = Depends(require_guard)
 ):
     """Guard Mobile Clock-Out Endpoint matching Screen 19."""
-    today = date.today()
-    now = datetime.now()
+    today = today_eat()
+    now = now_eat()
 
     check_period_not_locked(db, today)
 
@@ -552,7 +553,7 @@ def list_super_guard_site_guards(
     if not site:
         raise HTTPException(status_code=400, detail="Super Guard has no site assigned.")
 
-    today = date.today()
+    today = today_eat()
     stationed_guards = db.query(Guard).filter(
         Guard.primary_site_id == site.id,
         Guard.status == "ACTIVE"
@@ -614,8 +615,8 @@ def super_guard_mandate_clock_in(
             detail=f"Guard '{target_guard.full_name}' is stationed at another site. You only have mandate for {site.site_name}."
         )
 
-    today = date.today()
-    now = datetime.now()
+    today = today_eat()
+    now = now_eat()
 
     check_period_not_locked(db, today)
 
@@ -710,8 +711,8 @@ def super_guard_mandate_clock_out(
             detail=f"Guard '{target_guard.full_name}' is stationed at another site. You only have mandate for {site.site_name}."
         )
 
-    today = date.today()
-    now = datetime.now()
+    today = today_eat()
+    now = now_eat()
 
     att = db.query(Attendance).filter(
         Attendance.guard_id == target_guard.id,

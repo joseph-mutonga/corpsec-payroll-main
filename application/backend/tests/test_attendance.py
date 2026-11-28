@@ -175,3 +175,28 @@ def test_overtime_management(client, db):
 
     overtime_list_resp = client.get("/api/v1/attendance", headers=admin_headers)
     assert overtime_list_resp.status_code == 200
+
+
+def test_clock_in_uses_kenya_eat_timezone(client, db, monkeypatch):
+    """Clock-in records Kenya East Africa Time (UTC+3) even on a UTC server."""
+    from datetime import timezone
+    from application.backend.app.core import timezone as tz_mod
+    from application.backend.app.api.v1 import attendance as att_api
+
+    utc_now = datetime.now(timezone.utc)
+    expected_eat = (utc_now + timedelta(hours=3)).replace(tzinfo=None)
+    actual_eat = tz_mod.now_eat()
+    assert abs((actual_eat - expected_eat).total_seconds()) < 5
+    assert os.environ.get("TZ") == "Africa/Nairobi"
+
+    # Simulate guard clocking in at 17:47 EAT (14:47 UTC on a UTC server)
+    simulated_eat = datetime(2026, 11, 29, 17, 47, 0)
+    monkeypatch.setattr(att_api, "now_eat", lambda: simulated_eat)
+    monkeypatch.setattr(att_api, "today_eat", lambda: simulated_eat.date())
+
+    headers = get_guard_headers(client)
+    resp = client.post("/api/v1/attendance/clock-in?shift_id=1", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["shift_date"] == "2026-11-29"
+    assert data["actual_clock_in"].startswith("2026-11-29T17:47:00")

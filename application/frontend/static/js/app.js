@@ -21,6 +21,37 @@ function escapeHtml(text) {
 }
 window.escapeHtml = escapeHtml;
 
+const KENYA_TZ = 'Africa/Nairobi';
+function parseKenyaDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  const s = String(val).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00+03:00`);
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
+    return new Date(s.replace(' ', 'T') + '+03:00');
+  }
+  return new Date(s);
+}
+function formatKenyaTime(val) {
+  const d = parseKenyaDate(val);
+  if (!d || isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-KE', { timeZone: KENYA_TZ, hour: '2-digit', minute: '2-digit' });
+}
+function formatKenyaDateTime(val) {
+  const d = parseKenyaDate(val);
+  if (!d || isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-KE', { timeZone: KENYA_TZ, dateStyle: 'medium', timeStyle: 'short' });
+}
+function getKenyaDateISO(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: KENYA_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(d);
+}
+window.formatKenyaTime = formatKenyaTime;
+window.formatKenyaDateTime = formatKenyaDateTime;
+window.getKenyaDateISO = getKenyaDateISO;
+
 function getLoggedInUser() {
   try {
     const raw = localStorage.getItem('corpsec_user');
@@ -993,7 +1024,7 @@ function updateUserProfileDisplay(userData) {
   if (profLastLogin) {
     if (userData.last_login) {
       try {
-        profLastLogin.innerText = new Date(userData.last_login).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
+        profLastLogin.innerText = formatKenyaDateTime(userData.last_login);
       } catch (e) {
         profLastLogin.innerText = 'Active Session';
       }
@@ -1185,7 +1216,7 @@ function logout() {
 async function initApp(preloadedUser = null) {
   const subtitleEl = document.getElementById('top-bar-date-subtitle');
   if (subtitleEl) {
-    const todayStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const todayStr = new Date().toLocaleDateString('en-US', { timeZone: KENYA_TZ, month: 'long', day: 'numeric', year: 'numeric' });
     subtitleEl.innerText = `Data summary for ${todayStr}`;
   }
 
@@ -1312,7 +1343,8 @@ function switchTab(tabId, updateHistory = true) {
   if (target) target.style.display = 'block';
 
   document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-  const activeNav = document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
+  const navTabId = tabId === 'download-app' ? 'settings' : tabId;
+  const activeNav = document.querySelector(`.nav-item[onclick*="'${navTabId}'"]`);
   if (activeNav) activeNav.classList.add('active');
 
   document.querySelectorAll('#mobile-bottom-nav .bottom-nav-item').forEach(btn => {
@@ -3529,7 +3561,7 @@ async function loadAttendance() {
           displayAtts = atts.filter(a => assignedIds.has(a.guard_id));
         }
         displayAtts.slice(0, 6).forEach(a => {
-          const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+          const clockIn = a.actual_clock_in ? formatKenyaTime(a.actual_clock_in) : '-';
           const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
           const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
           const guardName = a.guard_name ? `${a.guard_name} (${a.guard_employee_number || ''})` : (g ? `${g.full_name} (${g.employee_number})` : `Guard #${a.guard_id}`);
@@ -3612,7 +3644,7 @@ async function openManualAttendanceModal() {
     shiftSel.innerHTML = (cachedShifts || []).map(sh => `<option value="${sh.id}">${escapeHtml(sh.name)} (${escapeHtml(sh.start_time)} - ${escapeHtml(sh.end_time)})</option>`).join('');
     onManualAttendanceGuardChange();
   }
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getKenyaDateISO();
   document.getElementById('manual-att-date').value = todayStr;
   document.getElementById('modal-manual-attendance').style.display = 'flex';
 }
@@ -3702,7 +3734,7 @@ function setAttendanceShiftFilter(type) {
 function setAttendanceTodayDate() {
   const dateInput = document.getElementById('att-filter-date');
   if (dateInput) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getKenyaDateISO();
     dateInput.value = today;
     filterAttendanceLogs();
   }
@@ -3798,8 +3830,8 @@ function filterAttendanceLogs() {
   }
 
   filtered.forEach(a => {
-    const clockIn = a.actual_clock_in ? new Date(a.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
-    const clockOut = a.actual_clock_out ? new Date(a.actual_clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+    const clockIn = a.actual_clock_in ? formatKenyaTime(a.actual_clock_in) : '-';
+    const clockOut = a.actual_clock_out ? formatKenyaTime(a.actual_clock_out) : '-';
     const g = (cachedGuards && cachedGuards.length) ? cachedGuards.find(x => x.id === a.guard_id) : null;
     const s = (cachedSites && cachedSites.length) ? cachedSites.find(x => x.id === a.site_id) : null;
     const guardName = a.guard_name || (g ? g.full_name : `Guard #${a.guard_id}`);
@@ -8093,9 +8125,9 @@ function filterSupervisorRollCall(supId, supEmail) {
 async function loadSupervisorAttendanceRoll() {
   const dateInput = document.getElementById('supervisor-attendance-date');
   if (dateInput && !dateInput.value) {
-    dateInput.value = new Date().toISOString().split('T')[0];
+    dateInput.value = getKenyaDateISO();
   }
-  const shiftDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+  const shiftDate = dateInput ? dateInput.value : getKenyaDateISO();
   const tbody = document.getElementById('supervisor-attendance-table-body');
   if (!tbody) return;
 
@@ -8125,11 +8157,11 @@ async function loadSupervisorAttendanceRoll() {
 
       let clockDisplay = '<span style="color:#94A3B8; font-size:12px;">Not Clocked In</span>';
       if (isCompleted) {
-        const inStr = new Date(r.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const outStr = new Date(r.actual_clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const inStr = formatKenyaTime(r.actual_clock_in);
+        const outStr = formatKenyaTime(r.actual_clock_out);
         clockDisplay = `<div style="font-size:11px; line-height:1.4;"><span style="color:#166534; font-weight:600;">🕒 In: ${inStr}</span><br><span style="color:#475569;">🏁 Out: ${outStr}</span></div>`;
       } else if (isCurrentlyActive) {
-        const inStr = new Date(r.actual_clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const inStr = formatKenyaTime(r.actual_clock_in);
         clockDisplay = `<div style="font-size:11px; line-height:1.4;"><span style="color:#1D4ED8; font-weight:700;">🕒 In: ${inStr}</span><br><span class="badge" style="background:#DCFCE7; color:#166534; font-size:10px; padding:2px 6px;">Active On Duty</span></div>`;
       }
 

@@ -809,16 +809,6 @@ body.portal-logged-in .install-app-banner {
   border-color: #A7F3D0;
 }
 
-.desktop-only-launcher {
-  display: none !important;
-}
-
-@media (min-width: 1025px) and (pointer: fine) {
-  .desktop-only-launcher {
-    display: block !important;
-  }
-}
-
 /* Responsive tables and modals inside mobile portal */
 .table-responsive,
 .portal-table-wrap {

@@ -17,6 +17,7 @@ from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 
 from application.backend.app.core.config import settings
+from application.backend.app.core.timezone import now_eat
 from application.backend.app.models.email_otp import EmailOTP
 from application.backend.app.models.user import User, UserRole
 
@@ -604,7 +605,8 @@ def createAndSendOTPWithStatus(
     ).update({"is_used": True}, synchronize_session=False)
 
     otp_code = generateSecureOTP(6)
-    expires_at = datetime.datetime.now() + datetime.timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+    created_now = now_eat()
+    expires_at = created_now + datetime.timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
 
     otp_record = EmailOTP(
         user_id=user.id,
@@ -613,7 +615,7 @@ def createAndSendOTPWithStatus(
         expires_at=expires_at,
         is_used=False,
         attempts=0,
-        created_at=datetime.datetime.now()
+        created_at=created_now
     )
     db.add(otp_record)
     db.commit()

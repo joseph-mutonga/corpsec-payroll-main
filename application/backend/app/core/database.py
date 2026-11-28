@@ -1,8 +1,8 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 from application.backend.app.core.config import settings
 
-# Configure SQLite vs PostgreSQL connect args
+# Configure SQLite vs MySQL/PostgreSQL connect args
 connect_args = {}
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
@@ -12,6 +12,15 @@ engine = create_engine(
     connect_args=connect_args,
     pool_pre_ping=True
 )
+
+if not settings.DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _set_mysql_kenya_timezone(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SET time_zone = '+03:00'")
+        finally:
+            cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
