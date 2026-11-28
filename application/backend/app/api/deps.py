@@ -108,6 +108,12 @@ def require_guard(current_user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Guard role required. Administrators must use the Admin Web App."
         )
+    if getattr(current_user, "must_change_password", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required before accessing Guard Portal features.",
+            headers={"X-Password-Change-Required": "true"},
+        )
     return current_user
 
 

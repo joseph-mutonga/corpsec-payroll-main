@@ -245,8 +245,11 @@ def _extract_login_identifier(body_bytes: bytes) -> str:
     try:
         data = json.loads(body_bytes.decode("utf-8"))
         if isinstance(data, dict):
-            raw = data.get("email") or data.get("username") or data.get("guard_id") or ""
-            return str(raw).strip().lower()
+            raw = data.get("phone") or data.get("email") or data.get("username") or data.get("guard_id") or ""
+            ident = str(raw).strip()
+            from application.backend.app.core.phone import normalize_kenyan_phone
+            norm_phone = normalize_kenyan_phone(ident)
+            return norm_phone if norm_phone else ident.lower()
     except Exception:
         pass
     return ""

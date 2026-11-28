@@ -140,24 +140,39 @@ def get_guard_portal_dashboard(
             attendance_id=today_att.id if today_att else None
         )
     else:
-        # Fallback if no roster pattern/assignment has been generated for guard
         if guard.primary_site_id and guard.shift_id:
             site = db.query(Site).filter(Site.id == guard.primary_site_id).first()
             shift = db.query(Shift).filter(Shift.id == guard.shift_id).first()
-            today_shift = GuardTodayShift(
-                site_name=site.site_name if site else "Unassigned Site",
-                shift_name=shift.name if shift else "Standard Shift",
-                shift_id=shift.id if shift else 1,
-                start_time=shift.start_time if shift else "06:00 AM",
-                end_time=shift.end_time if shift else "06:00 PM",
-                is_clocked_in=clocked_in,
-                is_scheduled=True,
-                attendance_id=today_att.id if today_att else None,
-                site_id=site.id if site else None,
-                site_latitude=site.latitude if site else None,
-                site_longitude=site.longitude if site else None,
-                geofence_radius=site.geofence_radius if site else 200.0
-            )
+            if site and shift:
+                today_shift = GuardTodayShift(
+                    site_name=site.site_name,
+                    shift_name=shift.name,
+                    shift_id=shift.id,
+                    start_time=shift.start_time,
+                    end_time=shift.end_time,
+                    is_clocked_in=clocked_in,
+                    is_scheduled=True,
+                    attendance_id=today_att.id if today_att else None,
+                    site_id=site.id,
+                    site_latitude=site.latitude,
+                    site_longitude=site.longitude,
+                    geofence_radius=site.geofence_radius
+                )
+            else:
+                today_shift = GuardTodayShift(
+                    site_name=site.site_name if site else "Unassigned Site",
+                    shift_name="No Shift Assigned",
+                    shift_id=None,
+                    start_time="--:--",
+                    end_time="--:--",
+                    is_clocked_in=clocked_in,
+                    is_scheduled=False,
+                    attendance_id=today_att.id if today_att else None,
+                    site_id=site.id if site else None,
+                    site_latitude=site.latitude if site else None,
+                    site_longitude=site.longitude if site else None,
+                    geofence_radius=site.geofence_radius if site else 200.0
+                )
         else:
             today_shift = GuardTodayShift(
                 site_name="No shift scheduled today",

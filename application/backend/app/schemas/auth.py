@@ -14,13 +14,22 @@ class LoginRequest(BaseModel):
 
 
 class GuardLoginRequest(BaseModel):
-    guard_id: str = Field(..., description="Guard ID (e.g. CS-00452) or Phone Number")
+    guard_id: Optional[str] = Field(None, description="Registered Phone Number or Guard ID (e.g. CS-00452)")
+    phone: Optional[str] = Field(None, description="Registered Kenyan Phone Number (07XXXXXXXX, +254..., 254...)")
     password: str = Field(..., min_length=1)
     remember_me: Optional[bool] = False
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     accuracy: Optional[float] = None
     location_name: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_login_identifier(self):
+        ident = (self.phone or self.guard_id or "").strip()
+        if not ident:
+            raise ValueError("Please enter your registered phone number or Guard ID.")
+        self.guard_id = ident
+        return self
 
 
 class HeartbeatRequest(BaseModel):
@@ -93,6 +102,13 @@ class UserResponse(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=6)
+    confirm_password: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_optional_confirm(self):
+        if self.confirm_password is not None and self.new_password != self.confirm_password:
+            raise ValueError("Passwords do not match. Please enter the same password in both fields.")
+        return self
 
 
 class SetNewPasswordRequest(BaseModel):

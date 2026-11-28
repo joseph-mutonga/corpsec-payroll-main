@@ -6,7 +6,7 @@
 
   <meta charset="UTF-8">
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
   <meta name="theme-color" content="#0F172A">
 
@@ -14,31 +14,144 @@
 
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
+  <meta name="apple-mobile-web-app-title" content="Guard Portal">
+
+  <meta name="mobile-web-app-capable" content="yes">
+
   <title>CorpSec Guard Mobile Portal</title>
 
-  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico?v=20261128_v1">
 
-  <link rel="apple-touch-icon" href="/static/images/corpsec_pwa_192.png">
+  <link rel="apple-touch-icon" href="/static/images/corpsec_pwa_192.png?v=20261128_v1">
 
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="/portal-manifest.json">
 
-  <link rel="stylesheet" href="/static/css/portal.css">
+  <link rel="stylesheet" href="/static/css/portal.css?v=20261128_v1">
 
 </head>
 
 <body class="portal-body">
 
+  <div id="portal-offline-banner" class="portal-offline-banner" hidden>
+    You are offline. Connect to mobile data or Wi-Fi to sign in or sync attendance.
+  </div>
 
+  <!-- 1. SELF-CONTAINED GUARD PHONE LOGIN SCREEN (Zero logos, fast instant render) -->
+  <section id="portal-login-section" class="login-wrapper" style="display:none;">
+    <div class="login-card">
+      <div class="login-card-header">
+        <span class="login-badge-pill">Guard Self-Service App</span>
+        <h2>Guard Portal Sign In</h2>
+        <p>Use your registered phone number (e.g. 0712345678 or +254712345678) as your username and initial password.</p>
+      </div>
 
+      <div id="portal-login-alert" class="alert-banner" style="display:none;"></div>
 
+      <form id="portal-login-form" onsubmit="handlePortalLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="login-phone">Registered Phone Number</label>
+          <input
+            type="tel"
+            id="login-phone"
+            class="form-input"
+            inputmode="tel"
+            autocomplete="username"
+            placeholder="0712345678 or +254712345678"
+            required
+          >
+        </div>
 
-  <!-- 2. PORTAL HEADER (Shown when logged in) -->
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password</label>
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="login-password"
+              class="form-input"
+              autocomplete="current-password"
+              placeholder="Enter password (initial = phone number)"
+              required
+            >
+            <button type="button" class="btn-toggle-pw" onclick="togglePortalPassword('login-password', this)" aria-label="Show password">Show</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-portal-login" class="btn-submit">
+          Sign In
+        </button>
+      </form>
+
+      <div class="login-helper-links">
+        <button type="button" class="btn-link-muted" onclick="togglePortalForgotBox()">Forgot Password?</button>
+      </div>
+
+      <div id="portal-forgot-box" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid #E2E8F0;">
+        <p style="margin:0 0 10px 0; font-size:12px; color:#475569; line-height:1.45;">
+          Enter your phone number or Guard ID to email a temporary password if you have an email on file, or ask HR / Admin to reset your password back to your registered phone number.
+        </p>
+        <div class="form-group" style="margin-bottom:10px;">
+          <input type="text" id="portal-forgot-input" class="form-input" placeholder="Phone number or Guard ID (CS-XXXXX)">
+        </div>
+        <button type="button" id="btn-portal-forgot" class="btn-secondary-outline" style="margin-top:0;" onclick="handlePortalForgotPassword()">
+          Send Reset Email
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1B. FORCED FIRST-LOGIN PASSWORD CHANGE SCREEN -->
+  <section id="portal-force-password-section" class="login-wrapper" style="display:none;">
+    <div class="login-card">
+      <div class="login-card-header">
+        <span class="login-badge-pill" style="background:#FEF3C7; color:#92400E;">First-Login Security</span>
+        <h2>Set Your New Password</h2>
+        <p>For account security, replace your initial password with a personal password before using the Guard Portal.</p>
+      </div>
+
+      <div id="portal-force-pwd-alert" class="alert-banner" style="display:none;"></div>
+
+      <form id="portal-force-password-form" onsubmit="handleForcePasswordChange(event)">
+        <div class="form-group">
+          <label class="form-label" for="force-current-password">Current Password (Phone / Temporary)</label>
+          <div class="password-input-wrap">
+            <input type="password" id="force-current-password" class="form-input" autocomplete="current-password" placeholder="Current password" required>
+            <button type="button" class="btn-toggle-pw" onclick="togglePortalPassword('force-current-password', this)">Show</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="force-new-password">New Password (min 6 characters)</label>
+          <div class="password-input-wrap">
+            <input type="password" id="force-new-password" class="form-input" autocomplete="new-password" minlength="6" placeholder="Choose a new password" required>
+            <button type="button" class="btn-toggle-pw" onclick="togglePortalPassword('force-new-password', this)">Show</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="force-confirm-password">Confirm New Password</label>
+          <div class="password-input-wrap">
+            <input type="password" id="force-confirm-password" class="form-input" autocomplete="new-password" minlength="6" placeholder="Repeat new password" required>
+            <button type="button" class="btn-toggle-pw" onclick="togglePortalPassword('force-confirm-password', this)">Show</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-force-pwd-submit" class="btn-submit">
+          Save New Password &amp; Continue
+        </button>
+        <button type="button" class="btn-secondary-outline" onclick="logoutGuard()">
+          Sign Out
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 2. PORTAL HEADER (Shown when logged in — Zero CorpSec logo image) -->
 
   <header id="portal-header" class="portal-header" style="display:none;">
 
     <div class="portal-brand">
 
-      <img src="/static/images/corpsec_logo_badge.png" alt="CorpSec" class="portal-brand-img">
+      <div class="portal-brand-monogram" aria-hidden="true">GP</div>
 
       <div class="portal-title-group">
 
@@ -560,9 +673,9 @@
 
         </div>
 
-        <h2 id="prof-full-name" style="margin:0 0 4px 0; font-size:18px;">Peter Otieno</h2>
+        <h2 id="prof-full-name" style="margin:0 0 4px 0; font-size:18px;">Loading...</h2>
 
-        <span id="prof-emp-num" style="font-family:monospace; font-weight:700; color:#3B5EDB; font-size:14px;">CS-00431</span>
+        <span id="prof-emp-num" style="font-family:monospace; font-weight:700; color:#3B5EDB; font-size:14px;">—</span>
 
       </div>
 
@@ -578,7 +691,7 @@
 
             <span style="color:#64748B;">Primary Site:</span>
 
-            <span style="font-weight:700; color:#0F172A;" id="prof-site">Westlands Mall</span>
+            <span style="font-weight:700; color:#0F172A;" id="prof-site">—</span>
 
           </div>
 
@@ -586,7 +699,7 @@
 
             <span style="color:#64748B;">Current Shift:</span>
 
-            <span style="font-weight:600; color:#0F172A;" id="prof-shift">Day Shift</span>
+            <span style="font-weight:600; color:#0F172A;" id="prof-shift">—</span>
 
           </div>
 
@@ -594,7 +707,7 @@
 
             <span style="color:#64748B;">Registered Email:</span>
 
-            <span style="font-weight:600; color:#0F172A;" id="prof-email">peter.otieno@corpsec.co.ke</span>
+            <span style="font-weight:600; color:#0F172A;" id="prof-email">—</span>
 
           </div>
 
@@ -602,7 +715,7 @@
 
             <span style="color:#64748B;">Phone Number:</span>
 
-            <span style="font-weight:600; color:#0F172A;" id="prof-phone">0721654321</span>
+            <span style="font-weight:600; color:#0F172A;" id="prof-phone">—</span>
 
           </div>
 
@@ -710,8 +823,7 @@
 
 
 
-  <script src="/static/js/portal.js?v=20261112_v19"></script>
-  <script src="/static/js/silent-updater.js?v=20261112_v1"></script>
+  <script src="/static/js/portal.js?v=20261128_v1" defer></script>
 
 </body>
 

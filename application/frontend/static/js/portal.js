@@ -3,6 +3,7 @@
 const API_BASE = '/api/v1';
 const INSTALL_DISMISSED_KEY = 'corpsec_guard_install_dismissed_v2';
 let deferredInstallPrompt = null;
+let dashboardInFlight = null;
 
 // Token & Session Storage Helpers
 function getToken() {
@@ -27,12 +28,30 @@ function clearToken() {
 
 function getStoredUser() {
   const data = sessionStorage.getItem('guard_user') || localStorage.getItem('guard_user');
-  return data ? JSON.parse(data) : null;
+  if (!data) return null;
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    clearToken();
+    return null;
+  }
+}
+
+function updateOfflineBanner(customText = null) {
+  const banner = document.getElementById('portal-offline-banner');
+  if (!banner) return;
+  if (!navigator.onLine) {
+    banner.textContent = customText || 'You are offline. Connect to mobile data or Wi-Fi to sign in or sync attendance.';
+    banner.hidden = false;
+  } else {
+    banner.hidden = true;
+  }
 }
 
 // REST API Fetch Wrapper
 async function apiFetch(endpoint, options = {}) {
   options.headers = options.headers || {};
+  options.cache = options.cache || 'no-store';
   const token = getToken();
   if (token) {
     options.headers['Authorization'] = `Bearer ${token}`;
@@ -41,12 +60,34 @@ async function apiFetch(endpoint, options = {}) {
     options.headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, options);
-  
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, options);
+  } catch (networkErr) {
+    updateOfflineBanner('Connection error: Unable to reach CorpSec server. Check your internet and try again.');
+    const banner = document.getElementById('portal-offline-banner');
+    if (banner) banner.hidden = false;
+    throw new Error('Network error: Unable to connect to server.');
+  }
+
+  if (navigator.onLine) {
+    updateOfflineBanner();
+  }
+
   if (res.status === 401) {
     clearToken();
-    showLoginView('Session expired. Please log in again.');
+    resetPortalDomState();
+    showLoginView('Session expired. Please sign in again.');
     throw new Error('Unauthorized');
+  }
+
+  if (res.status === 403 && res.headers.get('X-Password-Change-Required') === 'true') {
+    const user = getStoredUser() || {};
+    user.must_change_password = true;
+    const tok = getToken();
+    if (tok) setToken(tok, user);
+    showForcePasswordView('Please set a personal password before using the Guard Portal.');
+    throw new Error('Password change required');
   }
 
   return res;
@@ -55,13 +96,24 @@ async function apiFetch(endpoint, options = {}) {
 function registerPortalServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
-  navigator.serviceWorker.register('/portal-sw.js', { scope: '/', updateViaCache: 'none' })
-    .then(() => {
-      console.log('CorpSec Guard Portal PWA: Service worker registered');
-    })
-    .catch((err) => {
-      console.warn('Service worker registration failed:', err);
-    });
+  const startReg = () => {
+    navigator.serviceWorker.register('/guard-sw.js', { scope: '/portal', updateViaCache: 'none' })
+      .then((reg) => {
+        if (reg && reg.update) {
+          // Non-blocking background SW check; does not delay login or dashboard use
+          setTimeout(() => reg.update().catch(() => {}), 4000);
+        }
+      })
+      .catch((err) => {
+        console.warn('Guard SW registration note:', err);
+      });
+  };
+
+  if (document.readyState === 'complete') {
+    setTimeout(startReg, 50);
+  } else {
+    window.addEventListener('load', () => setTimeout(startReg, 50), { once: true });
+  }
 }
 
 function isPortalStandalone() {
@@ -154,51 +206,339 @@ function setupInstallPrompt() {
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', () => {
+  updateOfflineBanner();
+  window.addEventListener('online', () => updateOfflineBanner());
+  window.addEventListener('offline', () => updateOfflineBanner());
+
   registerPortalServiceWorker();
   setupInstallPrompt();
 
   const token = getToken();
+  const user = getStoredUser();
   if (token) {
-    showPortalView();
-    switchPortalTab('home');
+    if (user && user.must_change_password) {
+      showForcePasswordView();
+    } else {
+      showPortalView();
+      switchPortalTab('home');
+    }
   } else {
-    window.location.href = '/';
+    showLoginView();
   }
 });
 
+function setLoginAlert(message, type = 'danger') {
+  const alertEl = document.getElementById('portal-login-alert');
+  if (!alertEl) return;
+  if (!message) {
+    alertEl.style.display = 'none';
+    alertEl.textContent = '';
+    return;
+  }
+  alertEl.className = `alert-banner ${type === 'success' ? 'alert-success' : 'alert-danger'}`;
+  alertEl.textContent = message;
+  alertEl.style.display = 'flex';
+}
+
+function setForcePwdAlert(message, type = 'danger') {
+  const alertEl = document.getElementById('portal-force-pwd-alert');
+  if (!alertEl) return;
+  if (!message) {
+    alertEl.style.display = 'none';
+    alertEl.textContent = '';
+    return;
+  }
+  alertEl.className = `alert-banner ${type === 'success' ? 'alert-success' : 'alert-danger'}`;
+  alertEl.textContent = message;
+  alertEl.style.display = 'flex';
+}
+
+function resetPortalDomState() {
+  currentShiftId = null;
+  currentShiftSite = null;
+  isCurrentSuperGuard = false;
+  superGuardSiteId = null;
+  superGuardSiteName = null;
+  dashboardInFlight = null;
+
+  const textResets = {
+    'header-guard-name': 'GUARD PORTAL',
+    'dash-emp-num': '--',
+    'dash-site-name': 'Loading...',
+    'dash-shift-name': '--',
+    'dash-clock-status': 'Loading...',
+    'dash-pay-amount': '--',
+    'dash-pay-period': '',
+  };
+  Object.entries(textResets).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  });
+
+  ['leave-history-list', 'incidents-history-list', 'payslips-list-container', 'offday-history-list'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+}
+
 // View Toggle Helpers
-function showLoginView(alertMessage = null) {
-  // Redirect to the unified login page at index.html.
-  // Append optional alert message as a query param so the login page can surface it.
-  clearToken();
-  const url = alertMessage
-    ? `/?alert=${encodeURIComponent(alertMessage)}`
-    : '/';
-  window.location.replace(url);
+function showLoginView(alertMessage = null, alertType = 'danger') {
+  document.body.classList.remove('portal-logged-in');
+  const header = document.getElementById('portal-header');
+  const nav = document.getElementById('portal-bottom-nav');
+  const main = document.getElementById('portal-main');
+  const loginSec = document.getElementById('portal-login-section');
+  const forceSec = document.getElementById('portal-force-password-section');
+
+  if (header) header.style.display = 'none';
+  if (nav) nav.style.display = 'none';
+  if (main) main.style.display = 'none';
+  if (forceSec) forceSec.style.display = 'none';
+  if (loginSec) loginSec.style.display = 'flex';
+
+  const pwInput = document.getElementById('login-password');
+  if (pwInput) pwInput.value = '';
+  setLoginAlert(alertMessage, alertType);
+}
+
+function showForcePasswordView(alertMessage = null) {
+  document.body.classList.remove('portal-logged-in');
+  const header = document.getElementById('portal-header');
+  const nav = document.getElementById('portal-bottom-nav');
+  const main = document.getElementById('portal-main');
+  const loginSec = document.getElementById('portal-login-section');
+  const forceSec = document.getElementById('portal-force-password-section');
+
+  if (header) header.style.display = 'none';
+  if (nav) nav.style.display = 'none';
+  if (main) main.style.display = 'none';
+  if (loginSec) loginSec.style.display = 'none';
+  if (forceSec) forceSec.style.display = 'flex';
+
+  ['force-current-password', 'force-new-password', 'force-confirm-password'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  setForcePwdAlert(alertMessage, 'danger');
 }
 
 function showPortalView() {
+  const loginSec = document.getElementById('portal-login-section');
+  const forceSec = document.getElementById('portal-force-password-section');
+  if (loginSec) loginSec.style.display = 'none';
+  if (forceSec) forceSec.style.display = 'none';
+
   document.body.classList.add('portal-logged-in');
   document.getElementById('portal-header').style.display = 'flex';
   document.getElementById('portal-bottom-nav').style.display = 'flex';
   document.getElementById('portal-main').style.display = 'block';
 
   const user = getStoredUser();
-  if (user && user.email) {
-    document.getElementById('header-guard-name').innerText = user.email.split('@')[0].replace('.', ' ').toUpperCase();
+  if (user) {
+    const displayName = user.full_name || (user.email ? user.email.split('@')[0].replace('.', ' ') : 'GUARD PORTAL');
+    document.getElementById('header-guard-name').innerText = displayName.toUpperCase();
   }
 }
 
+window.togglePortalPassword = function (inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const hidden = input.type === 'password';
+  input.type = hidden ? 'text' : 'password';
+  if (btnEl) btnEl.textContent = hidden ? 'Hide' : 'Show';
+};
+
+window.togglePortalForgotBox = function () {
+  const box = document.getElementById('portal-forgot-box');
+  if (!box) return;
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+};
+
+window.handlePortalForgotPassword = async function () {
+  const input = document.getElementById('portal-forgot-input');
+  const btn = document.getElementById('btn-portal-forgot');
+  const ident = (input ? input.value : '').trim();
+  if (!ident) {
+    setLoginAlert('Enter your registered phone number or Guard ID first.', 'danger');
+    return;
+  }
+  if (!navigator.onLine) {
+    setLoginAlert('You appear offline. Reconnect to internet to request a password reset.', 'danger');
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+  }
+  try {
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: ident }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setLoginAlert(data.detail || 'Could not reset password via email. Please contact HR or Admin to reset your password to your phone number.', 'danger');
+      return;
+    }
+    setLoginAlert(data.message || 'Password reset email dispatched.', 'success');
+  } catch (e) {
+    setLoginAlert('Connection error while contacting server. Check your mobile data and try again.', 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Send Reset Email';
+    }
+  }
+};
+
+window.handlePortalLogin = async function (event) {
+  if (event) event.preventDefault();
+  setLoginAlert(null);
+
+  const phoneInput = document.getElementById('login-phone');
+  const pwInput = document.getElementById('login-password');
+  const btn = document.getElementById('btn-portal-login');
+
+  const ident = (phoneInput ? phoneInput.value : '').trim();
+  const password = pwInput ? pwInput.value : '';
+
+  if (!ident || !password) {
+    setLoginAlert('Please enter your phone number and password.', 'danger');
+    return;
+  }
+
+  if (!navigator.onLine) {
+    setLoginAlert('You are currently offline. Connect to mobile data or Wi-Fi to sign in.', 'danger');
+    updateOfflineBanner();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login/guard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        guard_id: ident,
+        phone: ident,
+        password: password,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setLoginAlert(data.detail || 'Incorrect phone number or password.', 'danger');
+      return;
+    }
+
+    if (!data.access_token) {
+      setLoginAlert(data.message || 'Unable to complete sign-in.', 'danger');
+      return;
+    }
+
+    clearToken();
+    resetPortalDomState();
+    setToken(data.access_token, data);
+
+    if (data.must_change_password) {
+      showForcePasswordView();
+    } else {
+      showPortalView();
+      switchPortalTab('home');
+    }
+  } catch (err) {
+    setLoginAlert('Unable to connect to CorpSec server. Check your internet connection and retry.', 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  }
+};
+
+window.handleForcePasswordChange = async function (event) {
+  if (event) event.preventDefault();
+  setForcePwdAlert(null);
+
+  const curInput = document.getElementById('force-current-password');
+  const newInput = document.getElementById('force-new-password');
+  const confInput = document.getElementById('force-confirm-password');
+  const btn = document.getElementById('btn-force-pwd-submit');
+
+  const currentPassword = curInput ? curInput.value : '';
+  const newPassword = newInput ? newInput.value : '';
+  const confirmPassword = confInput ? confInput.value : '';
+
+  if (newPassword.length < 6) {
+    setForcePwdAlert('New password must be at least 6 characters long.', 'danger');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    setForcePwdAlert('New password and confirmation do not match.', 'danger');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving new password...';
+  }
+
+  try {
+    const res = await apiFetch('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setForcePwdAlert(data.detail || 'Could not update password. Please verify your current password.', 'danger');
+      return;
+    }
+
+    const user = getStoredUser() || {};
+    user.must_change_password = false;
+    const tok = getToken();
+    if (tok) setToken(tok, user);
+
+    showPortalView();
+    switchPortalTab('home');
+  } catch (err) {
+    if (err.message !== 'Unauthorized') {
+      setForcePwdAlert(err.message || 'Network error updating password. Please try again.', 'danger');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save New Password & Continue';
+    }
+  }
+};
 
 function logoutGuard() {
+  const token = getToken();
+  if (token) {
+    fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      keepalive: true,
+    }).catch(() => {});
+  }
   clearToken();
-  // Redirect to the unified login page on logout.
-  window.location.replace('/');
+  resetPortalDomState();
+  showLoginView('Signed out successfully.', 'success');
 }
 
 window.addEventListener('popstate', () => {
   if (!getToken()) {
-    showLoginView('Logged out successfully.');
+    showLoginView('Logged out successfully.', 'success');
   }
 });
 
@@ -206,6 +546,11 @@ window.addEventListener('popstate', () => {
 function switchPortalTab(tabName) {
   if (!getToken()) {
     showLoginView('Session expired. Please log in again.');
+    return;
+  }
+  const storedUser = getStoredUser();
+  if (storedUser && storedUser.must_change_password) {
+    showForcePasswordView();
     return;
   }
   const tabs = ['home', 'leave', 'incidents', 'super-guard', 'profile', 'anonymous'];
@@ -240,11 +585,24 @@ let superGuardSiteId = null;
 let superGuardSiteName = null;
 
 async function loadDashboard() {
+  if (dashboardInFlight) {
+    return dashboardInFlight;
+  }
+
+  const clockStatus = document.getElementById('dash-clock-status');
+  const clockBtn = document.getElementById('btn-clock-action');
+  if (clockStatus && clockStatus.innerText === 'Loading...') {
+    clockStatus.innerText = '⏳ Loading shift...';
+  }
+  if (clockBtn && !currentShiftId) {
+    clockBtn.disabled = true;
+  }
+
+  dashboardInFlight = (async () => {
   try {
     const res = await apiFetch('/guard-portal/dashboard');
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      const clockStatus = document.getElementById('dash-clock-status');
       if (clockStatus) {
         clockStatus.className = 'status-badge danger';
         clockStatus.innerText = '⚠️ Error Loading Dashboard';
@@ -309,7 +667,10 @@ async function loadDashboard() {
       }
     } else {
       document.getElementById('dash-site-name').innerText = shift.site_name || 'Assigned Site';
-      document.getElementById('dash-shift-name').innerText = `${shift.shift_name || 'Day Shift'} (${shift.start_time || '06:00 AM'} - ${shift.end_time || '06:00 PM'})`;
+      const timeRange = (shift.start_time && shift.end_time && shift.start_time !== '--:--')
+        ? ` (${shift.start_time} - ${shift.end_time})`
+        : '';
+      document.getElementById('dash-shift-name').innerText = `${shift.shift_name || 'No Shift Assigned'}${timeRange}`;
 
       if (shift.is_clocked_in) {
         clockStatus.className = 'status-badge active';
@@ -376,13 +737,19 @@ async function loadDashboard() {
     renderScheduledOffDays(data);
 
   } catch (err) {
+    if (err.message === 'Unauthorized' || err.message === 'Password change required') return;
     console.error('Dashboard load error:', err);
     const clockStatus = document.getElementById('dash-clock-status');
     if (clockStatus) {
       clockStatus.className = 'status-badge danger';
-      clockStatus.innerText = '⚠️ Network Error';
+      clockStatus.innerText = navigator.onLine ? '⚠️ Unable to load shift details' : '⚠️ Offline — Reconnect to load';
     }
+  } finally {
+    dashboardInFlight = null;
   }
+  })();
+
+  return dashboardInFlight;
 }
 
 async function handleClockIn(shiftId) {
@@ -764,7 +1131,7 @@ async function loadSuperGuardPortal() {
               ${statusBadge}
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #F1F5F9; padding-top:8px; margin-top:6px;">
-              <div style="font-size:11px; color:#64748B;">Shift: <strong>${g.shift_name || 'Day Shift'}</strong></div>
+              <div style="font-size:11px; color:#64748B;">Shift: <strong>${g.shift_name || 'Unassigned'}</strong></div>
               <div>${actionButton}</div>
             </div>
           </div>
@@ -836,17 +1203,17 @@ async function loadProfile() {
     if (!res.ok) return;
 
     const data = await res.json();
-    document.getElementById('prof-full-name').innerText = data.full_name || 'Guard Name';
-    document.getElementById('prof-emp-num').innerText = data.employee_number || 'CS-00400';
-    document.getElementById('prof-site').innerText = data.today_shift ? data.today_shift.site_name : 'Primary Site';
-    document.getElementById('prof-shift').innerText = data.today_shift ? data.today_shift.shift_name : 'Shift Roster';
+    document.getElementById('prof-full-name').innerText = data.full_name || '—';
+    document.getElementById('prof-emp-num').innerText = data.employee_number || '—';
+    document.getElementById('prof-site').innerText = data.today_shift ? (data.today_shift.site_name || 'Unassigned') : 'Unassigned';
+    document.getElementById('prof-shift').innerText = data.today_shift ? (data.today_shift.shift_name || 'Unassigned') : 'Unassigned';
 
     // Also get current user info for email
     const meRes = await apiFetch('/auth/me');
     if (meRes.ok) {
       const me = await meRes.json();
-      document.getElementById('prof-email').innerText = me.email || 'guard@corpsec.co.ke';
-      document.getElementById('prof-phone').innerText = me.phone || '0700000000';
+      document.getElementById('prof-email').innerText = me.email || '—';
+      document.getElementById('prof-phone').innerText = me.phone || '—';
     }
 
   } catch (err) {

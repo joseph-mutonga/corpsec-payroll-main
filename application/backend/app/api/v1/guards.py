@@ -3,10 +3,13 @@ import secrets
 from datetime import datetime
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, get_current_user
+from application.backend.app.core.phone import validate_kenyan_phone, kenyan_phone_variants, normalize_kenyan_phone
 from application.backend.app.core.security import get_password_hash
+from application.backend.app.services.guard_auth_migration import initialize_guard_phone_credentials
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
 from application.backend.app.models.shift import Shift
@@ -17,6 +20,22 @@ from application.backend.app.schemas.guard import (
 )
 
 router = APIRouter(prefix="/guards", tags=["Guards Workforce Management"])
+
+
+def _validate_supervisor_user(db: Session, supervisor_id: Optional[int]) -> Optional[User]:
+    """Validate that supervisor_id refers to a Supervisor, HR Manager, or Admin user."""
+    if supervisor_id is None:
+        return None
+    sup = db.query(User).filter(
+        User.id == supervisor_id,
+        func.upper(User.role).in_([UserRole.SUPERVISOR.value, UserRole.HR.value, UserRole.ADMIN.value])
+    ).first()
+    if not sup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assigned Supervisor / HR personnel not found."
+        )
+    return sup
 
 
 def compute_next_candidate(emp_no: str) -> Tuple[str, int, int]:
@@ -150,7 +169,7 @@ def _format_guard_detail(guard: Guard) -> dict:
 def create_guard_profile(
     payload: GuardCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Create a new guard profile with automatic incremental employee number."""
     emp_no = (payload.employee_number or "").strip()
@@ -179,11 +198,26 @@ def create_guard_profile(
             detail=f"Portal User account with email '{user_email}' already exists."
         )
 
-    existing_user_phone = db.query(User).filter(User.phone == payload.phone).first()
+    valid_phone, norm_phone, phone_err = validate_kenyan_phone(payload.phone)
+    if not valid_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=phone_err or "Invalid Kenyan phone number."
+        )
+    phone_variants = kenyan_phone_variants(norm_phone)
+
+    existing_guard_phone = db.query(Guard).filter(Guard.phone.in_(phone_variants)).first()
+    if existing_guard_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A guard profile with phone number '{norm_phone}' already exists."
+        )
+
+    existing_user_phone = db.query(User).filter(User.phone.in_(phone_variants)).first()
     if existing_user_phone:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Portal User account with phone '{payload.phone}' already exists."
+            detail=f"Portal User account with phone '{norm_phone}' already exists."
         )
 
     if payload.site_id:
@@ -196,11 +230,14 @@ def create_guard_profile(
         if not shift:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned shift not found")
 
+    if payload.supervisor_id:
+        _validate_supervisor_user(db, payload.supervisor_id)
+
     guard = Guard(
         employee_number=emp_no,
         full_name=payload.full_name,
         national_id=payload.national_id,
-        phone=payload.phone,
+        phone=norm_phone,
         email=payload.email,
         date_of_birth=payload.date_of_birth,
         gender=payload.gender,
@@ -228,17 +265,18 @@ def create_guard_profile(
     db.add(guard)
     db.flush()
 
-    if payload.initial_password and len(payload.initial_password.strip()) >= 6:
-        initial_pwd = payload.initial_password.strip()
-    else:
-        initial_pwd = f"Guard#{secrets.randbelow(899999)+100000}"
+    explicit_pw = payload.initial_password.strip() if (payload.initial_password and len(payload.initial_password.strip()) >= 6) else None
+    initial_pwd = explicit_pw if explicit_pw else norm_phone
+    must_change = (explicit_pw is None) or (normalize_kenyan_phone(initial_pwd) == norm_phone)
 
     user_account = User(
+        full_name=guard.full_name,
         email=user_email,
-        phone=payload.phone,
+        phone=norm_phone,
         password_hash=get_password_hash(initial_pwd),
         role=UserRole.GUARD.value,
         status=UserStatus.ACTIVE.value,
+        must_change_password=must_change,
         guard_id=guard.id,
         created_at=datetime.now(),
         updated_at=datetime.now()
@@ -266,13 +304,18 @@ def create_guard_profile(
 def list_guards(
     status_filter: Optional[str] = Query(None, alias="status"),
     site_id: Optional[int] = Query(None),
+    supervisor_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     is_reliever: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """List and filter guards directory."""
-    query = db.query(Guard).options(joinedload(Guard.site))
+    query = db.query(Guard).options(
+        joinedload(Guard.site),
+        joinedload(Guard.shift),
+        joinedload(Guard.supervisor)
+    )
 
     if current_user.role == UserRole.GUARD.value:
         query = query.filter(Guard.id == current_user.guard_id)
@@ -287,6 +330,12 @@ def list_guards(
         query = query.filter(Guard.status == status_filter.upper())
     if site_id:
         query = query.filter(Guard.primary_site_id == site_id)
+    if supervisor_id:
+        sup_site_ids_f = [s[0] for s in db.query(Site.id).filter(Site.supervisor_id == supervisor_id).all()]
+        if sup_site_ids_f:
+            query = query.filter((Guard.supervisor_id == supervisor_id) | (Guard.primary_site_id.in_(sup_site_ids_f)))
+        else:
+            query = query.filter(Guard.supervisor_id == supervisor_id)
     if is_reliever is not None:
         query = query.filter(Guard.is_reliever == is_reliever)
     if search:
@@ -348,20 +397,33 @@ def get_guard_detail(
     return _format_guard_detail(guard)
 
 
-@router.put("/{guard_id}", response_model=GuardResponse)
+@router.put("/{guard_id}", response_model=GuardDetailResponse)
 def update_guard_profile(
     guard_id: int,
     payload: GuardUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
-    """Update guard profile information."""
-    guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
+    """Update guard profile information and persist all changes to database."""
+    guard = db.query(Guard).options(
+        joinedload(Guard.site),
+        joinedload(Guard.shift),
+        joinedload(Guard.supervisor)
+    ).filter(Guard.id == guard_id).first()
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
 
     update_data = payload.model_dump(exclude_unset=True)
-    
+
+    # Guard against accidental null writes on non-nullable columns
+    non_nullable_fields = {
+        "employee_number", "full_name", "national_id", "phone",
+        "hire_date", "gender", "payment_method", "is_reliever", "is_super_guard"
+    }
+    for req_field in list(non_nullable_fields):
+        if req_field in update_data and update_data[req_field] is None:
+            update_data.pop(req_field)
+
     if "employee_number" in update_data and update_data["employee_number"]:
         new_emp = update_data["employee_number"].strip()
         existing = db.query(Guard).filter(Guard.employee_number == new_emp, Guard.id != guard_id).first()
@@ -372,31 +434,96 @@ def update_guard_profile(
             )
         update_data["employee_number"] = new_emp
 
+    if "national_id" in update_data and update_data["national_id"]:
+        new_nat = update_data["national_id"].strip()
+        existing_nat = db.query(Guard).filter(Guard.national_id == new_nat, Guard.id != guard_id).first()
+        if existing_nat:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Guard with National ID '{new_nat}' already exists."
+            )
+        update_data["national_id"] = new_nat
+
+    if "full_name" in update_data and update_data["full_name"]:
+        update_data["full_name"] = update_data["full_name"].strip()
+
+    if "phone" in update_data and update_data["phone"]:
+        valid_phone, norm_phone, phone_err = validate_kenyan_phone(update_data["phone"])
+        if not valid_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=phone_err or "Invalid Kenyan phone number."
+            )
+        phone_variants = kenyan_phone_variants(norm_phone)
+        dup_guard_phone = db.query(Guard).filter(Guard.phone.in_(phone_variants), Guard.id != guard_id).first()
+        if dup_guard_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Another guard already uses phone number '{norm_phone}'."
+            )
+        update_data["phone"] = norm_phone
+
     if "site_id" in update_data:
-        update_data["primary_site_id"] = update_data.pop("site_id")
-        if ("supervisor_id" not in update_data or not update_data["supervisor_id"]) and update_data["primary_site_id"]:
-            target_site = db.query(Site).filter(Site.id == update_data["primary_site_id"]).first()
-            if target_site and target_site.supervisor_id:
+        new_site_id = update_data.pop("site_id")
+        if new_site_id is not None:
+            target_site = db.query(Site).filter(Site.id == new_site_id).first()
+            if not target_site:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned site not found")
+            if "supervisor_id" not in update_data and not guard.supervisor_id and target_site.supervisor_id:
                 update_data["supervisor_id"] = target_site.supervisor_id
+        update_data["primary_site_id"] = new_site_id
+
+    if "shift_id" in update_data and update_data["shift_id"] is not None:
+        shift = db.query(Shift).filter(Shift.id == update_data["shift_id"]).first()
+        if not shift:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned shift not found")
+
+    if "supervisor_id" in update_data and update_data["supervisor_id"] is not None:
+        _validate_supervisor_user(db, update_data["supervisor_id"])
+
+    # Sync linked User account if email, phone, or full_name changed
+    user_acc = db.query(User).filter(User.guard_id == guard.id).first()
+    if user_acc:
+        if "email" in update_data and update_data["email"]:
+            new_email = update_data["email"].strip().lower()
+            update_data["email"] = new_email
+            dup_email = db.query(User).filter(func.lower(User.email) == new_email, User.id != user_acc.id).first()
+            if dup_email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Another user account already uses email '{new_email}'."
+                )
+            user_acc.email = new_email
+        if "phone" in update_data and update_data["phone"]:
+            new_phone = update_data["phone"]
+            phone_variants = kenyan_phone_variants(new_phone)
+            dup_phone = db.query(User).filter(User.phone.in_(phone_variants), User.id != user_acc.id).first()
+            if dup_phone:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Another user account already uses phone '{new_phone}'."
+                )
+            user_acc.phone = new_phone
+        if "full_name" in update_data and update_data["full_name"]:
+            user_acc.full_name = update_data["full_name"]
+        user_acc.updated_at = datetime.now()
+
+    for key, value in update_data.items():
+        setattr(guard, key, value)
 
     if "is_super_guard" in update_data:
         new_is_sg = bool(update_data["is_super_guard"])
         guard.is_super_guard = new_is_sg
         if not new_is_sg:
-            # Clear super_guard_id on any site that assigned this guard as super guard
             db.query(Site).filter(Site.super_guard_id == guard.id).update(
                 {Site.super_guard_id: None},
                 synchronize_session=False
             )
         else:
-            # If set to True and guard has a primary site that doesn't have a super guard, assign them
             if guard.primary_site_id:
                 target_site = db.query(Site).filter(Site.id == guard.primary_site_id).first()
                 if target_site and (target_site.super_guard_id is None or target_site.super_guard_id == guard.id):
                     target_site.super_guard_id = guard.id
-
-    for key, value in update_data.items():
-        setattr(guard, key, value)
 
     guard.updated_at = datetime.now()
 
@@ -412,9 +539,14 @@ def update_guard_profile(
     )
     db.add(audit_entry)
     db.commit()
-    db.refresh(guard)
 
-    return _format_guard(guard)
+    guard = db.query(Guard).options(
+        joinedload(Guard.site),
+        joinedload(Guard.shift),
+        joinedload(Guard.supervisor)
+    ).filter(Guard.id == guard_id).first()
+
+    return _format_guard_detail(guard)
 
 
 @router.post("/{guard_id}/deactivate", response_model=GuardResponse)
@@ -505,7 +637,7 @@ def reactivate_guard(
 def remove_super_guard_mandate(
     guard_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Explicitly remove Super Guard designation from a guard and unassign from any sites."""
     guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
@@ -540,7 +672,7 @@ def assign_super_guard_mandate(
     guard_id: int,
     site_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Explicitly assign Super Guard designation to a guard and attach to site."""
     guard = db.query(Guard).options(joinedload(Guard.site)).filter(Guard.id == guard_id).first()
@@ -581,3 +713,87 @@ def assign_super_guard_mandate(
     db.commit()
     db.refresh(guard)
     return _format_guard(guard)
+
+
+@router.post("/{guard_id}/reset-password")
+def reset_guard_password_to_phone(
+    guard_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_admin_or_hr)
+):
+    """
+    Admin or HR action: Reset a guard's password back to their registered normalized
+    Kenyan phone number and require an immediate password change on next login.
+    Never resets non-Guard accounts and never returns or logs plaintext passwords.
+    """
+    guard = db.query(Guard).filter(Guard.id == guard_id).first()
+    if not guard:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
+
+    valid_phone, norm_phone, phone_err = validate_kenyan_phone(guard.phone)
+    if not valid_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=phone_err or "Guard does not have a valid registered Kenyan phone number."
+        )
+
+    guard.phone = norm_phone
+    guard.updated_at = datetime.now()
+
+    user_acc = db.query(User).filter(User.guard_id == guard.id).first()
+    if user_acc:
+        if (user_acc.role or "").upper() != UserRole.GUARD.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot reset non-guard user credentials via guard password reset."
+            )
+        user_acc.phone = norm_phone
+        user_acc.password_hash = get_password_hash(norm_phone)
+        user_acc.must_change_password = True
+        user_acc.updated_at = datetime.now()
+    else:
+        user_email = (guard.email or f"{guard.employee_number.lower()}@corpsec.co.ke").strip().lower()
+        user_acc = User(
+            full_name=guard.full_name,
+            email=user_email,
+            phone=norm_phone,
+            password_hash=get_password_hash(norm_phone),
+            role=UserRole.GUARD.value,
+            status=UserStatus.ACTIVE.value if guard.status == "ACTIVE" else UserStatus.SUSPENDED.value,
+            must_change_password=True,
+            guard_id=guard.id,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        db.add(user_acc)
+
+    audit_entry = AuditLog(
+        user_id=actor.id,
+        user_name=actor.email,
+        role=actor.role,
+        action="RESET_GUARD_PASSWORD",
+        target_entity="Guard",
+        target_id=str(guard.id),
+        reason=f"Guard password reset to registered phone number by {actor.role} (password change required on next login)"
+    )
+    db.add(audit_entry)
+    db.commit()
+
+    return {
+        "status": "SUCCESS",
+        "guard_id": guard.id,
+        "employee_number": guard.employee_number,
+        "must_change_password": True,
+        "message": "Guard password has been reset to their registered phone number. Guard must set a new password on next login."
+    }
+
+
+@router.post("/sync-phone-credentials")
+def sync_guard_phone_credentials_endpoint(
+    dry_run: bool = Query(False),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_admin)
+):
+    """Admin-only safe batch initialization/normalization of guard phone-number login credentials."""
+    summary = initialize_guard_phone_credentials(db, dry_run=dry_run, overwrite_custom_passwords=False)
+    return {"status": "SUCCESS", "dry_run": dry_run, "summary": summary}

@@ -155,10 +155,14 @@ def clock_in(
         resolved_shift_id = guard.shift_id
         resolved_site_id = guard.primary_site_id
     else:
-        # Default fallback shift #1 (Day Shift)
         first_shift = db.query(Shift).first()
-        resolved_shift_id = first_shift.id if first_shift else 1
-        resolved_site_id = guard.primary_site_id if guard.primary_site_id else 1
+        if not first_shift:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No shifts configured in the database. Please create a shift first."
+            )
+        resolved_shift_id = first_shift.id
+        resolved_site_id = guard.primary_site_id
 
     existing = db.query(Attendance).filter(
         Attendance.guard_id == guard.id,
@@ -509,8 +513,8 @@ def _resolve_super_guard(db: Session, current_user: User):
     """Helper to verify caller is a Super Guard and get their assigned site."""
     if current_user.role in [UserRole.ADMIN.value, UserRole.SUPERVISOR.value]:
         first_site = db.query(Site).first()
-        dummy_guard = db.query(Guard).first()
-        return (dummy_guard, first_site)
+        acting_guard = db.query(Guard).first()
+        return (acting_guard, first_site)
 
     if not current_user.guard_id:
         raise HTTPException(status_code=403, detail="User account is not linked to a guard profile.")
@@ -563,7 +567,7 @@ def list_super_guard_site_guards(
 
         is_in = bool(today_att and today_att.actual_clock_in and not today_att.actual_clock_out)
         is_completed = bool(today_att and today_att.actual_clock_in and today_att.actual_clock_out)
-        shift_name = g.shift.name if g.shift else "Day Shift"
+        shift_name = g.shift.name if g.shift else "Unassigned"
         
         results.append({
             "guard_id": g.id,

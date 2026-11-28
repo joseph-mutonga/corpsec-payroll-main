@@ -10,26 +10,7 @@ from application.backend.app.models.off_day import OffDayRequest, OffDayAllowanc
 from application.backend.app.services.payroll_engine import calculate_month_to_date_guard_pay, format_pay_period_label
 
 
-def validate_kenyan_phone(phone_str: Optional[str]) -> Tuple[bool, str, Optional[str]]:
-    """
-    Validates and normalizes Kenyan phone numbers (07xx xxx xxx, 01xx xxx xxx, +254xx...).
-    Returns (is_valid, normalized_phone, error_message).
-    """
-    if not phone_str:
-        return False, "", "Phone number is missing"
-
-    # Remove whitespace, dashes, plus signs
-    cleaned = re.sub(r"[\s\-\+\(\)]", "", str(phone_str).strip())
-
-    # Handle +254 or 254 prefix
-    if cleaned.startswith("254") and len(cleaned) == 12:
-        cleaned = "0" + cleaned[3:]
-
-    # Check 10-digit Kenyan format starting with 07 or 01
-    if len(cleaned) == 10 and (cleaned.startswith("07") or cleaned.startswith("01")):
-        return True, cleaned, None
-
-    return False, phone_str, f"Invalid Kenyan phone format: '{phone_str}'"
+from application.backend.app.core.phone import validate_kenyan_phone
 
 
 def validate_bank_details(bank_name: Optional[str], bank_account: Optional[str]) -> Tuple[bool, Optional[str]]:

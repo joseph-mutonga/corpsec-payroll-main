@@ -57,15 +57,20 @@ if settings.BACKEND_CORS_ORIGINS:
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
     """
-    Ensures HTML, JS, CSS, manifests, and version manifests are never cached stalely
-    by client browsers or intermediate proxies. Browsers will always revalidate
-    and fetch the latest application release immediately.
+    Ensures HTML entrypoints, service workers, manifests, and unversioned static assets
+    are revalidated cleanly, while allowing long-lived browser caching on explicitly
+    versioned Guard Portal assets (?v=...) for fast mobile startup without stale deploys.
     """
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
+        has_version_tag = bool(request.query_params.get("v"))
+        if path in ["/static/js/portal.js", "/static/css/portal.css"] and has_version_tag:
+            response.headers["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
+            return response
+
         if (
-            path in ["/", "/portal", "/portal.html", "/version.json", "/manifest.json", "/portal-sw.js"]
+            path in ["/", "/portal", "/portal.html", "/version.json", "/manifest.json", "/portal-manifest.json", "/portal-sw.js", "/guard-sw.js"]
             or path.startswith("/static/js/")
             or path.startswith("/static/css/")
             or path.endswith(".js")
@@ -183,6 +188,36 @@ def read_manifest():
             headers={"Content-Disposition": "inline", "Cache-Control": "no-cache"},
         )
     return {"error": "manifest not found"}
+
+
+@app.get("/portal-manifest.json")
+def read_portal_manifest():
+    manifest_file = os.path.join(frontend_dir, "portal-manifest.json")
+    if os.path.exists(manifest_file):
+        return FileResponse(
+            manifest_file,
+            media_type="application/manifest+json",
+            headers={"Content-Disposition": "inline", "Cache-Control": "no-cache"},
+        )
+    return {"error": "portal manifest not found"}
+
+
+@app.get("/guard-sw.js")
+def read_guard_service_worker():
+    sw_file = os.path.join(frontend_dir, "guard-sw.js")
+    if os.path.exists(sw_file):
+        return FileResponse(
+            sw_file,
+            media_type="application/javascript",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+                "Service-Worker-Allowed": "/portal",
+            },
+        )
+    return {"error": "guard service worker not found"}
 
 
 @app.get("/version.json")

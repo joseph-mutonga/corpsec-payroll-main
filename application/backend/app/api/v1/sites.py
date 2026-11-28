@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from application.backend.app.api.deps import get_db, require_admin, get_current_user
+from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, get_current_user
 from application.backend.app.models.site import Site
 from application.backend.app.models.region import Region
 from application.backend.app.models.guard import Guard
@@ -72,7 +73,7 @@ def _format_site(site: Site) -> dict:
 def create_client_site(
     payload: SiteCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Create a new Client Site with basic salary, daily rates, allowances, geofence radius, and assigned supervisor."""
     existing = db.query(Site).filter(Site.site_name == payload.site_name).first()
@@ -88,9 +89,12 @@ def create_client_site(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Region #{payload.region_id} not found")
 
     if payload.supervisor_id:
-        sup_user = db.query(User).filter(User.id == payload.supervisor_id, User.role == UserRole.SUPERVISOR.value).first()
+        sup_user = db.query(User).filter(
+            User.id == payload.supervisor_id,
+            func.upper(User.role).in_([UserRole.SUPERVISOR.value, UserRole.HR.value])
+        ).first()
         if not sup_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{payload.supervisor_id} not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor / HR Manager #{payload.supervisor_id} not found")
 
     if payload.super_guard_id:
         sg_guard = db.query(Guard).filter(Guard.id == payload.super_guard_id).first()
@@ -193,7 +197,7 @@ def update_site_rates(
     site_id: int,
     payload: SiteUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_admin_or_hr)
 ):
     """Update site details, basic salary, billing rates, allowances, and assigned supervisor."""
     site = db.query(Site).options(joinedload(Site.region), joinedload(Site.supervisor)).filter(Site.id == site_id).first()
@@ -231,9 +235,12 @@ def update_site_rates(
     new_supervisor_id = update_data.get("supervisor_id") if "supervisor_id" in update_data else old_supervisor_id
 
     if "supervisor_id" in update_data and new_supervisor_id is not None:
-        sup_user = db.query(User).filter(User.id == new_supervisor_id, User.role == UserRole.SUPERVISOR.value).first()
+        sup_user = db.query(User).filter(
+            User.id == new_supervisor_id,
+            func.upper(User.role).in_([UserRole.SUPERVISOR.value, UserRole.HR.value])
+        ).first()
         if not sup_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor #{new_supervisor_id} not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Supervisor / HR Manager #{new_supervisor_id} not found")
 
     old_sg_id = site.super_guard_id
     if "super_guard_id" in update_data:

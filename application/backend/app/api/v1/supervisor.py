@@ -9,7 +9,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 import secrets
 
@@ -118,15 +118,28 @@ class SupervisorAttendanceStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── Admin: List all supervisors ───────────────────────────────────────────────
+ASSIGNABLE_MANAGER_ROLES = [UserRole.SUPERVISOR.value, UserRole.HR.value]
+
+
+def _get_assignable_manager(db: Session, manager_id: int) -> Optional[User]:
+    """Retrieve a Supervisor or HR Manager user who can be assigned guards/sites."""
+    return db.query(User).filter(
+        User.id == manager_id,
+        func.upper(User.role).in_(ASSIGNABLE_MANAGER_ROLES)
+    ).first()
+
+
+# ── Admin: List all supervisors & HR managers ────────────────────────────────
 
 @router.get("", response_model=List[SupervisorResponse])
 def list_supervisors(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin_or_hr)
 ):
-    """List all supervisor user accounts with assigned sites and guards."""
-    supervisors = db.query(User).filter(User.role == UserRole.SUPERVISOR.value).all()
+    """List all supervisor and HR user accounts with assigned sites and guards."""
+    supervisors = db.query(User).filter(
+        func.upper(User.role).in_(ASSIGNABLE_MANAGER_ROLES)
+    ).all()
     results = []
     for sup in supervisors:
         sup_sites = db.query(Site).filter(Site.supervisor_id == sup.id).all()
@@ -232,12 +245,9 @@ def assign_sites_to_supervisor(
     Assign a list of site IDs to a supervisor.
     Guards deployed at those sites will automatically fall under this supervisor's command.
     """
-    sup = db.query(User).filter(
-        User.id == supervisor_id,
-        User.role == UserRole.SUPERVISOR.value
-    ).first()
+    sup = _get_assignable_manager(db, supervisor_id)
     if not sup:
-        raise HTTPException(status_code=404, detail="Supervisor not found.")
+        raise HTTPException(status_code=404, detail="Supervisor or HR personnel not found.")
 
     new_site_ids = set(payload.site_ids)
     previously_assigned_sites = db.query(Site).filter(Site.supervisor_id == supervisor_id).all()
@@ -320,12 +330,9 @@ def assign_guards_to_supervisor(
     Assign a list of guard IDs to a supervisor.
     Guards not in the list but previously assigned to this supervisor will be unassigned.
     """
-    sup = db.query(User).filter(
-        User.id == supervisor_id,
-        User.role == UserRole.SUPERVISOR.value
-    ).first()
+    sup = _get_assignable_manager(db, supervisor_id)
     if not sup:
-        raise HTTPException(status_code=404, detail="Supervisor not found.")
+        raise HTTPException(status_code=404, detail="Supervisor or HR personnel not found.")
 
     previously_assigned = db.query(Guard).filter(Guard.supervisor_id == supervisor_id).all()
     new_ids_set = set(payload.guard_ids)
@@ -399,12 +406,9 @@ def list_supervisor_guards(
     admin: User = Depends(require_admin_or_hr)
 ):
     """List all guards assigned to a specific supervisor (directly or via assigned sites)."""
-    sup = db.query(User).filter(
-        User.id == supervisor_id,
-        User.role == UserRole.SUPERVISOR.value
-    ).first()
+    sup = _get_assignable_manager(db, supervisor_id)
     if not sup:
-        raise HTTPException(status_code=404, detail="Supervisor not found.")
+        raise HTTPException(status_code=404, detail="Supervisor or HR personnel not found.")
 
     sup_site_ids = [s.id for s in db.query(Site.id).filter(Site.supervisor_id == supervisor_id).all()]
     filters = [Guard.supervisor_id == supervisor_id]
@@ -472,7 +476,7 @@ def get_supervisor_guards_attendance(
         ).first()
 
         site_name = g.site.site_name if g.site else "Unassigned Site"
-        shift_name = g.shift.name if g.shift else "Day Shift"
+        shift_name = g.shift.name if g.shift else "Unassigned"
 
         att_status = att.status if att else "NOT_MARKED"
         att_notes = att.notes if att else None
@@ -548,11 +552,13 @@ def supervisor_mark_attendance(
                 shift_duration = s_obj.duration_hours
         else:
             first_shift = db.query(Shift).first()
-            resolved_shift_id = first_shift.id if first_shift else 1
-            if first_shift and first_shift.duration_hours:
+            if not first_shift:
+                raise HTTPException(status_code=400, detail="No shifts configured in the database.")
+            resolved_shift_id = first_shift.id
+            if first_shift.duration_hours:
                 shift_duration = first_shift.duration_hours
 
-        resolved_site_id = guard.primary_site_id or 1
+        resolved_site_id = guard.primary_site_id
         now = datetime.now()
 
         att = db.query(Attendance).filter(
@@ -653,8 +659,21 @@ def supervisor_guard_clock_in(
             detail=f"Guard '{guard.full_name}' is already clocked in today at {today_active.actual_clock_in.strftime('%H:%M')}."
         )
 
-    resolved_shift_id = guard.shift_id or 1
-    resolved_site_id = guard.primary_site_id or 1
+    resolved_shift_id = guard.shift_id
+    shift_duration = 12.0
+    if resolved_shift_id:
+        s_obj = db.query(Shift).filter(Shift.id == resolved_shift_id).first()
+        if s_obj and s_obj.duration_hours:
+            shift_duration = s_obj.duration_hours
+    else:
+        first_shift = db.query(Shift).first()
+        if not first_shift:
+            raise HTTPException(status_code=400, detail="No shifts configured in the database.")
+        resolved_shift_id = first_shift.id
+        if first_shift.duration_hours:
+            shift_duration = first_shift.duration_hours
+
+    resolved_site_id = guard.primary_site_id
 
     att = db.query(Attendance).filter(
         Attendance.guard_id == guard.id,
@@ -670,7 +689,7 @@ def supervisor_guard_clock_in(
             actual_clock_in=now,
             actual_clock_out=None,
             status="PRESENT",
-            regular_hours=12.0,
+            regular_hours=shift_duration,
             overtime_hours=0.0,
             notes=f"Clocked in by supervisor {current_user.email}"
         )
@@ -679,7 +698,7 @@ def supervisor_guard_clock_in(
         att.actual_clock_in = now
         att.actual_clock_out = None
         att.status = "PRESENT"
-        att.regular_hours = 12.0
+        att.regular_hours = shift_duration
         att.overtime_hours = 0.0
         att.notes = f"Clocked in by supervisor {current_user.email}"
 

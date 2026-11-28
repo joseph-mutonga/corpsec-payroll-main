@@ -104,9 +104,9 @@ class VoiceProviderService:
     def __init__(self):
         # Environment configuration placeholders
         self.provider = getattr(settings, "VOICE_PROVIDER", None) or os.getenv("VOICE_PROVIDER", "AFRICAS_TALKING")  # TWILIO, AFRICAS_TALKING, WEBRTC_SIMULATOR
-        self.twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID", "AC_placeholder_corpsec_callcenter")
-        self.twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN", "auth_placeholder_corpsec")
-        self.twilio_twiml_app_sid = os.getenv("TWILIO_TWIML_APP_SID", "AP_placeholder_twiml")
+        self.twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+        self.twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
+        self.twilio_twiml_app_sid = os.getenv("TWILIO_TWIML_APP_SID", "")
 
     @property
     def at_username(self) -> str:

@@ -1539,15 +1539,27 @@ async def call_center_websocket_endpoint(
     delivers instantaneous call ringing notifications, queue counters, and agent statuses.
     """
     from application.backend.app.core.security import decode_access_token
+    from application.backend.app.models.user import UserStatus
 
-    user_id = 1
-    if token:
-        try:
-            payload = decode_access_token(token)
-            if payload and payload.get("sub"):
-                user_id = int(payload.get("sub"))
-        except Exception:
-            pass
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    payload = decode_access_token(token)
+    if not payload or not payload.get("sub"):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    sub_val = str(payload.get("sub"))
+    if not sub_val.isdigit():
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    user_id = int(sub_val)
+    user_obj = db.query(User).filter(User.id == user_id, User.status == UserStatus.ACTIVE.value).first()
+    if not user_obj:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     await ws_manager.connect(websocket, user_id)
     try:

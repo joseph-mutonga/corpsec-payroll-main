@@ -10,6 +10,9 @@
 
   function isSystemAdminUser() {
     try {
+      const token = localStorage.getItem('corpsec_token');
+      if (!token || token === 'null' || token === 'undefined') return false;
+      if (typeof isAuthSessionVerified !== 'undefined' && !isAuthSessionVerified) return false;
       const stored = localStorage.getItem('corpsec_user');
       if (stored) {
         const u = JSON.parse(stored);

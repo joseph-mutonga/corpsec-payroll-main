@@ -12,6 +12,14 @@ class ShiftCreate(BaseModel):
     duration_hours: float = 12.0
 
 
+class ShiftUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2)
+    shift_type: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_night_shift: Optional[bool] = None
+
+
 class ShiftResponse(BaseModel):
     id: int
     name: str

@@ -7,6 +7,7 @@ from sqlalchemy import or_
 
 from application.backend.app.api.deps import get_db, get_current_user, require_admin
 from application.backend.app.core.config import settings
+from application.backend.app.core.phone import normalize_kenyan_phone, kenyan_phone_variants
 from application.backend.app.core.security import verify_password, get_password_hash, create_access_token
 from application.backend.app.core.limiter import limiter
 from application.backend.app.models.user import User, UserRole, UserStatus
@@ -37,6 +38,16 @@ def check_user_credentials(user: User, password: str) -> bool:
     if verify_password(password, user.password_hash):
         return True
 
+    user_role = (user.role or "").upper()
+    if user_role in (UserRole.GUARD.value, "GUARD") and getattr(user, "must_change_password", False):
+        # Support equivalent Kenyan phone formats (+254..., 254..., 07...) as initial password verification
+        norm_pw = normalize_kenyan_phone(password)
+        registered_phone = user.phone or (user.guard.phone if user.guard else None)
+        norm_registered = normalize_kenyan_phone(registered_phone)
+        if norm_pw and norm_registered and norm_pw == norm_registered:
+            if verify_password(norm_pw, user.password_hash):
+                return True
+
     # Enforce strict verification when a temporary emailed password was issued
     if getattr(user, "must_change_password", False):
         return False
@@ -45,7 +56,7 @@ def check_user_credentials(user: User, password: str) -> bool:
     if os.getenv("TESTING") == "1":
         return False
 
-    # Graceful fallback for standard authorized environment credentials in local development
+    # Graceful fallback for standard authorized environment credentials in local development (non-guard roles only)
     from application.backend.app.core.config import settings
     allowed_admin_passwords = {
         settings.ADMIN_INITIAL_PASSWORD,
@@ -59,13 +70,8 @@ def check_user_credentials(user: User, password: str) -> bool:
         "CorpSec2026!",
         "123456"
     }
-    user_role = (user.role or "").upper()
     if user_role in (UserRole.ADMIN.value, "ADMIN", UserRole.HR.value, "HR", UserRole.SUPERVISOR.value, "SUPERVISOR", UserRole.STAFF.value):
         if password in allowed_admin_passwords:
-            user.password_hash = get_password_hash(password)
-            return True
-    elif user_role in (UserRole.GUARD.value, "GUARD"):
-        if password in ("Guard@123456", "password123", "guard", "guard123", "123456"):
             user.password_hash = get_password_hash(password)
             return True
     return False
@@ -135,10 +141,21 @@ def find_user_by_credential(db: Session, login_id: str) -> Optional[User]:
         if user:
             return user
 
-    # 3. Direct user phone match
-    user = db.query(User).filter(User.phone == login_id).first()
-    if user:
-        return user
+    # 3. Direct user phone match (including normalized Kenyan phone variants)
+    phone_variants = kenyan_phone_variants(login_id)
+    if phone_variants:
+        guard_by_phone = db.query(Guard).filter(Guard.phone.in_(phone_variants)).first()
+        if guard_by_phone:
+            guard_user = db.query(User).filter(User.guard_id == guard_by_phone.id).first()
+            if guard_user:
+                return guard_user
+        user = db.query(User).filter(User.phone.in_(phone_variants)).first()
+        if user:
+            return user
+    else:
+        user = db.query(User).filter(User.phone == login_id).first()
+        if user:
+            return user
 
     # 3b. Direct full name match
     user = db.query(User).filter(User.full_name.ilike(login_id)).first()
@@ -232,10 +249,6 @@ def login_for_access_token(
     if not user_name:
         if user.guard:
             user_name = user.guard.full_name
-        elif user.role and user.role.upper() == "ADMIN":
-            user_name = "Fiona Johnson"
-        elif user.role and user.role.upper() == "HR":
-            user_name = "Sarah Njeri"
         else:
             user_name = user.email.split('@')[0].replace('.', ' ').title()
 
@@ -345,26 +358,52 @@ def guard_login(
     payload: GuardLoginRequest,
     db: Session = Depends(get_db)
 ):
-    """Guard Mobile Portal Login endpoint matching Screen 19 (supports Employee Number or Phone)."""
-    guard = db.query(Guard).filter(
-        (Guard.employee_number == payload.guard_id) | (Guard.phone == payload.guard_id)
-    ).first()
+    """Guard Mobile Portal Login endpoint matching Screen 19 (supports Kenyan Phone variants or Employee Number)."""
+    ident = (payload.phone or payload.guard_id or "").strip()
+    phone_variants = kenyan_phone_variants(ident)
+
+    if phone_variants:
+        guard = db.query(Guard).filter(
+            (Guard.employee_number == ident) | (Guard.phone.in_(phone_variants))
+        ).first()
+    else:
+        guard = db.query(Guard).filter(
+            (Guard.employee_number == ident) | (Guard.phone == ident)
+        ).first()
 
     user = None
     if guard:
         user = db.query(User).filter(User.guard_id == guard.id).first()
 
-    if not user and "@" in payload.guard_id:
-        user = db.query(User).filter(User.email == payload.guard_id).first()
+    if not user and phone_variants:
+        user = db.query(User).filter(
+            User.phone.in_(phone_variants),
+            User.role == UserRole.GUARD.value,
+        ).first()
+        if user and user.guard_id and not guard:
+            guard = db.query(Guard).filter(Guard.id == user.guard_id).first()
 
-    if not user:
+    if not user and "@" in ident:
+        user = db.query(User).filter(
+            User.email.ilike(ident),
+            User.role == UserRole.GUARD.value,
+        ).first()
+        if user and user.guard_id and not guard:
+            guard = db.query(Guard).filter(Guard.id == user.guard_id).first()
+
+    if not user or (user.role or "").upper() != UserRole.GUARD.value:
         verify_password(payload.password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Guard ID / Phone or Password"
         )
 
-    if not check_user_credentials(user, payload.password) or user.status != UserStatus.ACTIVE.value:
+    guard_is_active = True if not guard else ((guard.status or "").upper() == "ACTIVE")
+    if (
+        not guard_is_active
+        or (user.status or "").upper() != UserStatus.ACTIVE.value
+        or not check_user_credentials(user, payload.password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Guard ID / Phone or Password"
@@ -532,10 +571,6 @@ def verify_otp(
     if not user_name:
         if user.guard:
             user_name = user.guard.full_name
-        elif user.role and user.role.upper() == "ADMIN":
-            user_name = "Fiona Johnson"
-        elif user.role and user.role.upper() == "HR":
-            user_name = "Sarah Njeri"
         else:
             user_name = user.email.split('@')[0].replace('.', ' ').title()
 
@@ -796,11 +831,22 @@ def change_password(
     current_user: User = Depends(get_current_user)
 ):
     """Change current logged-in user password."""
-    if not verify_password(payload.current_password, current_user.password_hash):
+    if not check_user_credentials(current_user, payload.current_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password incorrect"
         )
+    if (current_user.role or "").upper() == UserRole.GUARD.value:
+        registered_phone = current_user.phone or (current_user.guard.phone if current_user.guard else None)
+        norm_reg = normalize_kenyan_phone(registered_phone)
+        norm_new = normalize_kenyan_phone(payload.new_password)
+        if (norm_reg and norm_new and norm_new == norm_reg) or (
+            registered_phone and payload.new_password.strip() == registered_phone.strip()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please choose a new password that is different from your phone number."
+            )
     current_user.password_hash = get_password_hash(payload.new_password)
     current_user.must_change_password = False
 
@@ -832,6 +878,18 @@ def set_new_password_after_reset(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No pending temporary password reset for this account. Use Change Password instead."
         )
+
+    if (current_user.role or "").upper() == UserRole.GUARD.value:
+        registered_phone = current_user.phone or (current_user.guard.phone if current_user.guard else None)
+        norm_reg = normalize_kenyan_phone(registered_phone)
+        norm_new = normalize_kenyan_phone(payload.new_password)
+        if (norm_reg and norm_new and norm_new == norm_reg) or (
+            registered_phone and payload.new_password.strip() == registered_phone.strip()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please choose a new password that is different from your phone number."
+            )
 
     current_user.password_hash = get_password_hash(payload.new_password)
     current_user.must_change_password = False

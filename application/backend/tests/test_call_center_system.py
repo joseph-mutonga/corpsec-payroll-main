@@ -304,3 +304,24 @@ def test_call_history_recordings_and_missed_endpoints(client, db):
     token_data = res_token.json()
     assert "token" in token_data
     assert "identity" in token_data
+
+
+def test_call_center_websocket_requires_valid_corpsec_token(client, db):
+    """WebSocket endpoint rejects missing or foreign/invalid tokens and accepts valid active user tokens."""
+    from starlette.websockets import WebSocketDisconnect
+
+    admin = get_or_create_user(db, "admin@corpsec.co.ke", UserRole.ADMIN, "System Administrator")
+    valid_token = create_access_token(data={"sub": str(admin.id)})
+
+    # 1. Missing or foreign JWT should be rejected
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/api/v1/call-center/ws?token=invalid_foreign_jwt"):
+            pass
+    assert exc_info.value.code == 1008
+
+    # 2. Valid CorpSec token connects and handles ping/pong
+    with client.websocket_connect(f"/api/v1/call-center/ws?token={valid_token}") as ws:
+        ws.send_text('{"action": "ping"}')
+        reply = ws.receive_json()
+        assert reply == {"event": "pong"}
+

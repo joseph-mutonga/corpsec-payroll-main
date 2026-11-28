@@ -65,8 +65,11 @@
     options.headers = options.headers || {};
 
     const token = localStorage.getItem('corpsec_token') ||
-                  localStorage.getItem('token') ||
                   (typeof authToken !== 'undefined' ? authToken : '');
+
+    if (!token && !endpoint.includes('/auth/')) {
+      throw new Error('Not authenticated');
+    }
 
     if (token && !options.headers['Authorization']) {
       options.headers['Authorization'] = `Bearer ${token}`;
@@ -240,13 +243,16 @@
      2. WebSocket Connection for Real-Time ACD Events
      ========================================================================== */
   function initCallCenterWebSocket() {
-    if (window.CallCenter.ws && window.CallCenter.ws.readyState === WebSocket.OPEN) {
+    if (window.CallCenter.ws && (window.CallCenter.ws.readyState === WebSocket.OPEN || window.CallCenter.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
     const token = localStorage.getItem('corpsec_token') ||
-                  localStorage.getItem('token') ||
                   (typeof authToken !== 'undefined' ? authToken : '');
+
+    if (!token || token === 'null' || token === 'undefined' || token.trim() === '' || (typeof isAuthSessionVerified !== 'undefined' && !isAuthSessionVerified)) {
+      return;
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/v1/call-center/ws?token=${encodeURIComponent(token)}`;
@@ -269,12 +275,19 @@
       };
 
       ws.onclose = () => {
-        setTimeout(initCallCenterWebSocket, 5000);
+        window.CallCenter.ws = null;
+        if (localStorage.getItem('corpsec_token') && (typeof isAuthSessionVerified === 'undefined' || isAuthSessionVerified)) {
+          setTimeout(initCallCenterWebSocket, 5000);
+        }
       };
     } catch (e) {
       console.warn('WebSocket init exception', e);
     }
   }
+  window.initCallCenterWebSocketIfReady = function () {
+    initCallCenterWebSocket();
+    fetchCurrentAgentStatus();
+  };
 
   function handleWebSocketMessage(msg) {
     if (!msg || !msg.event) return;
@@ -380,6 +393,10 @@
   }
 
   async function fetchCurrentAgentStatus() {
+    const token = localStorage.getItem('corpsec_token') || (typeof authToken !== 'undefined' ? authToken : '');
+    if (!token || token === 'null' || token === 'undefined' || (typeof isAuthSessionVerified !== 'undefined' && !isAuthSessionVerified)) {
+      return;
+    }
     try {
       const res = await callCenterFetch('/call-center/agent-status');
       if (res && res.status) {
@@ -2469,13 +2486,11 @@
     initDraggableSoftphone();
   };
 
-  // Auto-init status & draggable floating softphone when DOM loads
+  // Auto-init draggable softphone when DOM loads; WS/status are started only after verified login in checkAuthStatus()
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     initDraggableSoftphone();
   } else {
     document.addEventListener('DOMContentLoaded', () => {
-      fetchCurrentAgentStatus();
-      initCallCenterWebSocket();
       initDraggableSoftphone();
     });
   }

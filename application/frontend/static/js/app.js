@@ -3,6 +3,7 @@ const API_BASE = '/api/v1';
 let authToken = localStorage.getItem('corpsec_token') || '';
 let cachedGuards = [];
 let cachedSites = [];
+let cachedShifts = [];
 let cachedAttendance = [];
 let cachedRegions = [];
 let supervisorsCache = [];
@@ -62,36 +63,20 @@ document.addEventListener('DOMContentLoaded', () => {
   checkAuthStatus();
 });
 
-function checkAuthStatus() {
+let isAuthSessionVerified = false;
+
+async function checkAuthStatus() {
   const loginOverlay = document.getElementById('unified-login-overlay');
   const sidebar = document.getElementById('sidebar');
   const mainContent = document.getElementById('main-content');
   const token = localStorage.getItem('corpsec_token');
 
-  if (token && token !== 'null' && token !== 'undefined' && token.trim() !== '' && token.length > 20) {
-    authToken = token;
-    if (loginOverlay) loginOverlay.style.display = 'none';
-    if (sidebar) sidebar.style.display = '';
-    if (mainContent) mainContent.style.display = '';
-
-    const storedUser = localStorage.getItem('corpsec_user');
-    if (storedUser) {
-      try {
-        const u = JSON.parse(storedUser);
-        if (u && (u.role === 'GUARD' || u.role === 'Guard')) {
-          window.location.href = '/portal';
-          return;
-        }
-        updateUserProfileDisplay(u);
-      } catch (e) { }
-    }
-    fetchCurrentAuthenticatedUser();
-    startSessionHeartbeat();
-    initApp();
-  } else {
+  const showSignedOutScreen = () => {
+    isAuthSessionVerified = false;
     authToken = '';
     localStorage.removeItem('corpsec_token');
     localStorage.removeItem('corpsec_user');
+    stopSessionHeartbeat();
     if (typeof handleBackToLogin === 'function') {
       handleBackToLogin();
     } else {
@@ -104,7 +89,6 @@ function checkAuthStatus() {
     if (sidebar) sidebar.style.display = 'none';
     if (mainContent) mainContent.style.display = 'none';
 
-    // Surface any redirect alert from portal (e.g. logout or session expiry)
     const urlParams = new URLSearchParams(window.location.search);
     const alertMsg = urlParams.get('alert');
     if (alertMsg) {
@@ -114,9 +98,54 @@ function checkAuthStatus() {
         alertEl.innerText = alertMsg;
         alertEl.style.display = 'block';
       }
-      // Clean the URL so refreshing doesn't re-show the alert
       window.history.replaceState({}, '', '/');
     }
+  };
+
+  if (!token || token === 'null' || token === 'undefined' || token.trim() === '' || token.length <= 20) {
+    showSignedOutScreen();
+    return;
+  }
+
+  // Validate token first via /auth/me before launching parallel dashboard/tab fetches (prevents 401 bursts on stale tokens)
+  try {
+    const verifyRes = await fetch(`${API_BASE}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!verifyRes.ok) {
+      showSignedOutScreen();
+      return;
+    }
+    const liveUser = await verifyRes.json();
+    if (liveUser && (liveUser.role === 'GUARD' || liveUser.role === 'Guard')) {
+      sessionStorage.setItem('guard_auth_token', token);
+      sessionStorage.setItem('guard_user', JSON.stringify(liveUser));
+      localStorage.setItem('guard_auth_token', token);
+      localStorage.setItem('guard_user', JSON.stringify(liveUser));
+      window.location.href = '/portal';
+      return;
+    }
+
+    authToken = token;
+    isAuthSessionVerified = true;
+    localStorage.setItem('corpsec_user', JSON.stringify(liveUser));
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (sidebar) sidebar.style.display = '';
+    if (mainContent) mainContent.style.display = '';
+
+    updateUserProfileDisplay(liveUser);
+    startSessionHeartbeat();
+    if (typeof window.initCallCenterWebSocketIfReady === 'function') {
+      window.initCallCenterWebSocketIfReady();
+    }
+    if (window.SystemAIAssistant && typeof window.SystemAIAssistant.init === 'function') {
+      window.SystemAIAssistant.init();
+    }
+    await initApp();
+    restoreTabFromHash();
+  } catch (err) {
+    console.warn('Session check failed:', err);
+    showSignedOutScreen();
   }
 }
 
@@ -536,6 +565,7 @@ function completeAuthenticatedSession(data, alertEl, btnOpts = {}) {
   }
 
   authToken = data.access_token;
+  isAuthSessionVerified = true;
   localStorage.setItem('corpsec_token', authToken);
   localStorage.setItem('corpsec_user', JSON.stringify(data));
   if (data.session_id) {
@@ -543,6 +573,12 @@ function completeAuthenticatedSession(data, alertEl, btnOpts = {}) {
   }
   startSessionHeartbeat();
   updateUserProfileDisplay(data);
+  if (typeof window.initCallCenterWebSocketIfReady === 'function') {
+    window.initCallCenterWebSocketIfReady();
+  }
+  if (window.SystemAIAssistant && typeof window.SystemAIAssistant.init === 'function') {
+    window.SystemAIAssistant.init();
+  }
 
   if (btnText) btnText.innerText = 'Verified! Accessing System...';
   if (alertEl) {
@@ -901,7 +937,7 @@ function updateUserProfileDisplay(userData) {
   if (profEmail) profEmail.innerText = userData.email || '-';
 
   const profPhone = document.getElementById('profile-modal-phone');
-  if (profPhone) profPhone.innerText = userData.phone || '0741630443';
+  if (profPhone) profPhone.innerText = userData.phone || '—';
 
   const profRole = document.getElementById('profile-modal-role');
   if (profRole) {
@@ -1082,7 +1118,12 @@ let isLoggingOut = false;
 function logout() {
   if (isLoggingOut) return;
   isLoggingOut = true;
+  isAuthSessionVerified = false;
   stopSessionHeartbeat();
+  if (window.CallCenter && window.CallCenter.ws) {
+    try { window.CallCenter.ws.close(); } catch (e) { }
+    window.CallCenter.ws = null;
+  }
   const sessId = localStorage.getItem('corpsec_session_id');
   const oldToken = authToken;
 
@@ -1308,6 +1349,7 @@ function switchTab(tabId, updateHistory = true) {
 
 // Browser Back & Forward & Hash Navigation Handlers
 function restoreTabFromHash() {
+  if (!authToken || !isAuthSessionVerified) return;
   if (window.location.hash) {
     const cleanTab = normalizeTabId(window.location.hash);
     if (cleanTab && cleanTab !== window.currentActiveTab) {
@@ -1319,6 +1361,7 @@ function restoreTabFromHash() {
 }
 
 window.addEventListener('popstate', (event) => {
+  if (!authToken || !isAuthSessionVerified) return;
   const rawTab = (event.state && event.state.tabId) || (window.location.hash ? window.location.hash.replace('#', '') : 'dashboard');
   const targetTab = normalizeTabId(rawTab);
   if (targetTab && targetTab !== window.currentActiveTab) {
@@ -1328,17 +1371,14 @@ window.addEventListener('popstate', (event) => {
 
 window.addEventListener('hashchange', restoreTabFromHash);
 
-// Restore active tab from URL hash on load
-if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', restoreTabFromHash);
-} else {
-  restoreTabFromHash();
-}
-
 async function apiFetch(endpoint, options = {}) {
   options.headers = options.headers || {};
-  if (authToken) {
-    options.headers['Authorization'] = `Bearer ${authToken}`;
+  const token = authToken || localStorage.getItem('corpsec_token') || '';
+  if (!token && !endpoint.includes('/auth/')) {
+    throw new Error('Not authenticated');
+  }
+  if (token) {
+    options.headers['Authorization'] = `Bearer ${token}`;
   }
   if (options.body && !(options.body instanceof FormData) && !options.headers['Content-Type']) {
     options.headers['Content-Type'] = 'application/json';
@@ -1381,14 +1421,47 @@ async function loadDashboardData(forceReload = false) {
   const user = getLoggedInUser();
   const isSupervisor = user && user.role === 'SUPERVISOR';
 
-  // 1. Update live shift badge & current clock subtitle
+  // 1. Update live shift badge & current clock subtitle from real DB shift definitions
   const now = new Date();
-  const hr = now.getHours();
-  const isDayShift = hr >= 6 && hr < 18;
+  const curMins = now.getHours() * 60 + now.getMinutes();
+  let shiftsList = cachedShifts && cachedShifts.length ? cachedShifts : [];
+  if (shiftsList.length === 0) {
+    try {
+      const shRes = await apiFetch('/shifts');
+      if (shRes.ok) {
+        shiftsList = await shRes.json();
+        cachedShifts = shiftsList;
+      }
+    } catch (e) { }
+  }
+  let matchedShift = null;
+  for (const sh of shiftsList) {
+    if (!sh.start_time || !sh.end_time) continue;
+    const [shH, shM] = sh.start_time.split(':').map(Number);
+    const [ehH, ehM] = sh.end_time.split(':').map(Number);
+    if (isNaN(shH) || isNaN(ehH)) continue;
+    const sMins = shH * 60 + (shM || 0);
+    const eMins = ehH * 60 + (ehM || 0);
+    const active = sMins < eMins ? (curMins >= sMins && curMins < eMins) : (curMins >= sMins || curMins < eMins);
+    if (active) {
+      matchedShift = sh;
+      break;
+    }
+  }
   const shiftBadge = document.getElementById('dash-live-shift-badge');
   if (shiftBadge) {
-    shiftBadge.innerHTML = isDayShift ? '☀️ Day Shift (06:00 - 18:00)' : '🌙 Night Shift (18:00 - 06:00)';
-    shiftBadge.className = 'dash-badge ' + (isDayShift ? 'dash-badge-shift' : 'dash-badge-live');
+    if (matchedShift) {
+      const icon = matchedShift.is_night_shift ? '🌙' : '☀️';
+      shiftBadge.innerHTML = `${icon} ${escapeHtml(matchedShift.name)} (${escapeHtml(matchedShift.start_time)} - ${escapeHtml(matchedShift.end_time)})`;
+      shiftBadge.className = 'dash-badge ' + (matchedShift.is_night_shift ? 'dash-badge-live' : 'dash-badge-shift');
+    } else if (shiftsList.length > 0) {
+      const s0 = shiftsList[0];
+      shiftBadge.innerHTML = `🕒 ${escapeHtml(s0.name)} (${escapeHtml(s0.start_time)} - ${escapeHtml(s0.end_time)})`;
+      shiftBadge.className = 'dash-badge dash-badge-shift';
+    } else {
+      shiftBadge.innerHTML = '🕒 No Shifts Configured';
+      shiftBadge.className = 'dash-badge dash-badge-shift';
+    }
   }
   const statusSubtitle = document.getElementById('dashboard-hero-status-text');
   if (statusSubtitle) {
@@ -1607,9 +1680,9 @@ function renderDashboardSiteDeployment() {
       coverageBadge = `<span class="badge" style="background:#FEE2E2; color:#DC2626; font-weight:700;">🔴 Vacant (${required} Needed)</span>`;
     }
 
-    const sup = (cachedSupervisors || []).find(sp => sp.id === s.assigned_supervisor_id);
-    const supName = sup ? (sup.full_name || sup.name) : (s.assigned_supervisor_name || 'Unassigned');
-    const locationStr = [s.city_or_county, s.location].filter(Boolean).join(' • ') || 'Nairobi HQ';
+    const sup = (supervisorsCache || []).find(sp => sp.id === (s.supervisor_id || s.assigned_supervisor_id));
+    const supName = sup ? (sup.full_name || sup.email || sup.name) : (s.supervisor_name || s.assigned_supervisor_name || 'Unassigned');
+    const locationStr = [s.city_or_county, s.location].filter(Boolean).join(' • ') || '—';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1831,19 +1904,19 @@ async function loadGuards() {
 let currentViewedGuard = null;
 
 function calculateGuardAge(dob) {
-  if (!dob) return '28';
+  if (!dob || dob === '—') return '—';
   try {
     const birthDate = new Date(dob);
-    if (isNaN(birthDate.getTime())) return '28';
+    if (isNaN(birthDate.getTime())) return '—';
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
-    return age > 0 ? String(age) : '28';
+    return age > 0 ? String(age) : '—';
   } catch (e) {
-    return '28';
+    return '—';
   }
 }
 
@@ -1853,8 +1926,8 @@ function renderGuardAttendanceHistoryRows(records) {
   }
   return records.slice(0, 30).map(a => {
     const shiftDate = a.shift_date ? String(a.shift_date).substring(0, 10) : '—';
-    const clockIn = a.actual_clock_in ? String(a.actual_clock_in).substring(11, 16) : (a.status === 'PRESENT' ? '06:00' : '—');
-    const clockOut = a.actual_clock_out ? String(a.actual_clock_out).substring(11, 16) : (a.status === 'PRESENT' ? '18:00' : '—');
+    const clockIn = a.actual_clock_in ? String(a.actual_clock_in).substring(11, 16) : '—';
+    const clockOut = a.actual_clock_out ? String(a.actual_clock_out).substring(11, 16) : '—';
     let badgeBg = '#DCFCE7'; let badgeColor = '#166534';
     if (a.status === 'ABSENT') { badgeBg = '#FEE2E2'; badgeColor = '#991B1B'; }
     else if (a.status === 'LATE') { badgeBg = '#FEF3C7'; badgeColor = '#92400E'; }
@@ -1935,7 +2008,9 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
   const site = g.site || sitesList.find(s => s.id === (g.site_id || g.primary_site_id)) || null;
   const shift = g.shift || shiftsList.find(s => s.id === g.shift_id) || null;
   const siteName = site ? site.site_name : 'Unassigned';
-  const shiftName = shift ? (shift.shift_name || shift.name || 'Day Shift') : 'Day Shift';
+  const shiftName = shift
+    ? (shift.start_time && shift.end_time ? `${shift.name || shift.shift_name} (${shift.start_time} - ${shift.end_time})` : (shift.name || shift.shift_name))
+    : 'Unassigned';
   const siteLocation = site ? (site.location || '—') : '—';
 
   const hireDate = g.hire_date ? String(g.hire_date).substring(0, 10) : '—';
@@ -1950,7 +2025,7 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
   let attendancePct = totalCount > 0 ? ((presentCount / totalCount) * 100).toFixed(1) : '—';
 
   // Academic qualification & emergency contact from database
-  const educationLevel = g.education_level || 'KCSE / Secondary School Certificate';
+  const educationLevel = g.education_level || 'Not Recorded';
   const emergencyName = g.emergency_contact_name || 'Not Recorded';
   const emergencyPhone = g.emergency_contact_phone || 'Not Recorded';
   const bloodGroup = g.blood_group || '—';
@@ -1970,7 +2045,12 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </svg>
         Back to Guard Directory
       </button>
-      <div style="display:flex; align-items:center; gap:10px;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        ${!isSupervisor ? `
+          <button type="button" class="btn" style="background:#0F172A; color:#FFFFFF; font-weight:700; padding:6px 14px; font-size:12px; border-radius:6px; border:none; cursor:pointer;" onclick="resetGuardPasswordToPhone(${g.id}, '${safeName}', '${safeEmp}')">
+            🔑 Reset Portal Password
+          </button>
+        ` : ''}
         ${isInactive ? `
           <button type="button" class="btn" style="background:#16A34A; color:#FFFFFF; font-weight:700; padding:6px 14px; font-size:12px; border-radius:6px; border:none; cursor:pointer;" onclick="openReactivateGuardModal(${g.id}, '${safeName}', '${safeEmp}')">
             ✅ Restore to Active Service
@@ -2081,7 +2161,7 @@ function generateGuardFileHTML(g, attendanceRecords = [], sitesList = [], shifts
         </div>
         <div class="detail-field">
           <label>Age:</label>
-          <span class="value">${age} years</span>
+          <span class="value">${age !== '—' ? `${age} years` : 'Not Recorded'}</span>
         </div>
         <div class="detail-field">
           <label>Hire Date:</label>
@@ -2572,10 +2652,26 @@ function closeGuardFileModal() {
   backToGuardsList();
 }
 
-function openAmendGuardModal(guardId) {
-  const g = currentViewedGuard && currentViewedGuard.id === guardId
+async function openAmendGuardModal(guardId) {
+  let g = currentViewedGuard && currentViewedGuard.id === guardId
     ? currentViewedGuard
     : (cachedGuards.find(x => x.id === guardId) || currentViewedGuard);
+
+  try {
+    const [freshGuardRes, sitesRes, shiftsRes, supsRes] = await Promise.all([
+      apiFetch(`/guards/${guardId}`).catch(() => null),
+      (!cachedSites || cachedSites.length === 0) ? apiFetch('/sites').catch(() => null) : Promise.resolve(null),
+      apiFetch('/shifts').catch(() => null),
+      apiFetch('/supervisors').catch(() => null)
+    ]);
+    if (freshGuardRes && freshGuardRes.ok) {
+      g = await freshGuardRes.json();
+      currentViewedGuard = g;
+    }
+    if (sitesRes && sitesRes.ok) cachedSites = await sitesRes.json();
+    if (shiftsRes && shiftsRes.ok) cachedShifts = await shiftsRes.json();
+    if (supsRes && supsRes.ok) supervisorsCache = await supsRes.json();
+  } catch (e) { }
 
   if (!g) {
     showToast('Guard record not loaded', 'danger');
@@ -2589,29 +2685,33 @@ function openAmendGuardModal(guardId) {
     (cachedSites || []).forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.id;
-      opt.textContent = `${s.site_name} (${s.location || 'Kitengela'}) - KES ${(s.basic_salary || 15000).toLocaleString()}`;
+      opt.textContent = `${s.site_name}${s.location ? ' (' + s.location + ')' : ''} - KES ${(s.basic_salary || 15000).toLocaleString()}`;
       if (s.id === g.site_id || (g.site && s.id === g.site.id)) opt.selected = true;
       siteSelect.appendChild(opt);
     });
   }
 
-  // Populate Shifts dropdown
+  // Populate Shifts dropdown directly from database /api/v1/shifts
   const shiftSelect = document.getElementById('amend-guard-shift-select');
   if (shiftSelect) {
-    shiftSelect.innerHTML = `
-      <option value="1" ${g.shift_id === 1 ? 'selected' : ''}>Day Shift (06:00 - 18:00)</option>
-      <option value="2" ${g.shift_id === 2 ? 'selected' : ''}>Night Shift (18:00 - 06:00)</option>
-      <option value="3" ${g.shift_id === 3 ? 'selected' : ''}>Reliever Floating Roster</option>
-    `;
+    shiftSelect.innerHTML = '<option value="">-- No Shift Assigned --</option>';
+    (cachedShifts || []).forEach(sh => {
+      const opt = document.createElement('option');
+      opt.value = sh.id;
+      opt.textContent = `${sh.name} (${sh.start_time} - ${sh.end_time})`;
+      if (sh.id === g.shift_id || (g.shift && sh.id === g.shift.id)) opt.selected = true;
+      shiftSelect.appendChild(opt);
+    });
   }
 
   const supSelect = document.getElementById('amend-guard-supervisor-select');
   if (supSelect) {
-    supSelect.innerHTML = '<option value="">-- No Supervisor Assigned --</option>';
+    supSelect.innerHTML = '<option value="">-- No Supervisor / HR Assigned --</option>';
     (supervisorsCache || []).forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.id;
-      opt.textContent = `${s.full_name || s.email} (${s.email})`;
+      const roleTag = (s.role || '').toUpperCase() === 'HR' ? 'HR Manager' : 'Supervisor';
+      opt.textContent = `${s.full_name || s.email} [${roleTag}] (${s.email})`;
       if (s.id === g.supervisor_id) opt.selected = true;
       supSelect.appendChild(opt);
     });
@@ -2619,6 +2719,8 @@ function openAmendGuardModal(guardId) {
 
   // Fill in form values
   document.getElementById('amend-guard-id').value = g.id;
+  const empEl = document.getElementById('amend-guard-emp-no');
+  if (empEl) empEl.value = g.employee_number || '';
   document.getElementById('amend-guard-name').value = g.full_name || '';
   document.getElementById('amend-guard-natid').value = g.national_id || '';
   document.getElementById('amend-guard-phone').value = g.phone || '';
@@ -2687,6 +2789,7 @@ async function handleAmendGuardSubmit(e) {
   const guardId = parseInt(document.getElementById('amend-guard-id').value);
   if (!guardId) return;
 
+  const empNoVal = document.getElementById('amend-guard-emp-no')?.value?.trim();
   const full_name = document.getElementById('amend-guard-name').value.trim();
   const national_id = document.getElementById('amend-guard-natid').value.trim();
   const phone = document.getElementById('amend-guard-phone').value.trim();
@@ -2725,12 +2828,14 @@ async function handleAmendGuardSubmit(e) {
   const next_of_kin = document.getElementById('amend-guard-next-of-kin')?.value.trim() || null;
 
   const payload = {
-    full_name, national_id, phone, email, gender, date_of_birth, hire_date,
+    full_name, national_id, phone, email, gender, date_of_birth,
     site_id, shift_id, supervisor_id, basic_salary, is_reliever, is_super_guard,
     payment_method, mpesa_number, bank_name, bank_account,
     kra_pin, nssf_number, shif_number,
     education_level, blood_group, emergency_contact_name, emergency_contact_phone, next_of_kin
   };
+  if (empNoVal) payload.employee_number = empNoVal;
+  if (hire_date) payload.hire_date = hire_date;
 
   try {
     const res = await apiFetch(`/guards/${guardId}`, {
@@ -2744,11 +2849,13 @@ async function handleAmendGuardSubmit(e) {
       throw new Error(errData.detail || 'Failed to update guard file');
     }
 
-    showToast('Guard file amended successfully!', 'success');
+    const updatedGuard = await res.json();
+    currentViewedGuard = updatedGuard;
+
+    showToast('Guard file amended and saved to database!', 'success');
     closeAmendGuardModal();
-    // Refresh the view
-    await viewGuardFile(guardId);
-    await loadGuards();
+    // Refresh the view & directories from database
+    await Promise.all([viewGuardFile(guardId), loadGuards(), loadSupervisors()]);
   } catch (err) {
     showToast(err.message, 'danger');
   }
@@ -2872,8 +2979,154 @@ function renderAnalyticsSiteDistribution(distribution = null) {
 let currentRosterYear = new Date().getFullYear();
 let currentRosterMonth = new Date().getMonth() + 1; // 1-12
 
+async function loadShiftDefinitions(renderCatalog = true) {
+  try {
+    const res = await apiFetch('/shifts');
+    if (!res.ok) return [];
+    const shifts = await res.json();
+    cachedShifts = Array.isArray(shifts) ? shifts : [];
+    if (renderCatalog) renderShiftsCatalogTable();
+    return cachedShifts;
+  } catch (err) {
+    console.error('loadShiftDefinitions error:', err);
+    return cachedShifts || [];
+  }
+}
+
+function renderShiftsCatalogTable() {
+  const tbody = document.getElementById('shifts-catalog-body');
+  if (!tbody) return;
+  if (!cachedShifts || cachedShifts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:18px; color:#64748B;">No shift definitions configured in the database yet. Click "+ Create Shift" to add one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = cachedShifts.map(sh => {
+    const typeBadge = sh.is_night_shift
+      ? '<span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:700;">🌙 NIGHT</span>'
+      : (sh.shift_type === 'SPLIT'
+        ? '<span class="badge" style="background:#ECFDF5; color:#065F46; font-weight:700;">🔄 SPLIT</span>'
+        : '<span class="badge" style="background:#FFFBEB; color:#B45309; font-weight:700;">☀️ DAY</span>');
+    return `
+      <tr>
+        <td><strong>${escapeHtml(sh.name)}</strong></td>
+        <td>${typeBadge}</td>
+        <td>${escapeHtml(sh.start_time)}</td>
+        <td>${escapeHtml(sh.end_time)}</td>
+        <td><strong>${sh.duration_hours || 12} hrs</strong></td>
+        <td>${sh.is_night_shift ? '✅ Eligible' : '— Standard'}</td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button class="btn btn-secondary" style="padding:3px 9px; font-size:11px;" onclick="openShiftDefinitionModal(${sh.id})">✏️ Edit</button>
+          <button class="btn btn-secondary" style="padding:3px 8px; font-size:11px; color:#DC2626; margin-left:4px;" onclick="deleteShiftDefinition(${sh.id}, '${escapeHtml(sh.name).replace(/'/g, "\\'")}')">🗑️</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openShiftDefinitionModal(shiftId = null) {
+  const modal = document.getElementById('modal-shift-definition');
+  if (!modal) return;
+  const idEl = document.getElementById('shift-def-id');
+  const titleEl = document.getElementById('shift-def-modal-title');
+  const nameEl = document.getElementById('shift-def-name');
+  const typeEl = document.getElementById('shift-def-type');
+  const startEl = document.getElementById('shift-def-start');
+  const endEl = document.getElementById('shift-def-end');
+  const nightEl = document.getElementById('shift-def-night');
+
+  if (shiftId) {
+    const sh = (cachedShifts || []).find(s => s.id === shiftId);
+    if (sh) {
+      if (idEl) idEl.value = sh.id;
+      if (titleEl) titleEl.innerText = '✏️ Edit Shift Definition';
+      if (nameEl) nameEl.value = sh.name || '';
+      if (typeEl) typeEl.value = (sh.shift_type || 'DAY').toUpperCase();
+      if (startEl) startEl.value = (sh.start_time || '').substring(0, 5);
+      if (endEl) endEl.value = (sh.end_time || '').substring(0, 5);
+      if (nightEl) nightEl.checked = !!sh.is_night_shift;
+    }
+  } else {
+    if (idEl) idEl.value = '';
+    if (titleEl) titleEl.innerText = '⏱️ Add Shift Definition';
+    if (nameEl) nameEl.value = '';
+    if (typeEl) typeEl.value = 'DAY';
+    if (startEl) startEl.value = '06:00';
+    if (endEl) endEl.value = '18:00';
+    if (nightEl) nightEl.checked = false;
+  }
+  modal.style.display = 'flex';
+}
+
+function closeShiftDefinitionModal() {
+  const modal = document.getElementById('modal-shift-definition');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleShiftDefinitionSubmit(e) {
+  e.preventDefault();
+  const idVal = document.getElementById('shift-def-id')?.value;
+  const name = document.getElementById('shift-def-name')?.value?.trim();
+  const shift_type = document.getElementById('shift-def-type')?.value || 'DAY';
+  const start_time = document.getElementById('shift-def-start')?.value;
+  const end_time = document.getElementById('shift-def-end')?.value;
+  const is_night_shift = !!document.getElementById('shift-def-night')?.checked;
+
+  if (!name || !start_time || !end_time) return;
+
+  const [shH, shM] = start_time.split(':').map(Number);
+  const [ehH, ehM] = end_time.split(':').map(Number);
+  let mins = (ehH * 60 + ehM) - (shH * 60 + shM);
+  if (mins <= 0) mins += 24 * 60;
+  const duration_hours = Math.round((mins / 60) * 100) / 100;
+
+  try {
+    const url = idVal ? `/shifts/${idVal}` : '/shifts';
+    const method = idVal ? 'PUT' : 'POST';
+    const res = await apiFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, shift_type, start_time, end_time, is_night_shift, duration_hours })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.detail || 'Failed to save shift', 'danger');
+      return;
+    }
+    closeShiftDefinitionModal();
+    showToast(`✅ Shift "${data.name}" saved to database!`, 'success');
+    await loadShiftDefinitions(true);
+    await loadRosterGrid(currentRosterYear, currentRosterMonth);
+  } catch (err) {
+    showToast('Error saving shift: ' + err.message, 'danger');
+  }
+}
+
+async function deleteShiftDefinition(shiftId, shiftName) {
+  if (!confirm(`Delete shift "${shiftName}" from the database?`)) return;
+  try {
+    const res = await apiFetch(`/shifts/${shiftId}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.detail || 'Could not delete shift', 'danger');
+      return;
+    }
+    showToast(`Deleted shift "${shiftName}".`, 'success');
+    await loadShiftDefinitions(true);
+  } catch (err) {
+    showToast('Error deleting shift: ' + err.message, 'danger');
+  }
+}
+
+window.openShiftDefinitionModal = openShiftDefinitionModal;
+window.closeShiftDefinitionModal = closeShiftDefinitionModal;
+window.handleShiftDefinitionSubmit = handleShiftDefinitionSubmit;
+window.deleteShiftDefinition = deleteShiftDefinition;
+
 async function loadShifts() {
-  await loadRosterGrid(currentRosterYear, currentRosterMonth);
+  await Promise.all([
+    loadShiftDefinitions(true),
+    loadRosterGrid(currentRosterYear, currentRosterMonth)
+  ]);
 }
 
 function changeRosterMonth(delta) {
@@ -2905,7 +3158,7 @@ async function loadRosterGrid(year, month) {
     if (!thead || !tbody) return;
 
     // Build Table Header
-    let headHtml = '<tr><th style="min-width:160px; text-align:left; position:sticky; left:0; background:#F8FAFC; z-index:2;">Guard Name</th>';
+    let headHtml = '<tr><th style="min-width:190px; text-align:left; position:sticky; left:0; background:#F8FAFC; z-index:2;">Guard &amp; DB Shift</th>';
     const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
     for (let d = 1; d <= grid.days_in_month; d++) {
@@ -2927,9 +3180,14 @@ async function loadRosterGrid(year, month) {
 
     grid.rows.forEach(row => {
       const tr = document.createElement('tr');
+      const gObj = (cachedGuards || []).find(x => x.id === row.guard_id);
+      const shObj = gObj && gObj.shift_id ? (cachedShifts || []).find(s => s.id === gObj.shift_id) : null;
+      const gSiteObj = gObj && gObj.site_id ? (cachedSites || []).find(s => s.id === gObj.site_id) : null;
+      const shiftLabel = shObj ? `${shObj.name}` : 'No Shift';
+      const siteLabel = gSiteObj ? ` • ${gSiteObj.site_name}` : '';
       let rowHtml = `<td style="text-align:left; font-weight:700; position:sticky; left:0; background:#FFF; z-index:1; border-right:1px solid #CBD5E1;">
-        <div style="font-size:12px;">${row.full_name}</div>
-        <div style="font-size:10px; color:#64748B;">${row.employee_number}</div>
+        <div style="font-size:12px;">${escapeHtml(row.full_name)}</div>
+        <div style="font-size:10px; color:#64748B;">${escapeHtml(row.employee_number)} · ${escapeHtml(shiftLabel)}${escapeHtml(siteLabel)}</div>
       </td>`;
 
       for (let d = 1; d <= grid.days_in_month; d++) {
@@ -3303,22 +3561,46 @@ async function openManualAttendanceModal() {
       select.appendChild(opt);
     });
   }
+  await loadShiftDefinitions(false);
+  const shiftSel = document.getElementById('manual-att-shift-id');
+  if (shiftSel) {
+    shiftSel.innerHTML = (cachedShifts || []).map(sh => `<option value="${sh.id}">${escapeHtml(sh.name)} (${escapeHtml(sh.start_time)} - ${escapeHtml(sh.end_time)})</option>`).join('');
+    onManualAttendanceGuardChange();
+  }
   const todayStr = new Date().toISOString().split('T')[0];
   document.getElementById('manual-att-date').value = todayStr;
   document.getElementById('modal-manual-attendance').style.display = 'flex';
+}
+
+function onManualAttendanceGuardChange() {
+  const guardId = parseInt(document.getElementById('manual-att-guard-id')?.value);
+  const shiftSel = document.getElementById('manual-att-shift-id');
+  if (!shiftSel || !guardId) return;
+  const guard = (cachedGuards || []).find(g => g.id === guardId);
+  if (guard && guard.shift_id) {
+    shiftSel.value = String(guard.shift_id);
+  }
 }
 
 function closeManualAttendanceModal() {
   document.getElementById('modal-manual-attendance').style.display = 'none';
 }
 
+window.onManualAttendanceGuardChange = onManualAttendanceGuardChange;
+
 async function handleManualAttendanceSubmit(e) {
   e.preventDefault();
   const guardId = parseInt(document.getElementById('manual-att-guard-id').value);
+  const shiftIdVal = parseInt(document.getElementById('manual-att-shift-id')?.value);
   const shiftDate = document.getElementById('manual-att-date').value;
   const clockInStr = document.getElementById('manual-att-clock-in').value;
   const clockOutStr = document.getElementById('manual-att-clock-out').value;
   const notes = document.getElementById('manual-att-notes').value;
+
+  if (!shiftIdVal) {
+    alert('Please select a shift configured in the database.');
+    return;
+  }
 
   try {
     const res = await apiFetch('/attendance/log', {
@@ -3326,7 +3608,7 @@ async function handleManualAttendanceSubmit(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         guard_id: guardId,
-        shift_id: 1,
+        shift_id: shiftIdVal,
         shift_date: shiftDate,
         actual_clock_in: clockInStr,
         actual_clock_out: clockOutStr,
@@ -6530,8 +6812,11 @@ async function openAddSiteModal(presetClientName = '') {
 
   const supSelect = document.getElementById('new-site-supervisor-select');
   if (supSelect) {
-    supSelect.innerHTML = '<option value="">No Supervisor (Unassigned)</option>' +
-      (supervisorsCache || []).map(s => `<option value="${s.id}">👨‍💼 ${s.full_name || s.email} (${s.email})</option>`).join('');
+    supSelect.innerHTML = '<option value="">No Supervisor / HR (Unassigned)</option>' +
+      (supervisorsCache || []).map(s => {
+        const tag = (s.role || '').toUpperCase() === 'HR' ? 'HR Manager' : 'Supervisor';
+        return `<option value="${s.id}">${escapeHtml(s.full_name || s.email)} [${tag}] (${escapeHtml(s.email)})</option>`;
+      }).join('');
   }
 
   // Populate Super Guard select for new site
@@ -6644,11 +6929,14 @@ async function openEditSiteModal(siteId) {
         regionList.map(r => `<option value="${r.id}" ${site.region_id === r.id ? 'selected' : ''}>${r.name}</option>`).join('');
     }
 
-    // Populate Supervisors select
+    // Populate Supervisors & HR select
     const supSelect = document.getElementById('edit-site-supervisor-select');
     if (supSelect) {
-      supSelect.innerHTML = '<option value="">No Supervisor (Unassigned)</option>' +
-        (supervisorsCache || []).map(s => `<option value="${s.id}" ${site.supervisor_id === s.id ? 'selected' : ''}>👨‍💼 ${s.full_name || s.email} (${s.email})</option>`).join('');
+      supSelect.innerHTML = '<option value="">No Supervisor / HR (Unassigned)</option>' +
+        (supervisorsCache || []).map(s => {
+          const tag = (s.role || '').toUpperCase() === 'HR' ? 'HR Manager' : 'Supervisor';
+          return `<option value="${s.id}" ${site.supervisor_id === s.id ? 'selected' : ''}>${escapeHtml(s.full_name || s.email)} [${tag}] (${escapeHtml(s.email)})</option>`;
+        }).join('');
     }
 
     // Populate Geofence & Super Guard fields
@@ -6804,14 +7092,28 @@ function usePureNumericEmpNo() {
 }
 
 async function openAddGuardModal() {
-  await loadSites();
+  const [, shiftsList, supsRes] = await Promise.all([
+    loadSites(),
+    loadShiftDefinitions(false),
+    apiFetch('/supervisors').catch(() => null)
+  ]);
+  if (supsRes && supsRes.ok) supervisorsCache = await supsRes.json();
+
   const sel = document.getElementById('new-guard-site-select');
   if (sel && cachedSites) {
     sel.innerHTML = '<option value="">No Assigned Site (Unassigned/Reliever)</option>' + cachedSites.map(s => `<option value="${s.id}">${s.site_name} (Default: KES ${(s.basic_salary || 15000).toLocaleString()})</option>`).join('');
   }
+  const shiftSel = document.getElementById('new-guard-shift-select');
+  if (shiftSel) {
+    shiftSel.innerHTML = '<option value="">-- No Shift Assigned --</option>' +
+      (shiftsList || cachedShifts || []).map(sh => `<option value="${sh.id}">${escapeHtml(sh.name)} (${escapeHtml(sh.start_time)} - ${escapeHtml(sh.end_time)})</option>`).join('');
+  }
   const supSel = document.getElementById('new-guard-supervisor-select');
   if (supSel) {
-    supSel.innerHTML = '<option value="">-- No Supervisor Assigned --</option>' + (supervisorsCache || []).map(s => `<option value="${s.id}">${s.full_name || s.email} (${s.email})</option>`).join('');
+    supSel.innerHTML = '<option value="">-- No Supervisor / HR Assigned --</option>' + (supervisorsCache || []).map(s => {
+      const tag = (s.role || '').toUpperCase() === 'HR' ? 'HR Manager' : 'Supervisor';
+      return `<option value="${s.id}">${escapeHtml(s.full_name || s.email)} [${tag}] (${escapeHtml(s.email)})</option>`;
+    }).join('');
   }
   updateGuardSiteSalaryHint();
 
@@ -6861,6 +7163,8 @@ async function handleAddGuardSubmit(e) {
   const initial_password = document.getElementById('new-guard-password')?.value?.trim() || '';
   const site_id_val = document.getElementById('new-guard-site-select')?.value;
   const site_id = site_id_val ? parseInt(site_id_val) : null;
+  const shift_id_val = document.getElementById('new-guard-shift-select')?.value;
+  const shift_id = shift_id_val ? parseInt(shift_id_val) : null;
   const sup_id_val = document.getElementById('new-guard-supervisor-select')?.value;
   const supervisor_id = sup_id_val ? parseInt(sup_id_val) : null;
   const salaryVal = document.getElementById('new-guard-salary')?.value?.trim();
@@ -6872,7 +7176,7 @@ async function handleAddGuardSubmit(e) {
   try {
     const payload = {
       full_name, national_id, phone, initial_password,
-      site_id, supervisor_id, basic_salary, is_reliever, is_super_guard, hire_date
+      site_id, shift_id, supervisor_id, basic_salary, is_reliever, is_super_guard, hire_date
     };
     if (employee_number) payload.employee_number = employee_number;
     if (email) payload.email = email;
@@ -7470,20 +7774,24 @@ async function loadSupervisors() {
 function renderSupervisorsTable() {
   const tbody = document.getElementById('supervisors-table-body');
   const countBadge = document.getElementById('supervisors-count-badge');
-  if (countBadge) countBadge.innerText = `${supervisorsCache.length} Supervisor${supervisorsCache.length === 1 ? '' : 's'}`;
+  if (countBadge) countBadge.innerText = `${supervisorsCache.length} Manager${supervisorsCache.length === 1 ? '' : 's'}`;
   if (!tbody) return;
   tbody.innerHTML = '';
   if (supervisorsCache.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">No supervisors configured yet. Click "+ Add Supervisor" to register one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No supervisors or HR managers configured yet. Click "+ Add Supervisor" to register one.</td></tr>';
     return;
   }
   supervisorsCache.forEach(sup => {
     const tr = document.createElement('tr');
+    const isHR = (sup.role || '').toUpperCase() === 'HR';
+    const roleSubtitle = isHR
+      ? '<span class="badge" style="background:#E0F2FE; color:#0369A1; font-size:10px; font-weight:700; margin-left:6px;">💼 HR Manager</span>'
+      : '<span class="badge" style="background:#DCFCE7; color:#166534; font-size:10px; font-weight:700; margin-left:6px;">👨‍💼 Supervisor</span>';
     tr.innerHTML = `
       <td><b>#${sup.id}</b></td>
       <td>
-        <div style="font-weight:700; color:#0F172A;">${sup.full_name || sup.email}</div>
-        <div style="font-size:11px; color:#64748B;">${sup.email} · Operations Supervisor</div>
+        <div style="font-weight:700; color:#0F172A;">${escapeHtml(sup.full_name || sup.email)}${roleSubtitle}</div>
+        <div style="font-size:11px; color:#64748B;">${escapeHtml(sup.email)} · ${isHR ? 'Human Resources Manager' : 'Operations Supervisor'}</div>
       </td>
       <td>${sup.phone || '<span style="color:#94A3B8;">None</span>'}</td>
       <td><span class="badge ${sup.status === 'ACTIVE' ? 'badge-active' : 'badge-inactive'}">${sup.status}</span></td>
@@ -7634,14 +7942,30 @@ async function openSupervisorAssignPanel(supId, supEmail) {
     const container = document.getElementById('supervisor-assign-guards-list');
     if (!container) return;
     container.innerHTML = '';
-    // Show ONLY unassigned guards OR guards currently assigned to this supervisor
-    const assignableGuards = guards.filter(g => g.status === 'ACTIVE' && (!g.supervisor_id || g.supervisor_id === supId));
+    // Show all active guards: currently assigned to this person first, unassigned next, then guards assigned elsewhere (can be reassigned)
+    const activeGuards = guards.filter(g => g.status === 'ACTIVE');
+    activeGuards.sort((a, b) => {
+      const scoreA = a.supervisor_id === supId ? 0 : (!a.supervisor_id ? 1 : 2);
+      const scoreB = b.supervisor_id === supId ? 0 : (!b.supervisor_id ? 1 : 2);
+      if (scoreA !== scoreB) return scoreA - scoreB;
+      return (a.full_name || '').localeCompare(b.full_name || '');
+    });
 
-    if (assignableGuards.length === 0) {
-      container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:24px; color:#64748B;">All active security guards are already allocated to field supervisors.</div>';
+    if (activeGuards.length === 0) {
+      container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:24px; color:#64748B;">No active security guards found in the database.</div>';
     } else {
-      assignableGuards.forEach(g => {
+      activeGuards.forEach(g => {
         const checked = g.supervisor_id === supId;
+        const otherMgr = (g.supervisor_id && g.supervisor_id !== supId)
+          ? (supervisorsCache || []).find(s => s.id === g.supervisor_id)
+          : null;
+        const statusNote = checked
+          ? ' <span style="color:#2563EB; font-weight:700;">(Current Assignment)</span>'
+          : (otherMgr
+            ? ` <span style="color:#D97706; font-weight:600;">(Currently: ${escapeHtml(otherMgr.full_name || otherMgr.email)})</span>`
+            : ' <span style="color:#059669; font-weight:600;">(Unassigned)</span>');
+        const siteObj = (cachedSites || []).find(s => s.id === g.site_id);
+        const siteLabel = g.site_name || (siteObj ? siteObj.site_name : 'No Site');
         const div = document.createElement('div');
         div.className = 'assign-guard-item';
         div.style.padding = '10px 12px';
@@ -7654,8 +7978,8 @@ async function openSupervisorAssignPanel(supId, supEmail) {
         div.innerHTML = `
           <input type="checkbox" data-guard-id="${g.id}" ${checked ? 'checked' : ''} style="cursor:pointer; width:16px; height:16px;" onchange="this.parentElement.style.background=this.checked?'#EFF6FF':'#F8FAFC'; this.parentElement.style.border=this.checked?'1.5px solid #3B82F6':'1px solid #E2E8F0';">
           <div style="flex:1;">
-            <div style="font-size:13px; font-weight:700; color:#0F172A;">${g.full_name}</div>
-            <div style="font-size:11px; color:#64748B;">${g.employee_number} | ${g.site_name || 'No Site'}${checked ? ' <span style="color:#2563EB; font-weight:700;">(Current Assignment)</span>' : ''}</div>
+            <div style="font-size:13px; font-weight:700; color:#0F172A;">${escapeHtml(g.full_name)}</div>
+            <div style="font-size:11px; color:#64748B;">${escapeHtml(g.employee_number)} | ${escapeHtml(siteLabel)}${statusNote}</div>
           </div>
         `;
         container.appendChild(div);
@@ -7772,7 +8096,7 @@ async function loadSupervisorAttendanceRoll() {
         </td>
         <td><b>${r.employee_number}</b></td>
         <td>${r.site_name || 'Unassigned Site'}</td>
-        <td>${r.shift_name || 'Day Shift'}</td>
+        <td>${escapeHtml(r.shift_name || 'Unassigned')}</td>
         <td>
           <select class="form-control supervisor-roll-status" data-guard-id="${r.guard_id}" data-shift-id="${r.shift_id || ''}" style="max-width:140px; padding:4px 8px; font-weight:700; ${st === 'PRESENT' ? 'color:#166534; background:#DCFCE7;' : st === 'ABSENT' ? 'color:#991B1B; background:#FEE2E2;' : st === 'LATE' ? 'color:#92400E; background:#FEF3C7;' : st === 'OFF' ? 'color:#4338CA; background:#EEF2FF;' : ''}">
             <option value="PRESENT" ${st === 'PRESENT' ? 'selected' : ''}>✅ PRESENT</option>
@@ -9112,7 +9436,27 @@ function filterInactiveGuardsTable(searchTerm) {
   });
 }
 
+async function resetGuardPasswordToPhone(guardId, guardName, empNo) {
+  const confirmed = confirm(
+    `Reset Guard Portal password for ${guardName || empNo || ('Guard #' + guardId)}?\n\nTheir password will be reset to their registered phone number, and they will be required to set a new password upon next sign-in.`
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch(`/guards/${guardId}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to reset guard password');
+    showToast(data.message || 'Guard password reset to registered phone number.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Could not reset guard password', 'danger');
+  }
+}
+
 window.switchGuardSubTab = switchGuardSubTab;
+window.resetGuardPasswordToPhone = resetGuardPasswordToPhone;
 window.openDeactivateGuardModal = openDeactivateGuardModal;
 window.closeDeactivateGuardModal = closeDeactivateGuardModal;
 window.onDeactivateCategoryChange = onDeactivateCategoryChange;
@@ -9779,7 +10123,7 @@ async function viewInvoice(invoiceId) {
 
     // 2. Populate Client Profile retrieved from Database
     const clientPinEl = document.getElementById('view-inv-client-pin');
-    if (clientPinEl) clientPinEl.innerText = inv.client_kra_pin || 'P051288491A';
+    if (clientPinEl) clientPinEl.innerText = inv.client_kra_pin || 'Not Provided';
 
     // 3. Populate Banking & Paybill Instructions retrieved from Database
     if (inv.bank_name) document.getElementById('view-inv-bank-name').innerText = inv.bank_name;
@@ -9791,7 +10135,7 @@ async function viewInvoice(invoiceId) {
     document.getElementById('view-inv-number').innerText = inv.invoice_number || '';
     document.getElementById('view-inv-client').innerText = inv.client_name || '';
     document.getElementById('view-inv-site').innerText = `Site: ${inv.site_name || ''}`;
-    document.getElementById('view-inv-address').innerText = inv.billing_address || 'Nairobi, Kenya';
+    document.getElementById('view-inv-address').innerText = inv.billing_address || '—';
     document.getElementById('view-inv-period').innerText = `Billing Period: ${inv.billing_period || ''}`;
     document.getElementById('view-inv-issue-date').innerText = inv.issue_date || '';
     document.getElementById('view-inv-due-date').innerText = inv.due_date || '';
@@ -10939,7 +11283,7 @@ function renderClientsTable(clients) {
           <div>${escapeHtml(c.primary_contact_phone || '-')}</div>
           <div style="font-size:11px; color:#0D7682;">${escapeHtml(c.primary_contact_email || '')}</div>
         </td>
-        <td>${escapeHtml(c.city || 'Nairobi')}</td>
+        <td>${escapeHtml(c.city || '—')}</td>
         <td style="text-align:center;"><span class="badge" style="background:#EFF6FF; color:#2563EB;">${c.active_contracts_count || 0}</span></td>
         <td style="text-align:center;">${badge}</td>
         <td style="text-align:center; white-space:nowrap;">
@@ -11626,7 +11970,7 @@ function renderMilestonesTimeline(milestones) {
         </div>
         <p style="font-size:13px; color:#475569; margin:6px 0 8px 0; line-height:1.5;">${escapeHtml(m.description)}</p>
         <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748B; flex-wrap:wrap; gap:6px;">
-          <span>📍 ${escapeHtml(m.location || 'Nairobi HQ')}</span>
+          <span>📍 ${escapeHtml(m.location || '—')}</span>
           ${m.significance ? `<span style="font-weight:600; color:#059669;">🎯 Impact: ${escapeHtml(m.significance)}</span>` : ''}
         </div>
         ${m.document_url ? `
@@ -12560,7 +12904,7 @@ function openEditFoundingModal() {
   if (cachedFoundingHistory) {
     document.getElementById('founding-edit-date').value = cachedFoundingHistory.founding_date || '';
     document.getElementById('founding-edit-location').value = cachedFoundingHistory.original_location || '';
-    document.getElementById('founding-edit-guards').value = cachedFoundingHistory.initial_guards_count || 12;
+    document.getElementById('founding-edit-guards').value = cachedFoundingHistory.initial_guards_count ?? 0;
     document.getElementById('founding-edit-founders').value = cachedFoundingHistory.founder_names || '';
     document.getElementById('founding-edit-capital').value = cachedFoundingHistory.initial_capital || 0;
     document.getElementById('founding-edit-story').value = cachedFoundingHistory.background_story || '';
@@ -12613,7 +12957,7 @@ async function handleEditFoundingSubmit(e) {
     const payload = {
       founding_date: document.getElementById('founding-edit-date').value,
       original_location: document.getElementById('founding-edit-location').value.trim(),
-      initial_guards_count: parseInt(document.getElementById('founding-edit-guards').value) || 12,
+      initial_guards_count: parseInt(document.getElementById('founding-edit-guards').value) || 0,
       founder_names: document.getElementById('founding-edit-founders').value.trim(),
       initial_capital: parseFloat(document.getElementById('founding-edit-capital').value) || 0,
       background_story: document.getElementById('founding-edit-story').value.trim(),
@@ -17666,8 +18010,11 @@ async function populateSupervisorFilterOptions() {
       if (res.ok) supervisorsCache = await res.json();
     }
     const currentVal = sel.value;
-    sel.innerHTML = '<option value="">All Supervisors</option>' +
-      (supervisorsCache || []).map(s => `<option value="${s.id}">👨‍💼 ${escapeHtml(s.full_name || s.email)}</option>`).join('');
+    sel.innerHTML = '<option value="">All Supervisors &amp; HR</option>' +
+      (supervisorsCache || []).map(s => {
+        const tag = (s.role || '').toUpperCase() === 'HR' ? 'HR Manager' : 'Supervisor';
+        return `<option value="${s.id}">${escapeHtml(s.full_name || s.email)} [${tag}]</option>`;
+      }).join('');
     if (currentVal) sel.value = currentVal;
   } catch (e) {
     console.error('Error populating supervisor filter:', e);
