@@ -131,6 +131,11 @@ class AttendanceAnalyticsService:
                     if elapsed_hours > (shift_duration + 2.0):
                         incomplete_count += 1
                         warnings.append(f"Guard {emp_no} ({name}) shift duration exceeded without clock-out.")
+            elif not has_clock_in and has_clock_out:
+                incomplete_count += 1
+                status_str = "Orphaned Clock-Out (Needs Review)"
+                hours_str = "0.00 hrs"
+                warnings.append(f"Guard {emp_no} ({name}) has an orphaned offline clock-out without a clock-in record.")
             else:
                 status_str = att.status or "SCHEDULED"
                 hours_str = "0.00 hrs"

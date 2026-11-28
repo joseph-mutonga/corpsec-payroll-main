@@ -1,8 +1,9 @@
 from datetime import datetime, date, timedelta
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import List, Optional, Tuple
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
+from application.backend.app.core.config import settings
 from application.backend.app.api.deps import (
     get_db, require_admin, require_guard, get_current_user,
     require_admin_or_supervisor
@@ -14,7 +15,8 @@ from application.backend.app.models.site import Site
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.models.user import User, UserRole
 from application.backend.app.schemas.attendance import (
-    AttendanceLogRequest, AttendanceCorrectionRequest, AttendanceResponse, AnomalyResponse
+    AttendanceLogRequest, AttendanceCorrectionRequest, AttendanceResponse, AnomalyResponse,
+    ClockInPayload, ClockOutPayload, AttendanceReviewApproveRequest
 )
 from application.backend.app.services.attendance_service import (
     calculate_shift_hours, scan_pre_payroll_anomalies, sync_overtime_claim
@@ -97,21 +99,102 @@ def auto_close_past_unclosed_shifts(db: Session, guard_id: int, current_date: da
         db.commit()
 
 
+def normalize_naive_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
+def evaluate_offline_timestamp(
+    device_ts: Optional[datetime],
+    server_now: datetime,
+    clock_skew_ms: Optional[int],
+    is_offline: bool
+) -> Tuple[Optional[datetime], bool, List[str]]:
+    """
+    Evaluates untrusted device_timestamp and clock_skew_ms against server_now.
+    Never silently adjusts payroll times using clock_skew_ms.
+    Flags:
+    - abs(clock_skew_ms) > OFFLINE_SYNC_MAX_CLOCK_SKEW_MINUTES (default 5m)
+    - device_ts > server_now + OFFLINE_SYNC_MAX_FUTURE_MINUTES (default 5m)
+    - device_ts < server_now - OFFLINE_SYNC_MAX_PAST_HOURS (default 48h)
+    - (server_now - device_ts) > OFFLINE_SYNC_LATE_THRESHOLD_MINUTES (default 30m)
+    """
+    raw_dt = normalize_naive_datetime(device_ts)
+    reasons: List[str] = []
+    needs_review = False
+
+    max_skew_ms = settings.OFFLINE_SYNC_MAX_CLOCK_SKEW_MINUTES * 60 * 1000
+    if clock_skew_ms is not None and abs(clock_skew_ms) > max_skew_ms:
+        needs_review = True
+        skew_min = round(abs(clock_skew_ms) / 60000.0, 1)
+        reasons.append(f"Clock skew exceeds {settings.OFFLINE_SYNC_MAX_CLOCK_SKEW_MINUTES}m ({skew_min}m)")
+
+    if raw_dt is not None:
+        future_limit = server_now + timedelta(minutes=settings.OFFLINE_SYNC_MAX_FUTURE_MINUTES)
+        past_limit = server_now - timedelta(hours=settings.OFFLINE_SYNC_MAX_PAST_HOURS)
+        late_threshold = timedelta(minutes=settings.OFFLINE_SYNC_LATE_THRESHOLD_MINUTES)
+
+        if raw_dt > future_limit:
+            needs_review = True
+            diff_min = int((raw_dt - server_now).total_seconds() // 60)
+            reasons.append(f"Device timestamp is {diff_min}m in the future (>{settings.OFFLINE_SYNC_MAX_FUTURE_MINUTES}m limit)")
+        elif raw_dt < past_limit:
+            needs_review = True
+            diff_hr = round((server_now - raw_dt).total_seconds() / 3600.0, 1)
+            reasons.append(f"Device timestamp is {diff_hr}h old (>{settings.OFFLINE_SYNC_MAX_PAST_HOURS}h limit)")
+        elif is_offline and (server_now - raw_dt) > late_threshold:
+            needs_review = True
+            delay_min = int((server_now - raw_dt).total_seconds() // 60)
+            reasons.append(f"Late offline sync ({delay_min}m delay > {settings.OFFLINE_SYNC_LATE_THRESHOLD_MINUTES}m threshold)")
+
+    return raw_dt, needs_review, reasons
+
+
 @router.post("/clock-in", response_model=AttendanceResponse)
 def clock_in(
     shift_id: Optional[int] = Query(None),
     latitude: Optional[float] = Query(None),
     longitude: Optional[float] = Query(None),
+    client_uuid: Optional[str] = Query(None),
+    submitted_offline: Optional[bool] = Query(False),
+    clock_skew_ms: Optional[int] = Query(None),
+    payload: Optional[ClockInPayload] = Body(None),
     db: Session = Depends(get_db),
     guard_user: User = Depends(require_guard)
 ):
-    """Guard Mobile Clock-In Endpoint matching Screen 19."""
+    """Guard Mobile Clock-In Endpoint matching Screen 19 (with offline sync & idempotency support)."""
     guard = db.query(Guard).filter(Guard.id == guard_user.guard_id).first()
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard profile not found")
 
-    today = date.today()
+    eff_shift_id = payload.shift_id if (payload and payload.shift_id is not None) else shift_id
+    eff_lat = payload.latitude if (payload and payload.latitude is not None) else latitude
+    eff_lon = payload.longitude if (payload and payload.longitude is not None) else longitude
+    eff_uuid = (payload.client_uuid if (payload and payload.client_uuid) else client_uuid) or None
+    if eff_uuid:
+        eff_uuid = eff_uuid.strip()[:64]
+    is_offline = bool((payload and payload.submitted_offline) or submitted_offline)
+    eff_skew = payload.clock_skew_ms if (payload and payload.clock_skew_ms is not None) else clock_skew_ms
+    raw_device_input = payload.device_timestamp if payload else None
+
+    # 0. Idempotency check: duplicate (guard_id, client_uuid) returns existing record immediately
+    if eff_uuid:
+        existing_by_uuid = db.query(Attendance).filter(
+            Attendance.guard_id == guard.id,
+            Attendance.client_uuid == eff_uuid
+        ).first()
+        if existing_by_uuid:
+            return existing_by_uuid
+
     now = datetime.now()
+    raw_device_ts, needs_review, review_reasons = evaluate_offline_timestamp(
+        raw_device_input, now, eff_skew, is_offline
+    )
+    effective_clock_in = raw_device_ts if (is_offline and raw_device_ts is not None) else now
+    today = effective_clock_in.date()
 
     check_period_not_locked(db, today)
 
@@ -145,8 +228,8 @@ def clock_in(
         resolved_site_id = today_asgn.site_id
         resolved_shift_id = today_asgn.shift_id
         is_rostered = True
-    elif shift_id:
-        shift = db.query(Shift).filter(Shift.id == shift_id).first()
+    elif eff_shift_id:
+        shift = db.query(Shift).filter(Shift.id == eff_shift_id).first()
         if not shift:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shift not found")
         resolved_shift_id = shift.id
@@ -170,19 +253,35 @@ def clock_in(
     ).first()
 
     notes_val = "Roster-driven clock in" if is_rostered else "Unrostered clock in"
+    if is_offline:
+        notes_val += " (Synced from offline queue)"
 
     # 200m Geofence verification within site perimeter
     target_site = db.query(Site).filter(Site.id == resolved_site_id).first() if resolved_site_id else None
     if target_site and target_site.latitude is not None and target_site.longitude is not None:
         radius = float(target_site.geofence_radius) if target_site.geofence_radius else 200.0
-        if latitude is not None and longitude is not None:
-            dist = calculate_haversine_meters(latitude, longitude, target_site.latitude, target_site.longitude)
+        if eff_lat is not None and eff_lon is not None:
+            dist = calculate_haversine_meters(eff_lat, eff_lon, target_site.latitude, target_site.longitude)
             if dist > radius:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Clock-in rejected: You are {int(dist)} metres away from '{target_site.site_name}'. You must be within {int(radius)} metres radius to sign in."
-                )
-            notes_val += f" | GPS verified: {int(dist)}m from site perimeter"
+                if is_offline:
+                    # Do NOT auto-reject offline geofence failures on sync — flag for supervisor review
+                    needs_review = True
+                    review_reasons.append(
+                        f"Offline geofence mismatch: {int(dist)}m from '{target_site.site_name}' (limit {int(radius)}m)"
+                    )
+                    notes_val += f" | Offline GPS outside geofence: {int(dist)}m > {int(radius)}m (flagged for review)"
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Clock-in rejected: You are {int(dist)} metres away from '{target_site.site_name}'. You must be within {int(radius)} metres radius to sign in."
+                    )
+            else:
+                notes_val += f" | GPS verified: {int(dist)}m from site perimeter"
+        elif is_offline:
+            needs_review = True
+            review_reasons.append("Offline clock-in missing GPS coordinates for geofenced site")
+
+    review_reason_str = "; ".join(review_reasons) if review_reasons else None
 
     if not existing:
         existing = Attendance(
@@ -190,20 +289,34 @@ def clock_in(
             shift_id=resolved_shift_id,
             site_id=resolved_site_id,
             shift_date=today,
-            actual_clock_in=now,
+            actual_clock_in=effective_clock_in,
             status="PRESENT",
-            notes=notes_val
+            notes=notes_val,
+            client_uuid=eff_uuid,
+            device_clock_in_at=raw_device_ts or now,
+            server_clock_in_received_at=now,
+            clock_skew_ms=eff_skew,
+            submitted_offline=is_offline,
+            needs_supervisor_review=needs_review,
+            review_reason=review_reason_str,
         )
         db.add(existing)
     else:
         existing.shift_id = resolved_shift_id
         existing.site_id = resolved_site_id
-        existing.actual_clock_in = now
+        existing.actual_clock_in = effective_clock_in
         existing.actual_clock_out = None
         existing.regular_hours = 0.0
         existing.overtime_hours = 0.0
         existing.status = "PRESENT"
         existing.notes = notes_val
+        existing.client_uuid = eff_uuid
+        existing.device_clock_in_at = raw_device_ts or now
+        existing.server_clock_in_received_at = now
+        existing.clock_skew_ms = eff_skew
+        existing.submitted_offline = is_offline
+        existing.needs_supervisor_review = needs_review
+        existing.review_reason = review_reason_str
 
     db.commit()
     db.refresh(existing)
@@ -212,31 +325,119 @@ def clock_in(
 
 @router.post("/clock-out", response_model=AttendanceResponse)
 def clock_out(
+    client_uuid: Optional[str] = Query(None),
+    submitted_offline: Optional[bool] = Query(False),
+    clock_skew_ms: Optional[int] = Query(None),
+    payload: Optional[ClockOutPayload] = Body(None),
     db: Session = Depends(get_db),
     guard_user: User = Depends(require_guard)
 ):
-    """Guard Mobile Clock-Out Endpoint matching Screen 19."""
-    today = date.today()
+    """Guard Mobile Clock-Out Endpoint matching Screen 19 (with offline sync, idempotency & orphaned clock-out handling)."""
+    eff_uuid = (payload.client_uuid if (payload and payload.client_uuid) else client_uuid) or None
+    if eff_uuid:
+        eff_uuid = eff_uuid.strip()[:64]
+    is_offline = bool((payload and payload.submitted_offline) or submitted_offline)
+    eff_skew = payload.clock_skew_ms if (payload and payload.clock_skew_ms is not None) else clock_skew_ms
+    raw_device_input = payload.device_timestamp if payload else None
+    parent_uuid = (payload.parent_clock_in_uuid.strip()[:64] if (payload and payload.parent_clock_in_uuid) else None)
+    orphaned_reason = payload.orphaned_clock_in_reason if payload else None
+
+    # 0. Idempotency check on (guard_id, clock_out_client_uuid)
+    if eff_uuid:
+        existing_out = db.query(Attendance).filter(
+            Attendance.guard_id == guard_user.guard_id,
+            Attendance.clock_out_client_uuid == eff_uuid
+        ).first()
+        if existing_out:
+            return existing_out
+
     now = datetime.now()
+    raw_device_ts, needs_review, review_reasons = evaluate_offline_timestamp(
+        raw_device_input, now, eff_skew, is_offline
+    )
+    effective_clock_out = raw_device_ts if (is_offline and raw_device_ts is not None) else now
+    today = effective_clock_out.date()
 
     check_period_not_locked(db, today)
 
-    att = db.query(Attendance).filter(
-        Attendance.guard_id == guard_user.guard_id,
-        Attendance.actual_clock_in.isnot(None),
-        Attendance.actual_clock_out.is_(None)
-    ).order_by(Attendance.shift_date.desc()).first()
+    att = None
+    if parent_uuid:
+        att = db.query(Attendance).filter(
+            Attendance.guard_id == guard_user.guard_id,
+            Attendance.client_uuid == parent_uuid
+        ).first()
+
+    if not att:
+        att = db.query(Attendance).filter(
+            Attendance.guard_id == guard_user.guard_id,
+            Attendance.actual_clock_in.isnot(None),
+            Attendance.actual_clock_out.is_(None)
+        ).order_by(Attendance.shift_date.desc()).first()
 
     if not att:
         today_att = db.query(Attendance).filter(
             Attendance.guard_id == guard_user.guard_id,
             Attendance.shift_date == today
         ).first()
-        if today_att and today_att.actual_clock_out:
+        if today_att and today_att.actual_clock_out and not is_offline:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already clocked out for today")
+
+        if is_offline or orphaned_reason:
+            # Dependent / Orphaned offline clock-out: preceding clock-in failed or is missing.
+            # Never silently drop! Create a PENDING_REVIEW record so supervisors can reconcile it
+            # without miscounting it as a paid PRESENT shift in payroll before approval.
+            guard = db.query(Guard).filter(Guard.id == guard_user.guard_id).first()
+            fallback_shift_id = (guard.shift_id if guard and guard.shift_id else None)
+            if not fallback_shift_id:
+                first_shift = db.query(Shift).first()
+                fallback_shift_id = first_shift.id if first_shift else 1
+            fallback_site_id = guard.primary_site_id if guard and guard.primary_site_id else 1
+
+            orphan_msg = "Orphaned offline clock-out: preceding clock-in missing or failed"
+            if orphaned_reason:
+                orphan_msg += f" ({orphaned_reason})"
+            all_reasons = [orphan_msg] + review_reasons
+
+            orphan_att = Attendance(
+                guard_id=guard_user.guard_id,
+                shift_id=fallback_shift_id,
+                site_id=fallback_site_id,
+                shift_date=today,
+                actual_clock_in=None,
+                actual_clock_out=effective_clock_out,
+                regular_hours=0.0,
+                overtime_hours=0.0,
+                status="PENDING_REVIEW",
+                notes=f"Offline clock-out recorded without active clock-in | {orphan_msg}",
+                clock_out_client_uuid=eff_uuid,
+                device_clock_out_at=raw_device_ts or now,
+                server_clock_out_received_at=now,
+                clock_skew_ms=eff_skew,
+                submitted_offline=True,
+                needs_supervisor_review=True,
+                review_reason="; ".join(all_reasons),
+            )
+            db.add(orphan_att)
+            db.commit()
+            db.refresh(orphan_att)
+            return orphan_att
+
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active clock-in record found for today")
 
-    att.actual_clock_out = now
+    att.actual_clock_out = effective_clock_out
+    att.clock_out_client_uuid = eff_uuid
+    att.device_clock_out_at = raw_device_ts or now
+    att.server_clock_out_received_at = now
+    if eff_skew is not None:
+        att.clock_skew_ms = eff_skew
+    if is_offline:
+        att.submitted_offline = True
+        att.notes = f"{att.notes or ''} | Clock-out synced from offline queue".strip(" |")
+
+    if needs_review:
+        att.needs_supervisor_review = True
+        combined_reasons = [att.review_reason] + review_reasons if att.review_reason else review_reasons
+        att.review_reason = "; ".join([r for r in combined_reasons if r])
 
     shift_duration = 12.0
     if att.shift_id:
@@ -399,6 +600,9 @@ def correct_attendance_record(
     actor_label = "Supervisor" if role_upper == UserRole.SUPERVISOR.value else "Admin"
     user_name_display = current_user.full_name or current_user.email
     att.notes = f"Corrected by {actor_label} ({user_name_display}): {payload.reason}"
+    att.needs_supervisor_review = False
+    att.reviewed_by = current_user.email
+    att.reviewed_at = datetime.now()
 
     if att.status in ["ABSENT", "OFF"]:
         att.regular_hours = 0.0
@@ -434,6 +638,76 @@ def correct_attendance_record(
     return att
 
 
+@router.post("/{attendance_id}/approve-review", response_model=AttendanceResponse)
+def approve_flagged_attendance_review(
+    attendance_id: int,
+    payload: Optional[AttendanceReviewApproveRequest] = Body(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_supervisor)
+):
+    """
+    Approves a flagged offline attendance record after supervisor or admin review.
+    Clears needs_supervisor_review, records reviewer identity & timestamp, and recalculates
+    shift hours if clock-in/clock-out timestamps were supplied or present.
+    """
+    att = db.query(Attendance).filter(Attendance.id == attendance_id).first()
+    if not att:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+
+    check_period_not_locked(db, att.shift_date)
+
+    role_upper = (current_user.role or "").upper()
+    if role_upper == UserRole.SUPERVISOR.value:
+        if not is_guard_under_supervisor(db, att.guard_id, current_user.id, att.site_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor Mandate Restriction: You are only authorized to review attendance records for guards under your supervision or assigned sites."
+            )
+
+    if payload:
+        if payload.actual_clock_in is not None:
+            att.actual_clock_in = normalize_naive_datetime(payload.actual_clock_in)
+        if payload.actual_clock_out is not None:
+            att.actual_clock_out = normalize_naive_datetime(payload.actual_clock_out)
+        if payload.status:
+            att.status = payload.status
+
+    if att.status == "PENDING_REVIEW" and att.actual_clock_in:
+        att.status = "PRESENT"
+
+    if att.actual_clock_in and att.actual_clock_out:
+        shift_duration = 12.0
+        if att.shift_id:
+            shift = db.query(Shift).filter(Shift.id == att.shift_id).first()
+            if shift:
+                shift_duration = shift.duration_hours
+        reg_hrs, ot_hrs = calculate_shift_hours(att.actual_clock_in, att.actual_clock_out, shift_duration)
+        att.regular_hours = reg_hrs
+        att.overtime_hours = ot_hrs
+        sync_overtime_claim(db, att)
+
+    att.needs_supervisor_review = False
+    att.reviewed_by = current_user.email
+    att.reviewed_at = datetime.now()
+    note_suffix = f"Approved offline review by {current_user.email}"
+    if payload and payload.notes:
+        note_suffix += f" ({payload.notes})"
+    att.notes = f"{att.notes or ''} | {note_suffix}".strip(" |")
+
+    db.add(AuditLog(
+        user_id=current_user.id,
+        user_name=current_user.email,
+        role=current_user.role,
+        action="APPROVE_OFFLINE_ATTENDANCE_REVIEW",
+        target_entity="Attendance",
+        target_id=str(att.id),
+        reason=note_suffix
+    ))
+    db.commit()
+    db.refresh(att)
+    return att
+
+
 @router.get("", response_model=List[AttendanceResponse])
 def list_attendance_records(
     guard_id: Optional[int] = Query(None),
@@ -444,6 +718,8 @@ def list_attendance_records(
     shift_date: Optional[date] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    needs_supervisor_review: Optional[bool] = Query(None),
+    submitted_offline: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -493,6 +769,10 @@ def list_attendance_records(
         query = query.filter(Attendance.shift_date >= start_date)
     if end_date:
         query = query.filter(Attendance.shift_date <= end_date)
+    if needs_supervisor_review is not None:
+        query = query.filter(Attendance.needs_supervisor_review == needs_supervisor_review)
+    if submitted_offline is not None:
+        query = query.filter(Attendance.submitted_offline == submitted_offline)
 
     if search:
         search_term = f"%{search.strip()}%"

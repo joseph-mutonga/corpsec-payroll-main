@@ -95,14 +95,33 @@ def scan_pre_payroll_anomalies(db: Session, start_date: date, end_date: date, gu
                 "severity": "CRITICAL",
                 "description": f"Guard {gname} clocked in at {att.actual_clock_in.strftime('%H:%M')} but has no clock-out record."
             })
-        elif att.regular_hours + att.overtime_hours > 16.0:
+        elif not att.actual_clock_in and att.actual_clock_out:
+            anomalies.append({
+                "guard_id": att.guard_id,
+                "guard_name": gname,
+                "shift_date": att.shift_date,
+                "anomaly_type": "MISSING_CLOCK_IN",
+                "severity": "CRITICAL",
+                "description": f"Guard {gname} clocked out at {att.actual_clock_out.strftime('%H:%M')} without a matching clock-in record (orphaned offline clock-out)."
+            })
+        elif (att.regular_hours or 0.0) + (att.overtime_hours or 0.0) > 16.0:
             anomalies.append({
                 "guard_id": att.guard_id,
                 "guard_name": gname,
                 "shift_date": att.shift_date,
                 "anomaly_type": "EXCESSIVE_HOURS",
                 "severity": "WARNING",
-                "description": f"Guard {gname} logged {att.regular_hours + att.overtime_hours} hours on {att.shift_date}."
+                "description": f"Guard {gname} logged {(att.regular_hours or 0.0) + (att.overtime_hours or 0.0)} hours on {att.shift_date}."
+            })
+
+        if getattr(att, "needs_supervisor_review", False):
+            anomalies.append({
+                "guard_id": att.guard_id,
+                "guard_name": gname,
+                "shift_date": att.shift_date,
+                "anomaly_type": "OFFLINE_REVIEW_REQUIRED",
+                "severity": "WARNING",
+                "description": f"Guard {gname} attendance on {att.shift_date} flagged for supervisor review: {att.review_reason or 'Offline sync anomaly'}."
             })
 
     return anomalies

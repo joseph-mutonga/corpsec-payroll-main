@@ -30,9 +30,26 @@ class IncidentAdminResponse(BaseModel):
     description: str
     photo_path: Optional[str] = None
     status: str
+    client_uuid: Optional[str] = None
+    device_timestamp: Optional[datetime] = None
+    server_received_at: Optional[datetime] = None
+    clock_skew_ms: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    submitted_offline: Optional[bool] = False
+    needs_supervisor_review: Optional[bool] = False
+    review_reason: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ApproveIncidentReviewRequest(BaseModel):
+    notes: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
 
 
 class CreateIncidentRequest(BaseModel):
@@ -50,10 +67,42 @@ class UpdateIncidentStatusRequest(BaseModel):
     status: str  # OPEN, INVESTIGATING, RESOLVED
 
 
+def _build_incident_admin_response(inc: Incident, guard: Optional[Guard], site: Optional[Site]) -> IncidentAdminResponse:
+    return IncidentAdminResponse(
+        id=inc.id,
+        reference_number=inc.reference_number,
+        guard_id=inc.guard_id,
+        guard_name=guard.full_name if guard else "Unknown Guard",
+        guard_employee_number=guard.employee_number if guard else "CS-00000",
+        site_id=inc.site_id,
+        site_name=site.site_name if site else "Unknown Site",
+        incident_type=inc.incident_type,
+        incident_date=inc.incident_date,
+        incident_time=inc.incident_time,
+        description=inc.description,
+        photo_path=inc.photo_path,
+        status=inc.status,
+        client_uuid=inc.client_uuid,
+        device_timestamp=inc.device_timestamp,
+        server_received_at=inc.server_received_at,
+        clock_skew_ms=inc.clock_skew_ms,
+        latitude=inc.latitude,
+        longitude=inc.longitude,
+        submitted_offline=bool(inc.submitted_offline),
+        needs_supervisor_review=bool(inc.needs_supervisor_review),
+        review_reason=inc.review_reason,
+        reviewed_by=inc.reviewed_by,
+        reviewed_at=inc.reviewed_at,
+        created_at=inc.created_at
+    )
+
+
 @router.get("/incidents", response_model=List[IncidentAdminResponse])
 def list_admin_incidents(
     status_filter: Optional[str] = None,
     site_id: Optional[int] = None,
+    needs_supervisor_review: Optional[bool] = None,
+    submitted_offline: Optional[bool] = None,
     db: Session = Depends(get_db),
     admin_user: User = Depends(require_admin_or_supervisor)
 ):
@@ -75,6 +124,10 @@ def list_admin_incidents(
 
     if site_id:
         query = query.filter(Incident.site_id == site_id)
+    if needs_supervisor_review is not None:
+        query = query.filter(Incident.needs_supervisor_review == needs_supervisor_review)
+    if submitted_offline is not None:
+        query = query.filter(Incident.submitted_offline == submitted_offline)
 
     incidents = query.order_by(Incident.id.desc()).all()
     results = []
@@ -82,27 +135,7 @@ def list_admin_incidents(
     for inc in incidents:
         guard = db.query(Guard).filter(Guard.id == inc.guard_id).first()
         site = db.query(Site).filter(Site.id == inc.site_id).first()
-
-        guard_name = guard.full_name if guard else "Unknown Guard"
-        guard_emp = guard.employee_number if guard else "CS-00000"
-        site_name = site.site_name if site else "Unknown Site"
-
-        results.append(IncidentAdminResponse(
-            id=inc.id,
-            reference_number=inc.reference_number,
-            guard_id=inc.guard_id,
-            guard_name=guard_name,
-            guard_employee_number=guard_emp,
-            site_id=inc.site_id,
-            site_name=site_name,
-            incident_type=inc.incident_type,
-            incident_date=inc.incident_date,
-            incident_time=inc.incident_time,
-            description=inc.description,
-            photo_path=inc.photo_path,
-            status=inc.status,
-            created_at=inc.created_at
-        ))
+        results.append(_build_incident_admin_response(inc, guard, site))
 
     return results
 
@@ -215,22 +248,7 @@ def get_incident_detail(
             )
     site = db.query(Site).filter(Site.id == inc.site_id).first()
 
-    return IncidentAdminResponse(
-        id=inc.id,
-        reference_number=inc.reference_number,
-        guard_id=inc.guard_id,
-        guard_name=guard.full_name if guard else "Unknown Guard",
-        guard_employee_number=guard.employee_number if guard else "CS-00000",
-        site_id=inc.site_id,
-        site_name=site.site_name if site else "Unknown Site",
-        incident_type=inc.incident_type,
-        incident_date=inc.incident_date,
-        incident_time=inc.incident_time,
-        description=inc.description,
-        photo_path=inc.photo_path,
-        status=inc.status,
-        created_at=inc.created_at
-    )
+    return _build_incident_admin_response(inc, guard, site)
 
 
 @router.patch("/incidents/{incident_id}/status", response_model=IncidentAdminResponse)
@@ -276,22 +294,53 @@ def update_incident_status(
     guard = db.query(Guard).filter(Guard.id == inc.guard_id).first()
     site = db.query(Site).filter(Site.id == inc.site_id).first()
 
-    return IncidentAdminResponse(
-        id=inc.id,
-        reference_number=inc.reference_number,
-        guard_id=inc.guard_id,
-        guard_name=guard.full_name if guard else "Unknown Guard",
-        guard_employee_number=guard.employee_number if guard else "CS-00000",
-        site_id=inc.site_id,
-        site_name=site.site_name if site else "Unknown Site",
-        incident_type=inc.incident_type,
-        incident_date=inc.incident_date,
-        incident_time=inc.incident_time,
-        description=inc.description,
-        photo_path=inc.photo_path,
-        status=inc.status,
-        created_at=inc.created_at
-    )
+    return _build_incident_admin_response(inc, guard, site)
+
+
+@router.post("/incidents/{incident_id}/approve-review", response_model=IncidentAdminResponse)
+def approve_flagged_incident_review(
+    incident_id: int,
+    payload: Optional[ApproveIncidentReviewRequest] = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_or_supervisor)
+):
+    """Approve and clear needs_supervisor_review on an offline-synced incident report."""
+    inc = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not inc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident record not found.")
+
+    guard = db.query(Guard).filter(Guard.id == inc.guard_id).first()
+    if admin_user.role == UserRole.SUPERVISOR.value and guard:
+        is_sup = guard.supervisor_id == admin_user.id or (guard.site and guard.site.supervisor_id == admin_user.id)
+        if not is_sup:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: This incident belongs to a guard not assigned to your supervision or sites."
+            )
+
+    if payload:
+        if payload.description and len(payload.description.strip()) >= 5:
+            inc.description = payload.description.strip()
+        if payload.status and payload.status.upper().strip() in ["OPEN", "INVESTIGATING", "RESOLVED"]:
+            inc.status = payload.status.upper().strip()
+
+    inc.needs_supervisor_review = False
+    inc.reviewed_by = admin_user.email
+    inc.reviewed_at = datetime.now()
+
+    db.add(AuditLog(
+        user_id=admin_user.id,
+        user_name=admin_user.email,
+        role=admin_user.role,
+        action="APPROVE_OFFLINE_INCIDENT_REVIEW",
+        target_entity="Incident",
+        target_id=inc.reference_number,
+        reason=f"Approved offline review for incident {inc.reference_number} by {admin_user.email}"
+    ))
+    db.commit()
+    db.refresh(inc)
+    site = db.query(Site).filter(Site.id == inc.site_id).first()
+    return _build_incident_admin_response(inc, guard, site)
 
 
 @router.delete("/incidents/{incident_id}", status_code=status.HTTP_200_OK)

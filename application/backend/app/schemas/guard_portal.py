@@ -45,6 +45,7 @@ class GuardHomeResponse(BaseModel):
     off_days_supervisor_name: Optional[str] = None
     off_days_notes: Optional[str] = None
     is_today_off: bool = False
+    server_time: Optional[datetime] = None
 
 
 class ShiftInfoResponse(BaseModel):
@@ -102,6 +103,12 @@ class GuardIncidentCreate(BaseModel):
     incident_time: Optional[str] = None
     description: str = Field(..., min_length=5)
     photo_path: Optional[str] = None
+    client_uuid: Optional[str] = None
+    device_timestamp: Optional[datetime] = None
+    clock_skew_ms: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    submitted_offline: Optional[bool] = False
 
 
 IncidentReportCreate = GuardIncidentCreate
@@ -116,7 +123,19 @@ class IncidentReportResponse(BaseModel):
     incident_date: date
     incident_time: str
     description: str
+    photo_path: Optional[str] = None
     status: str
+    client_uuid: Optional[str] = None
+    device_timestamp: Optional[datetime] = None
+    server_received_at: Optional[datetime] = None
+    clock_skew_ms: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    submitted_offline: Optional[bool] = False
+    needs_supervisor_review: Optional[bool] = False
+    review_reason: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

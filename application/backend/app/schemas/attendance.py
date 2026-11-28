@@ -38,6 +38,34 @@ class AnomalyResponse(BaseModel):
     severity: str      # CRITICAL, WARNING
 
 
+class ClockInPayload(BaseModel):
+    shift_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    client_uuid: Optional[str] = None
+    device_timestamp: Optional[datetime] = None
+    clock_skew_ms: Optional[int] = None
+    submitted_offline: Optional[bool] = False
+
+
+class ClockOutPayload(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    client_uuid: Optional[str] = None
+    parent_clock_in_uuid: Optional[str] = None
+    orphaned_clock_in_reason: Optional[str] = None
+    device_timestamp: Optional[datetime] = None
+    clock_skew_ms: Optional[int] = None
+    submitted_offline: Optional[bool] = False
+
+
+class AttendanceReviewApproveRequest(BaseModel):
+    notes: Optional[str] = None
+    actual_clock_in: Optional[datetime] = None
+    actual_clock_out: Optional[datetime] = None
+    status: Optional[str] = "PRESENT"
+
+
 class AttendanceResponse(BaseModel):
     id: int
     guard_id: int
@@ -56,6 +84,18 @@ class AttendanceResponse(BaseModel):
     overtime_hours: float
     status: str
     notes: Optional[str] = None
+    client_uuid: Optional[str] = None
+    clock_out_client_uuid: Optional[str] = None
+    device_clock_in_at: Optional[datetime] = None
+    server_clock_in_received_at: Optional[datetime] = None
+    device_clock_out_at: Optional[datetime] = None
+    server_clock_out_received_at: Optional[datetime] = None
+    clock_skew_ms: Optional[int] = None
+    submitted_offline: Optional[bool] = False
+    needs_supervisor_review: Optional[bool] = False
+    review_reason: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

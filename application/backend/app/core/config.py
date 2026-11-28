@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     OFFLINE_SYNC_MAX_PAST_HOURS: int = 48
     OFFLINE_SYNC_MAX_CLOCK_SKEW_MINUTES: int = 5
     INCIDENT_PHOTO_MAX_BYTES: int = 5 * 1024 * 1024  # 5 MB
+    INCIDENT_PHOTO_UPLOAD_DIR: str = "./uploads/incidents"
 
     # SMTP Email & OTP Two-Factor Authentication
     SMTP_HOST: Optional[str] = None

@@ -1,8 +1,12 @@
+import os
+import uuid
 from datetime import date, datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
+from application.backend.app.core.config import settings
+from application.backend.app.api.v1.attendance import evaluate_offline_timestamp
 from application.backend.app.services.pdf_service import generate_payslip_pdf
 from application.backend.app.api.v1.payslips import build_payslip_dict
 
@@ -227,7 +231,8 @@ def get_guard_portal_dashboard(
         off_days_month_name=today.strftime("%B %Y"),
         off_days_supervisor_name=off_days_sup_name,
         off_days_notes=off_days_notes,
-        is_today_off=is_today_off
+        is_today_off=is_today_off,
+        server_time=datetime.now()
     )
 
 
@@ -320,6 +325,16 @@ def get_my_leave_requests(
     return db.query(LeaveRequest).filter(LeaveRequest.guard_id == guard_user.guard_id).order_by(LeaveRequest.id.desc()).all()
 
 
+def _detect_image_magic_extension(raw_bytes: bytes) -> Optional[str]:
+    if len(raw_bytes) >= 3 and raw_bytes[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if len(raw_bytes) >= 8 and raw_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if len(raw_bytes) >= 12 and raw_bytes[:4] == b"RIFF" and raw_bytes[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
 @router.post("/guard-portal/incidents", response_model=IncidentReportResponse, status_code=status.HTTP_200_OK)
 @router.post("/guard-portal/report-incident", response_model=IncidentReportResponse, status_code=status.HTTP_200_OK)
 @router.post("/portal/incidents", response_model=IncidentReportResponse, status_code=status.HTTP_200_OK)
@@ -329,25 +344,40 @@ def report_site_incident(
     db: Session = Depends(get_db),
     guard_user: User = Depends(require_guard)
 ):
-    """Submit Site Incident Report from Guard Mobile Portal (ref format INC-XXXX)."""
+    """Submit Site Incident Report from Guard Mobile Portal (ref format INC-XXXX, idempotent on client_uuid)."""
     if not payload.description or len(payload.description.strip()) < 5:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incident description must be at least 5 characters long."
         )
 
+    eff_uuid = payload.client_uuid.strip()[:64] if payload.client_uuid else None
+    if eff_uuid:
+        existing_inc = db.query(Incident).filter(
+            Incident.guard_id == guard_user.guard_id,
+            Incident.client_uuid == eff_uuid
+        ).first()
+        if existing_inc:
+            return existing_inc
+
     guard = db.query(Guard).filter(Guard.id == guard_user.guard_id).first()
-    site_id = getattr(payload, 'site_id', None) or (guard.primary_site_id if guard and guard.primary_site_id else 1)
+    site_id = (guard.primary_site_id if guard and guard.primary_site_id else None) or getattr(payload, 'site_id', None) or 1
 
     now = datetime.now()
+    is_offline = bool(payload.submitted_offline)
+    raw_device_ts, needs_review, review_reasons = evaluate_offline_timestamp(
+        payload.device_timestamp, now, payload.clock_skew_ms, is_offline
+    )
+    effective_dt = raw_device_ts if (is_offline and raw_device_ts is not None) else now
+
     count_inc = db.query(Incident).count() + 1
     ref_num = f"INC-{now.year}-{count_inc:04d}"
     while db.query(Incident).filter(Incident.reference_number == ref_num).first():
         count_inc += 1
         ref_num = f"INC-{now.year}-{count_inc:04d}"
 
-    inc_date = getattr(payload, 'incident_date', None) or date.today()
-    inc_time = getattr(payload, 'incident_time', None) or datetime.now().strftime("%H:%M")
+    inc_date = getattr(payload, 'incident_date', None) or effective_dt.date()
+    inc_time = getattr(payload, 'incident_time', None) or effective_dt.strftime("%H:%M")
 
     inc = Incident(
         reference_number=ref_num,
@@ -357,7 +387,16 @@ def report_site_incident(
         incident_date=inc_date,
         incident_time=inc_time,
         description=payload.description.strip(),
-        status="OPEN"
+        status="OPEN",
+        client_uuid=eff_uuid,
+        device_timestamp=raw_device_ts or now,
+        server_received_at=now,
+        clock_skew_ms=payload.clock_skew_ms,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        submitted_offline=is_offline,
+        needs_supervisor_review=needs_review,
+        review_reason="; ".join(review_reasons) if review_reasons else None,
     )
     db.add(inc)
 
@@ -368,9 +407,89 @@ def report_site_incident(
         action="REPORT_INCIDENT",
         target_entity="Incident",
         target_id=ref_num,
-        reason=f"Incident reported: {payload.incident_type}"
+        reason=f"Incident reported: {payload.incident_type}{' (offline sync)' if is_offline else ''}"
     )
     db.add(audit_entry)
+    db.commit()
+    db.refresh(inc)
+    return inc
+
+
+@router.post("/guard-portal/incidents/{incident_id}/photo", response_model=IncidentReportResponse)
+@router.post("/portal/incidents/{incident_id}/photo", response_model=IncidentReportResponse)
+async def upload_incident_photo(
+    incident_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    guard_user: User = Depends(require_guard)
+):
+    """
+    Two-step incident photo upload for Guard Mobile Portal:
+    - Owner-only (must match guard_user.guard_id)
+    - One photo per incident (rejects if photo_path is already populated)
+    - Validates MIME type + file magic bytes (JPEG, PNG, WebP)
+    - Enforces configurable INCIDENT_PHOTO_MAX_BYTES (default 5 MB)
+    - Uses a server-generated filename
+    """
+    inc = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not inc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident record not found.")
+
+    if inc.guard_id != guard_user.guard_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You can only attach photos to your own incident reports."
+        )
+
+    if inc.photo_path:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This incident already has an attached photo (limit: one photo per incident)."
+        )
+
+    allowed_mimes = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+    content_type = (file.content_type or "").lower().strip()
+    if content_type not in allowed_mimes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported image content type. Allowed types: JPEG, PNG, WebP."
+        )
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded photo file is empty.")
+
+    if len(raw_bytes) > settings.INCIDENT_PHOTO_MAX_BYTES:
+        max_mb = round(settings.INCIDENT_PHOTO_MAX_BYTES / (1024 * 1024), 1)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Photo exceeds maximum allowed size of {max_mb} MB."
+        )
+
+    ext = _detect_image_magic_extension(raw_bytes)
+    if not ext:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image file signature (magic bytes check failed). Allowed formats: JPEG, PNG, WebP."
+        )
+
+    upload_dir = os.path.abspath(settings.INCIDENT_PHOTO_UPLOAD_DIR)
+    os.makedirs(upload_dir, exist_ok=True)
+    server_filename = f"inc_{inc.id}_{uuid.uuid4().hex[:16]}{ext}"
+    dest_path = os.path.join(upload_dir, server_filename)
+    with open(dest_path, "wb") as out_f:
+        out_f.write(raw_bytes)
+
+    inc.photo_path = f"/uploads/incidents/{server_filename}"
+    db.add(AuditLog(
+        user_id=guard_user.id,
+        user_name=guard_user.email,
+        role=guard_user.role,
+        action="UPLOAD_INCIDENT_PHOTO",
+        target_entity="Incident",
+        target_id=inc.reference_number,
+        reason=f"Uploaded photo ({len(raw_bytes)} bytes) for incident {inc.reference_number}"
+    ))
     db.commit()
     db.refresh(inc)
     return inc
