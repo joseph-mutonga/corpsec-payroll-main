@@ -1,4 +1,5 @@
-const CACHE_NAME = 'corpsec-auto-update-v42';
+const CACHE_NAME = 'corpsec-auto-update-v43';
+const GUARD_CACHE_PREFIX = 'corpsec-guard-';
 const APP_SHELL = [
   '/',
   '/version.json',
@@ -26,12 +27,20 @@ function isApiRequest(url) {
   return url.pathname.startsWith('/api/');
 }
 
+function isGuardPortalRequest(url) {
+  return (
+    url.pathname === '/portal' ||
+    url.pathname === '/portal/' ||
+    url.pathname === '/portal.html' ||
+    url.pathname === '/portal-manifest.json' ||
+    url.pathname === '/guard-sw.js'
+  );
+}
+
 function isAppShellRequest(url) {
   return (
     url.pathname === '/' ||
     url.pathname === '/index.html' ||
-    url.pathname === '/portal' ||
-    url.pathname === '/portal/' ||
     url.pathname === '/version.json' ||
     url.pathname === '/manifest.json' ||
     url.pathname === '/portal-sw.js' ||
@@ -73,16 +82,16 @@ self.addEventListener('activate', (event) => {
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter((key) => key !== CACHE_NAME)
+        .filter((key) => key !== CACHE_NAME && !key.startsWith(GUARD_CACHE_PREFIX))
         .map((key) => caches.delete(key))
     );
     await self.clients.claim();
   })());
 });
 
-// Network-First for HTML navigation: Always get latest version from server; fallback to cache only offline
+// Network-First for Admin HTML navigation: Always get latest version from server; fallback to cache only offline
 async function networkFirstDocument(request, pathname) {
-  const cacheKey = pathname.startsWith('/portal') ? '/portal' : '/';
+  const cacheKey = '/';
   try {
     const response = await fetch(request, { cache: 'no-cache' });
     if (!isUnsafeToCache(response) && isHtmlResponse(response)) {
@@ -125,14 +134,20 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
     event.waitUntil((async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
+      await Promise.all(
+        keys
+          .filter((k) => !k.startsWith(GUARD_CACHE_PREFIX))
+          .map((k) => caches.delete(k))
+      );
       await self.clients.claim();
     })());
   }
   if (event.data && event.data.action === 'CLEAR_OLD_CACHES') {
     event.waitUntil(
       caches.keys().then((keys) => Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((k) => caches.delete(k))
+        keys
+          .filter((key) => key !== CACHE_NAME && !key.startsWith(GUARD_CACHE_PREFIX))
+          .map((k) => caches.delete(k))
       ))
     );
   }
@@ -145,6 +160,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Never intercept Guard Portal routes (owned by /guard-sw.js on scope /portal)
+  if (isGuardPortalRequest(url)) return;
+
   // Never intercept API or PDF payslips — those must always hit the backend
   if (isApiRequest(url) || isPdfRequest(url)) return;
 
@@ -153,9 +171,7 @@ self.addEventListener('fetch', (event) => {
   const isDocument =
     request.mode === 'navigate' ||
     url.pathname === '/' ||
-    url.pathname === '/index.html' ||
-    url.pathname === '/portal' ||
-    url.pathname === '/portal/';
+    url.pathname === '/index.html';
 
   if (isDocument) {
     event.respondWith(networkFirstDocument(request, url.pathname));

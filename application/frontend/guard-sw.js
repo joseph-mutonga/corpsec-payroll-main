@@ -72,6 +72,27 @@ self.addEventListener('message', (event) => {
   }
 });
 
+function isUnsafeToCache(response) {
+  if (!response || !response.ok || response.type !== 'basic') return true;
+  const type = (response.headers.get('content-type') || '').toLowerCase();
+  const disposition = (response.headers.get('content-disposition') || '').toLowerCase();
+  return (
+    type.includes('application/pdf') ||
+    type.includes('application/octet-stream') ||
+    disposition.includes('attachment')
+  );
+}
+
+function isHtmlResponse(response) {
+  const type = (response.headers.get('content-type') || '').toLowerCase();
+  return type.includes('text/html');
+}
+
+function isPdfRequest(url) {
+  const path = url.pathname.toLowerCase();
+  return path.endsWith('/pdf') || path.endsWith('.pdf') || path.includes('.pdf');
+}
+
 async function cacheFirstStaticAsset(request) {
   const cache = await caches.open(GUARD_SHELL_CACHE);
   const cached = await cache.match(request);
@@ -79,7 +100,7 @@ async function cacheFirstStaticAsset(request) {
     return cached;
   }
   const networkResp = await fetch(request);
-  if (networkResp && networkResp.ok && networkResp.type === 'basic') {
+  if (!isUnsafeToCache(networkResp)) {
     await cache.put(request, networkResp.clone());
   }
   return networkResp;
@@ -91,9 +112,9 @@ async function staleWhileRevalidateShell(request) {
   const cacheKey = url.pathname === '/portal.html' ? '/portal' : url.pathname;
   const cached = await cache.match(cacheKey);
 
-  const networkFetch = fetch(request)
+  const networkFetch = fetch(request, { cache: 'no-cache' })
     .then((networkResp) => {
-      if (networkResp && networkResp.ok && networkResp.type === 'basic') {
+      if (!isUnsafeToCache(networkResp) && isHtmlResponse(networkResp)) {
         cache.put(cacheKey, networkResp.clone()).catch(() => {});
       }
       return networkResp;
@@ -124,8 +145,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // SECURITY: Never cache auth, OTP, payroll, attendance, or personal API data
-  if (url.pathname.startsWith('/api/')) return;
+  // SECURITY: Never cache auth, OTP, payroll, attendance, PDFs, or personal API data
+  if (url.pathname.startsWith('/api/') || isPdfRequest(url)) return;
 
   if (GUARD_STATIC_ASSETS.includes(url.pathname)) {
     event.respondWith(cacheFirstStaticAsset(event.request));

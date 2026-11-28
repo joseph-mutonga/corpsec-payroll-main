@@ -94,6 +94,7 @@
     try {
       const keys = await caches.keys();
       for (const key of keys) {
+        if (key.startsWith('corpsec-guard-')) continue;
         if (key.startsWith('corpsec-') && !key.includes(currentReleaseId)) {
           await caches.delete(key).catch(() => {});
         }
@@ -215,7 +216,11 @@
     try {
       if ('caches' in window) {
         const keys = await caches.keys();
-        await Promise.all(keys.map(k => caches.delete(k)));
+        await Promise.all(
+          keys
+            .filter((k) => !k.startsWith('corpsec-guard-'))
+            .map((k) => caches.delete(k))
+        );
       }
     } catch (e) {}
     // Hard reload bypassing cache
