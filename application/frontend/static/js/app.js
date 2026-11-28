@@ -4018,6 +4018,7 @@ async function loadPayrollReview(targetPeriodId = null) {
     const recRes = await apiFetch(`/payroll/${periodId}/records`);
     const records = await recRes.json();
     currentPayrollRecordsCache = records || [];
+    await loadPayrollFlaggedOfflineWarning(periodId);
     if (!records || !records.length) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" style="text-align:center; padding:20px; color:#64748B;">No payroll calculation records found for period #${periodId}. Click 'Run Payroll' to calculate.</td></tr>`;
       setPayrollMetricsZero();
@@ -4114,6 +4115,82 @@ async function loadPayrollReview(targetPeriodId = null) {
     setPayrollMetricsZero();
   }
 }
+
+async function loadPayrollFlaggedOfflineWarning(periodId) {
+  const banner = document.getElementById('payroll-flagged-offline-warning');
+  const countEl = document.getElementById('payroll-flagged-offline-count');
+  const listEl = document.getElementById('payroll-flagged-offline-list');
+  if (!banner || !listEl || !periodId) return;
+
+  try {
+    const res = await apiFetch(`/payroll/${periodId}/flagged-attendance`);
+    if (!res.ok) {
+      banner.style.display = 'none';
+      return;
+    }
+    const data = await res.json();
+    const items = data.records || [];
+    if (countEl) countEl.innerText = items.length;
+    if (items.length === 0) {
+      banner.style.display = 'none';
+      listEl.innerHTML = '';
+      return;
+    }
+
+    banner.style.display = 'block';
+    listEl.innerHTML = items.map(item => `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:#FFFFFF; border:1px solid #FCD34D; border-radius:8px; padding:8px 12px; font-size:12px;">
+        <div>
+          <strong style="color:#0F172A;">${escapeHtml(item.guard_name)} (${escapeHtml(item.employee_number)})</strong>
+          <span style="color:#475569;"> • ${escapeHtml(item.shift_date)} • ${escapeHtml(item.site_name)}</span>
+          <span class="badge" style="background:#FEF3C7; color:#92400E; font-size:10.5px; font-weight:700; margin-left:6px;">${escapeHtml(item.status)}</span>
+          <div style="font-size:11px; color:#B45309; margin-top:2px;">Reason: ${escapeHtml(item.review_reason)}</div>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button type="button" class="btn btn-primary" style="padding:4px 10px; font-size:11px; background:#059669; border-color:#059669;"
+            onclick="approveFlaggedAttendanceAndRecalculate(${item.id}, ${periodId})">
+            ✅ Approve &amp; Recalculate
+          </button>
+          <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px;"
+            onclick="openCorrectAttendanceModal(${item.id})">
+            ✏️ Edit
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    banner.style.display = 'none';
+  }
+}
+
+async function approveFlaggedAttendanceAndRecalculate(attendanceId, periodId) {
+  try {
+    const res = await apiFetch(`/attendance/${attendanceId}/approve-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Approved from Payroll Review warning banner' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Could not approve record: ' + (err.detail || 'Server error'));
+      return;
+    }
+    await apiFetch(`/payroll/${periodId}/calculate`, { method: 'POST' });
+    await loadAttendance();
+    await loadPayrollReview(periodId);
+  } catch (e) {
+    alert('Error approving and recalculating payroll: ' + e.message);
+  }
+}
+window.approveFlaggedAttendanceAndRecalculate = approveFlaggedAttendanceAndRecalculate;
+
+function openFlaggedAttendanceFromPayroll() {
+  switchTab('attendance');
+  if (!currentAttendanceNeedsReviewOnly) {
+    toggleAttendanceNeedsReviewFilter();
+  }
+}
+window.openFlaggedAttendanceFromPayroll = openFlaggedAttendanceFromPayroll;
 
 function openPayeBreakdownModal(idx) {
   const rec = currentPayrollRecordsCache[idx];

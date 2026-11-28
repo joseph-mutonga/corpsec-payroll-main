@@ -131,6 +131,64 @@ def list_payroll_periods(
     return db.query(PayrollPeriod).order_by(PayrollPeriod.year.desc(), PayrollPeriod.month.desc()).all()
 
 
+@router.get("/{period_id}/flagged-attendance")
+def list_period_flagged_offline_attendance(
+    period_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin_or_hr)
+):
+    """
+    Returns unresolved flagged offline attendance records (needs_supervisor_review=True
+    or status='PENDING_REVIEW') within the payroll period date range.
+    Under Option B Payroll Policy, these records are excluded from paid days_worked
+    until reviewed and approved by a Supervisor or Admin.
+    """
+    period = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()
+    if not period:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll period not found")
+
+    flagged = db.query(Attendance).options(
+        joinedload(Attendance.guard),
+        joinedload(Attendance.site),
+        joinedload(Attendance.shift),
+    ).filter(
+        Attendance.shift_date >= period.start_date,
+        Attendance.shift_date <= period.end_date,
+        or_(
+            Attendance.needs_supervisor_review == True,
+            Attendance.status == "PENDING_REVIEW",
+        ),
+    ).order_by(Attendance.shift_date.desc(), Attendance.id.desc()).all()
+
+    items = []
+    for att in flagged:
+        g = att.guard
+        s = att.site
+        items.append({
+            "id": att.id,
+            "guard_id": att.guard_id,
+            "guard_name": g.full_name if g else f"Guard #{att.guard_id}",
+            "employee_number": g.employee_number if g else "CS-00000",
+            "site_name": s.site_name if s else "Unassigned Site",
+            "shift_date": str(att.shift_date),
+            "actual_clock_in": att.actual_clock_in.isoformat() if att.actual_clock_in else None,
+            "actual_clock_out": att.actual_clock_out.isoformat() if att.actual_clock_out else None,
+            "status": att.status,
+            "submitted_offline": bool(att.submitted_offline),
+            "needs_supervisor_review": bool(att.needs_supervisor_review),
+            "review_reason": att.review_reason or "Flagged offline attendance requires supervisor approval",
+        })
+
+    return {
+        "period_id": period.id,
+        "period_name": period.period_name,
+        "start_date": str(period.start_date),
+        "end_date": str(period.end_date),
+        "unresolved_count": len(items),
+        "records": items,
+    }
+
+
 @router.post("/{period_id}/calculate", response_model=PayrollCalculationSummary)
 def execute_payroll_calculation(
     period_id: int,

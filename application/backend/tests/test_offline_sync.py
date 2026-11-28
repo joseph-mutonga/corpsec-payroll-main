@@ -116,14 +116,66 @@ def test_offline_late_sync_clock_skew_and_geofence_flagged_for_review(client, db
         },
         headers=guard_headers,
     )
-    # Must NOT auto-reject offline geofence failure — must record and flag for supervisor review
+    # Must NOT auto-reject offline geofence failure — must record as PENDING_REVIEW and flag for supervisor review
     assert res.status_code == 200
     att = res.json()
     assert att["submitted_offline"] is True
     assert att["needs_supervisor_review"] is True
+    assert att["status"] == "PENDING_REVIEW"
     assert "Late offline sync" in att["review_reason"]
     assert "Clock skew exceeds" in att["review_reason"]
     assert "Offline geofence mismatch" in att["review_reason"]
+
+    # Option B Payroll Policy: verify flagged high-risk offline record does NOT count in payroll until approved,
+    # whereas a normal offline record on another guard DOES count in payroll.
+    today = date.today()
+    other_guard = db.query(Guard).filter(Guard.id != guard_user.guard_id, Guard.status == "ACTIVE").first()
+    normal_offline_att = Attendance(
+        guard_id=other_guard.id,
+        shift_id=1,
+        site_id=site.id,
+        shift_date=today,
+        actual_clock_in=datetime.now() - timedelta(hours=8),
+        actual_clock_out=datetime.now(),
+        regular_hours=8.0,
+        overtime_hours=0.0,
+        status="PRESENT",
+        submitted_offline=True,
+        needs_supervisor_review=False,
+    )
+    db.add(normal_offline_att)
+    period = PayrollPeriod(
+        year=today.year,
+        month=today.month,
+        period_name=f"Option B Test {today.strftime('%b %Y')}",
+        start_date=date(today.year, today.month, 1),
+        end_date=today,
+        status="DRAFT",
+    )
+    db.add(period)
+    db.commit()
+    db.refresh(period)
+
+    # Payroll screen flagged-attendance endpoint lists the unresolved flagged record
+    flagged_payroll_res = client.get(f"/api/v1/payroll/{period.id}/flagged-attendance", headers=admin_headers)
+    assert flagged_payroll_res.status_code == 200
+    flagged_payload = flagged_payroll_res.json()
+    assert flagged_payload["unresolved_count"] == 1
+    assert flagged_payload["records"][0]["id"] == att["id"]
+
+    # Calculate payroll BEFORE approval: flagged guard has days_worked == 0, normal offline guard has days_worked == 1
+    calc1 = client.post(f"/api/v1/payroll/{period.id}/calculate", headers=admin_headers)
+    assert calc1.status_code == 200
+    flagged_rec_before = db.query(PayrollRecord).filter(
+        PayrollRecord.payroll_period_id == period.id,
+        PayrollRecord.guard_id == guard_user.guard_id,
+    ).first()
+    normal_rec = db.query(PayrollRecord).filter(
+        PayrollRecord.payroll_period_id == period.id,
+        PayrollRecord.guard_id == other_guard.id,
+    ).first()
+    assert flagged_rec_before.days_worked == 0
+    assert normal_rec.days_worked == 1
 
     # 2. Filter via Admin API (?needs_supervisor_review=true)
     flagged_list = client.get("/api/v1/attendance?needs_supervisor_review=true", headers=admin_headers)
@@ -131,7 +183,7 @@ def test_offline_late_sync_clock_skew_and_geofence_flagged_for_review(client, db
     ids = [r["id"] for r in flagged_list.json()]
     assert att["id"] in ids
 
-    # 3. Approve review via Admin endpoint
+    # 3. Approve review via Admin endpoint -> transitions status to PRESENT and counts in payroll on recalculation
     approve_res = client.post(
         f"/api/v1/attendance/{att['id']}/approve-review",
         json={"notes": "Verified gate logbook with site supervisor"},
@@ -140,8 +192,21 @@ def test_offline_late_sync_clock_skew_and_geofence_flagged_for_review(client, db
     assert approve_res.status_code == 200
     approved = approve_res.json()
     assert approved["needs_supervisor_review"] is False
+    assert approved["status"] == "PRESENT"
     assert approved["reviewed_by"] is not None
     assert approved["reviewed_at"] is not None
+
+    flagged_after_res = client.get(f"/api/v1/payroll/{period.id}/flagged-attendance", headers=admin_headers)
+    assert flagged_after_res.json()["unresolved_count"] == 0
+
+    calc2 = client.post(f"/api/v1/payroll/{period.id}/calculate", headers=admin_headers)
+    assert calc2.status_code == 200
+    db.expire_all()
+    flagged_rec_after = db.query(PayrollRecord).filter(
+        PayrollRecord.payroll_period_id == period.id,
+        PayrollRecord.guard_id == guard_user.guard_id,
+    ).first()
+    assert flagged_rec_after.days_worked == 1
 
 
 def test_orphaned_clock_out_does_not_crash_or_miscount_payroll_and_reports(client, db):

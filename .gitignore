@@ -42,3 +42,5 @@ Thumbs.db
 
 # Generated documents / personal data
 *.pdf
+uploads/incidents/
+dev_corpsec_payroll.db

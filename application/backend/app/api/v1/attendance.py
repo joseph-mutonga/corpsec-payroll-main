@@ -282,6 +282,7 @@ def clock_in(
             review_reasons.append("Offline clock-in missing GPS coordinates for geofenced site")
 
     review_reason_str = "; ".join(review_reasons) if review_reasons else None
+    initial_status = "PENDING_REVIEW" if needs_review else "PRESENT"
 
     if not existing:
         existing = Attendance(
@@ -290,7 +291,7 @@ def clock_in(
             site_id=resolved_site_id,
             shift_date=today,
             actual_clock_in=effective_clock_in,
-            status="PRESENT",
+            status=initial_status,
             notes=notes_val,
             client_uuid=eff_uuid,
             device_clock_in_at=raw_device_ts or now,
@@ -308,7 +309,7 @@ def clock_in(
         existing.actual_clock_out = None
         existing.regular_hours = 0.0
         existing.overtime_hours = 0.0
-        existing.status = "PRESENT"
+        existing.status = initial_status
         existing.notes = notes_val
         existing.client_uuid = eff_uuid
         existing.device_clock_in_at = raw_device_ts or now
@@ -436,8 +437,11 @@ def clock_out(
 
     if needs_review:
         att.needs_supervisor_review = True
+        att.status = "PENDING_REVIEW"
         combined_reasons = [att.review_reason] + review_reasons if att.review_reason else review_reasons
         att.review_reason = "; ".join([r for r in combined_reasons if r])
+    elif att.needs_supervisor_review:
+        att.status = "PENDING_REVIEW"
 
     shift_duration = 12.0
     if att.shift_id:

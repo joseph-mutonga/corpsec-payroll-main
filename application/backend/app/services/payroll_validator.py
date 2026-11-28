@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
+from application.backend.app.models.attendance import Attendance
 from application.backend.app.models.payroll import PayrollPeriod, PayrollRecord, PayrollError
 
 
@@ -120,6 +121,34 @@ def validate_payroll_period(db: Session, period_or_id: Union[int, PayrollPeriod]
                 guard_id=guard.id,
                 error_type="EXCESSIVE_OVERTIME",
                 error_code="EXCESSIVE_OVERTIME",
+                error_message=msg,
+                description=msg,
+                severity="WARNING",
+                status="OPEN"
+            )
+            db.add(err)
+            errors.append(err)
+
+    # 6. Unresolved Flagged Offline Attendance Records in Period (Option B Payroll Policy)
+    period_obj = db.query(PayrollPeriod).filter(PayrollPeriod.id == period_id).first()
+    if period_obj:
+        flagged_atts = db.query(Attendance).filter(
+            Attendance.shift_date >= period_obj.start_date,
+            Attendance.shift_date <= period_obj.end_date,
+            (Attendance.needs_supervisor_review == True) | (Attendance.status == "PENDING_REVIEW")
+        ).all()
+        for f_att in flagged_atts:
+            g = db.query(Guard).filter(Guard.id == f_att.guard_id).first()
+            g_label = f"{g.employee_number} ({g.full_name})" if g else f"Guard #{f_att.guard_id}"
+            msg = (
+                f"Guard {g_label} has an unresolved flagged offline attendance on {f_att.shift_date} "
+                f"(excluded from paid days until approved): {f_att.review_reason or 'Pending supervisor review'}."
+            )
+            err = PayrollError(
+                payroll_period_id=period_id,
+                guard_id=f_att.guard_id,
+                error_type="UNRESOLVED_OFFLINE_ATTENDANCE",
+                error_code="UNRESOLVED_OFFLINE_ATTENDANCE",
                 error_message=msg,
                 description=msg,
                 severity="WARNING",
