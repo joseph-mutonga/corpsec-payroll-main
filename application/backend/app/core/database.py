@@ -55,8 +55,50 @@ def sync_db_schema():
                 # 3. Attendance table columns check
                 cursor.execute("PRAGMA table_info(attendance);")
                 att_cols = [c[1] for c in cursor.fetchall()]
-                if att_cols and "notes" not in att_cols:
-                    cursor.execute("ALTER TABLE attendance ADD COLUMN notes TEXT;")
+                if att_cols:
+                    if "notes" not in att_cols:
+                        cursor.execute("ALTER TABLE attendance ADD COLUMN notes TEXT;")
+                    att_offline_cols = [
+                        ("client_uuid", "VARCHAR(64)"),
+                        ("clock_out_client_uuid", "VARCHAR(64)"),
+                        ("device_clock_in_at", "DATETIME"),
+                        ("server_clock_in_received_at", "DATETIME"),
+                        ("device_clock_out_at", "DATETIME"),
+                        ("server_clock_out_received_at", "DATETIME"),
+                        ("clock_skew_ms", "INTEGER"),
+                        ("submitted_offline", "BOOLEAN DEFAULT 0"),
+                        ("needs_supervisor_review", "BOOLEAN DEFAULT 0"),
+                        ("review_reason", "TEXT"),
+                        ("reviewed_by", "VARCHAR(255)"),
+                        ("reviewed_at", "DATETIME"),
+                    ]
+                    for col_name, col_def in att_offline_cols:
+                        if col_name not in att_cols:
+                            cursor.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_def};")
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_guard_client_uuid ON attendance(guard_id, client_uuid);")
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_guard_clock_out_uuid ON attendance(guard_id, clock_out_client_uuid);")
+
+                # 3b. Incidents table offline sync columns check
+                cursor.execute("PRAGMA table_info(incidents);")
+                inc_cols = [c[1] for c in cursor.fetchall()]
+                if inc_cols:
+                    inc_offline_cols = [
+                        ("client_uuid", "VARCHAR(64)"),
+                        ("device_timestamp", "DATETIME"),
+                        ("server_received_at", "DATETIME"),
+                        ("clock_skew_ms", "INTEGER"),
+                        ("latitude", "FLOAT"),
+                        ("longitude", "FLOAT"),
+                        ("submitted_offline", "BOOLEAN DEFAULT 0"),
+                        ("needs_supervisor_review", "BOOLEAN DEFAULT 0"),
+                        ("review_reason", "TEXT"),
+                        ("reviewed_by", "VARCHAR(255)"),
+                        ("reviewed_at", "DATETIME"),
+                    ]
+                    for col_name, col_def in inc_offline_cols:
+                        if col_name not in inc_cols:
+                            cursor.execute(f"ALTER TABLE incidents ADD COLUMN {col_name} {col_def};")
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_incidents_guard_client_uuid ON incidents(guard_id, client_uuid);")
 
                 # 4. Sites table columns check
                 cursor.execute("PRAGMA table_info(sites);")
@@ -262,6 +304,75 @@ def sync_db_schema():
                         db_conn.commit()
                     except Exception as ue:
                         print(f"Notice adding column must_change_password to users: {ue}")
+
+        if "attendance" in existing_tables:
+            existing_att_cols = [c["name"] for c in insp.get_columns("attendance")]
+            att_cols_to_add = [
+                ("client_uuid", "VARCHAR(64) NULL"),
+                ("clock_out_client_uuid", "VARCHAR(64) NULL"),
+                ("device_clock_in_at", "DATETIME NULL"),
+                ("server_clock_in_received_at", "DATETIME NULL"),
+                ("device_clock_out_at", "DATETIME NULL"),
+                ("server_clock_out_received_at", "DATETIME NULL"),
+                ("clock_skew_ms", "INTEGER NULL"),
+                ("submitted_offline", "BOOLEAN DEFAULT FALSE NULL"),
+                ("needs_supervisor_review", "BOOLEAN DEFAULT FALSE NULL"),
+                ("review_reason", "TEXT NULL"),
+                ("reviewed_by", "VARCHAR(255) NULL"),
+                ("reviewed_at", "DATETIME NULL"),
+            ]
+            with engine.connect() as db_conn:
+                for col_name, col_def in att_cols_to_add:
+                    if col_name not in existing_att_cols:
+                        try:
+                            db_conn.execute(text(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_def};"))
+                            db_conn.commit()
+                        except Exception as ce:
+                            print(f"Notice adding column {col_name} to attendance: {ce}")
+                existing_att_idx = {idx["name"] for idx in insp.get_indexes("attendance") if idx.get("name")}
+                if "uq_attendance_guard_client_uuid" not in existing_att_idx:
+                    try:
+                        db_conn.execute(text("CREATE UNIQUE INDEX uq_attendance_guard_client_uuid ON attendance (guard_id, client_uuid);"))
+                        db_conn.commit()
+                    except Exception:
+                        pass
+                if "uq_attendance_guard_clock_out_uuid" not in existing_att_idx:
+                    try:
+                        db_conn.execute(text("CREATE UNIQUE INDEX uq_attendance_guard_clock_out_uuid ON attendance (guard_id, clock_out_client_uuid);"))
+                        db_conn.commit()
+                    except Exception:
+                        pass
+
+        if "incidents" in existing_tables:
+            existing_inc_cols = [c["name"] for c in insp.get_columns("incidents")]
+            inc_cols_to_add = [
+                ("client_uuid", "VARCHAR(64) NULL"),
+                ("device_timestamp", "DATETIME NULL"),
+                ("server_received_at", "DATETIME NULL"),
+                ("clock_skew_ms", "INTEGER NULL"),
+                ("latitude", "FLOAT NULL"),
+                ("longitude", "FLOAT NULL"),
+                ("submitted_offline", "BOOLEAN DEFAULT FALSE NULL"),
+                ("needs_supervisor_review", "BOOLEAN DEFAULT FALSE NULL"),
+                ("review_reason", "TEXT NULL"),
+                ("reviewed_by", "VARCHAR(255) NULL"),
+                ("reviewed_at", "DATETIME NULL"),
+            ]
+            with engine.connect() as db_conn:
+                for col_name, col_def in inc_cols_to_add:
+                    if col_name not in existing_inc_cols:
+                        try:
+                            db_conn.execute(text(f"ALTER TABLE incidents ADD COLUMN {col_name} {col_def};"))
+                            db_conn.commit()
+                        except Exception as ce:
+                            print(f"Notice adding column {col_name} to incidents: {ce}")
+                existing_inc_idx = {idx["name"] for idx in insp.get_indexes("incidents") if idx.get("name")}
+                if "uq_incidents_guard_client_uuid" not in existing_inc_idx:
+                    try:
+                        db_conn.execute(text("CREATE UNIQUE INDEX uq_incidents_guard_client_uuid ON incidents (guard_id, client_uuid);"))
+                        db_conn.commit()
+                    except Exception:
+                        pass
 
         if "payroll_records" in existing_tables:
             existing_cols = [c["name"] for c in insp.get_columns("payroll_records")]

@@ -1,11 +1,15 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Date, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Date, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from application.backend.app.core.database import Base
 
 
 class Attendance(Base):
     __tablename__ = "attendance"
+    __table_args__ = (
+        UniqueConstraint("guard_id", "client_uuid", name="uq_attendance_guard_client_uuid"),
+        UniqueConstraint("guard_id", "clock_out_client_uuid", name="uq_attendance_guard_clock_out_uuid"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     guard_id = Column(Integer, ForeignKey("guards.id"), nullable=False, index=True)
@@ -19,8 +23,22 @@ class Attendance(Base):
     regular_hours = Column(Float, default=0.0, nullable=False)
     overtime_hours = Column(Float, default=0.0, nullable=False)
     
-    status = Column(String(255), default="PRESENT", nullable=False)  # PRESENT, ABSENT, LATE, OFF
+    status = Column(String(255), default="PRESENT", nullable=False)  # PRESENT, ABSENT, LATE, OFF, PENDING_REVIEW
     notes = Column(Text, nullable=True)
+
+    # Offline Sync & Supervisor Review Metadata (Additive / Nullable)
+    client_uuid = Column(String(64), nullable=True, index=True)
+    clock_out_client_uuid = Column(String(64), nullable=True, index=True)
+    device_clock_in_at = Column(DateTime, nullable=True)
+    server_clock_in_received_at = Column(DateTime, nullable=True)
+    device_clock_out_at = Column(DateTime, nullable=True)
+    server_clock_out_received_at = Column(DateTime, nullable=True)
+    clock_skew_ms = Column(Integer, nullable=True)
+    submitted_offline = Column(Boolean, default=False, nullable=True)
+    needs_supervisor_review = Column(Boolean, default=False, nullable=True, index=True)
+    review_reason = Column(Text, nullable=True)
+    reviewed_by = Column(String(255), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.now, nullable=False)
 

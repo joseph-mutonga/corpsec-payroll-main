@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     DEFAULT_HOUSING_LEVY_RATE: float = 0.015
     DEFAULT_PERSONAL_RELIEF: float = 2400.0
 
+    # Guard Portal Offline Sync & Photo Upload Controls
+    OFFLINE_SYNC_LATE_THRESHOLD_MINUTES: int = 30
+    OFFLINE_SYNC_MAX_FUTURE_MINUTES: int = 5
+    OFFLINE_SYNC_MAX_PAST_HOURS: int = 48
+    OFFLINE_SYNC_MAX_CLOCK_SKEW_MINUTES: int = 5
+    INCIDENT_PHOTO_MAX_BYTES: int = 5 * 1024 * 1024  # 5 MB
+
     # SMTP Email & OTP Two-Factor Authentication
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587
