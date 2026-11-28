@@ -169,6 +169,10 @@ def test_guard_pwa_manifest_and_service_worker_routes(client):
     assert versioned_css.status_code == 200
     assert "immutable" in versioned_css.headers.get("cache-control", "").lower()
 
+    legacy_versioned_css = client.get("/static/css/portal.css?v=legacy_hardcoded_tag")
+    assert legacy_versioned_css.status_code == 200
+    assert "immutable" not in legacy_versioned_css.headers.get("cache-control", "").lower()
+
     unversioned_css = client.get("/static/css/portal.css")
     assert unversioned_css.status_code == 200
     assert "no-store" in unversioned_css.headers.get("cache-control", "").lower()

@@ -75,8 +75,10 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
             response.headers["Expires"] = "0"
             return response
 
-        has_version_tag = bool(request.query_params.get("v"))
-        if path.startswith("/static/") and has_version_tag:
+        # Long-lived immutable caching ONLY for assets stamped with the central ASSET_VERSION
+        # (config.py). Hard-coded legacy ?v= strings (admin index.html / portal-sw.js) are NOT
+        # trusted for immutability because they are not bumped from a single place.
+        if path.startswith("/static/") and request.query_params.get("v") == settings.ASSET_VERSION:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
             return response
 
