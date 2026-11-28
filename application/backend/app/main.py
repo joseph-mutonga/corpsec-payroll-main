@@ -93,6 +93,7 @@ app.add_middleware(
     store=login_security_store,
     protected_paths=(
         f"{settings.API_V1_STR}/auth/login",
+        f"{settings.API_V1_STR}/auth/login/management",
         f"{settings.API_V1_STR}/auth/login/guard",
     ),
 )

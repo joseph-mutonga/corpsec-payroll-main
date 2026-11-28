@@ -199,16 +199,26 @@ def find_user_by_credential(db: Session, login_id: str) -> Optional[User]:
     response_model=TokenResponse,
     responses={
         401: {"description": "Incorrect email or password"},
+        403: {"description": "Role restricted from Management login portal"},
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("20/15minutes")
+@router.post(
+    "/login/management",
+    response_model=TokenResponse,
+    responses={
+        401: {"description": "Incorrect email or password"},
+        403: {"description": "Guard accounts must use Guard Portal (/portal)"},
+        429: {"description": "Too many login attempts - Rate limit exceeded"}
+    }
+)
+@limiter.limit("25/1minute")
 def login_for_access_token(
     request: Request,
     payload: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    """Sign-in endpoint supporting Admin, HR, Supervisor, and Guard logins."""
+    """Management sign-in endpoint (Admin, HR, Supervisor, Staff). Enforces Guard isolation when portal='management' or /login/management."""
     login_id = payload.email.strip()
     user = find_user_by_credential(db, login_id)
 
@@ -243,6 +253,16 @@ def login_for_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    is_mgmt_portal = (
+        (payload.portal or "").strip().lower() == "management"
+        or request.url.path.rstrip("/").endswith("/login/management")
+    )
+    if is_mgmt_portal and (user.role or "").upper() == UserRole.GUARD.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This login page is for Management (System Admin, HR, Staff & Supervisors) only. Guards must sign in at the Guard Portal (/portal)."
         )
 
     user_name = user.full_name
@@ -352,7 +372,7 @@ def login_for_access_token(
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("20/15minutes")
+@limiter.limit("25/1minute")
 def guard_login(
     request: Request,
     payload: GuardLoginRequest,
@@ -926,8 +946,8 @@ def forgot_password(
     db: Session = Depends(get_db)
 ):
     """
-    Generate a new temporary password for ANY active user (Admin, HR, Supervisor, Staff, Guard)
-    and send it to their registered email address.
+    Generate a new temporary password for active Management users (Admin, HR, Supervisor, Staff)
+    and send it to their registered email address. Guards cannot self-reset via Forgot Password.
     """
     login_id = (payload.username or "").strip()
     user = find_user_by_credential(db, login_id)
@@ -941,6 +961,12 @@ def forgot_password(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Account is {(user.status or 'inactive').lower()}. Please contact your administrator."
+        )
+
+    if (user.role or "").upper() == UserRole.GUARD.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guards cannot change or reset password via Forgot Password. Please contact HR or System Admin."
         )
 
     target_email = (user.email or "").strip()

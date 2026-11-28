@@ -8,7 +8,7 @@
  * - API security: Strict bypass for /api/* (never caches auth/OTP/payroll/personal data).
  */
 
-const GUARD_SW_VERSION = '20261128_v2';
+const GUARD_SW_VERSION = '20261128_v5';
 const GUARD_SHELL_CACHE = `corpsec-guard-shell-${GUARD_SW_VERSION}`;
 
 const GUARD_APP_SHELL = [

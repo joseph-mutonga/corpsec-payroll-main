@@ -225,26 +225,50 @@ async function handleUnifiedLogin(e) {
   if (btnSpinner) btnSpinner.style.display = 'inline-block';
 
   const abortCtrl = new AbortController();
-  const timeoutId = setTimeout(() => abortCtrl.abort(), 25000);
+  const timeoutId = setTimeout(() => abortCtrl.abort(), 35000);
 
   try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    let res = await fetch(`${API_BASE}/auth/login/management`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: loginId, password: password }),
+      body: JSON.stringify({ email: loginId, password: password, portal: 'management' }),
       signal: abortCtrl.signal
     });
+    if (res.status === 404) {
+      res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginId, password: password, portal: 'management' }),
+        signal: abortCtrl.signal
+      });
+    }
     clearTimeout(timeoutId);
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
       if (btn) btn.disabled = false;
-      if (btnText) btnText.innerText = 'Sign In to CorpSec';
+      if (btnText) btnText.innerText = 'Sign in';
       if (btnSpinner) btnSpinner.style.display = 'none';
       if (alertEl) {
         alertEl.className = 'login-alert-banner alert-error';
-        alertEl.innerText = data.detail || 'Authentication failed. Please verify credentials.';
+        if (res.status === 403 && data.detail && data.detail.includes('/portal')) {
+          alertEl.innerHTML = `${data.detail} <a href="/portal" style="color:#2563EB; font-weight:700; text-decoration:underline; margin-left:4px;">Open Guard Portal →</a>`;
+        } else {
+          alertEl.innerText = data.detail || 'Authentication failed. Please verify credentials.';
+        }
+        alertEl.style.display = 'block';
+      }
+      return;
+    }
+
+    if ((data.role || '').toUpperCase() === 'GUARD') {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.innerText = 'Sign in';
+      if (btnSpinner) btnSpinner.style.display = 'none';
+      if (alertEl) {
+        alertEl.className = 'login-alert-banner alert-error';
+        alertEl.innerHTML = `This login page is for Management (System Admin, HR, Staff &amp; Supervisors) only. Guards must sign in at the Guard Portal (/portal). <a href="/portal" style="color:#2563EB; font-weight:700; text-decoration:underline; margin-left:4px;">Open Guard Portal →</a>`;
         alertEl.style.display = 'block';
       }
       return;
@@ -259,7 +283,7 @@ async function handleUnifiedLogin(e) {
       localStorage.removeItem('corpsec_user');
 
       if (btn) btn.disabled = false;
-      if (btnText) btnText.innerText = 'Sign In to CorpSec';
+      if (btnText) btnText.innerText = 'Sign in';
       if (btnSpinner) btnSpinner.style.display = 'none';
 
       pendingOTPAuth = {
@@ -275,7 +299,7 @@ async function handleUnifiedLogin(e) {
     // If user signed in with an emailed temporary password, force setting a custom password first
     if (data.must_change_password) {
       if (btn) btn.disabled = false;
-      if (btnText) btnText.innerText = 'Sign In to CorpSec';
+      if (btnText) btnText.innerText = 'Sign in';
       if (btnSpinner) btnSpinner.style.display = 'none';
       openSetNewPasswordView(data);
       return;
@@ -285,13 +309,13 @@ async function handleUnifiedLogin(e) {
       btn,
       btnText,
       btnSpinner,
-      defaultBtnLabel: 'Sign In to CorpSec'
+      defaultBtnLabel: 'Sign in'
     });
     return;
 
   } catch (err) {
     if (btn) btn.disabled = false;
-    if (btnText) btnText.innerText = 'Sign In to CorpSec';
+    if (btnText) btnText.innerText = 'Sign in';
     if (btnSpinner) btnSpinner.style.display = 'none';
     if (alertEl) {
       alertEl.className = 'login-alert-banner alert-error';
@@ -533,7 +557,10 @@ function toggleInputPassword(inputId, btnEl) {
   if (!input) return;
   const isPass = input.type === 'password';
   input.type = isPass ? 'text' : 'password';
-  if (btnEl) btnEl.innerText = isPass ? '🙈' : '👁️';
+  if (btnEl) {
+    if (btnEl.querySelector('svg')) btnEl.style.color = isPass ? '#2563EB' : '#64748B';
+    else btnEl.innerText = isPass ? '🙈' : '👁️';
+  }
 }
 
 function completeAuthenticatedSession(data, alertEl, btnOpts = {}) {
@@ -843,7 +870,7 @@ function handleBackToLogin() {
   isSettingNewPassword = false;
 
   if (loginBtn) loginBtn.disabled = false;
-  if (btnText) btnText.innerText = 'Sign In to CorpSec';
+  if (btnText) btnText.innerText = 'Sign in';
   if (btnSpinner) btnSpinner.style.display = 'none';
 
   if (otpContainer) otpContainer.style.display = 'none';
@@ -9454,27 +9481,123 @@ function filterInactiveGuardsTable(searchTerm) {
   });
 }
 
-async function resetGuardPasswordToPhone(guardId, guardName, empNo) {
-  const confirmed = confirm(
-    `Reset Guard Portal password for ${guardName || empNo || ('Guard #' + guardId)}?\n\nTheir password will be reset to their registered phone number, and they will be required to set a new password upon next sign-in.`
-  );
-  if (!confirmed) return;
+function resetGuardPasswordToPhone(guardId, guardName, empNo) {
+  const modal = document.getElementById('modal-reset-guard-password');
+  if (!modal) return;
+  document.getElementById('reset-guard-id').value = guardId;
+  document.getElementById('reset-guard-name').innerText = guardName || ('Guard #' + guardId);
+  document.getElementById('reset-guard-emp').innerText = empNo ? `Employee ID: ${empNo}` : '';
 
+  const pwEl = document.getElementById('reset-guard-new-password');
+  const confEl = document.getElementById('reset-guard-confirm-password');
+  const phoneCb = document.getElementById('reset-guard-to-phone');
+  const mustChangeCb = document.getElementById('reset-guard-must-change');
+  const errEl = document.getElementById('reset-guard-error');
+
+  if (pwEl) { pwEl.value = ''; pwEl.disabled = false; }
+  if (confEl) { confEl.value = ''; confEl.disabled = false; }
+  if (phoneCb) phoneCb.checked = false;
+  if (mustChangeCb) mustChangeCb.checked = false;
+  if (errEl) { errEl.style.display = 'none'; errEl.innerText = ''; }
+
+  modal.style.display = 'flex';
+  if (pwEl) setTimeout(() => pwEl.focus(), 50);
+}
+
+function closeResetGuardPasswordModal() {
+  const modal = document.getElementById('modal-reset-guard-password');
+  if (modal) modal.style.display = 'none';
+}
+
+function toggleResetGuardPhoneMode() {
+  const phoneCb = document.getElementById('reset-guard-to-phone');
+  const pwEl = document.getElementById('reset-guard-new-password');
+  const confEl = document.getElementById('reset-guard-confirm-password');
+  const mustChangeCb = document.getElementById('reset-guard-must-change');
+  const usePhone = !!(phoneCb && phoneCb.checked);
+  if (pwEl) {
+    pwEl.disabled = usePhone;
+    if (usePhone) pwEl.value = '';
+  }
+  if (confEl) {
+    confEl.disabled = usePhone;
+    if (usePhone) confEl.value = '';
+  }
+  if (mustChangeCb) mustChangeCb.checked = usePhone;
+}
+
+async function submitResetGuardPassword(event) {
+  if (event) event.preventDefault();
+  const guardId = document.getElementById('reset-guard-id')?.value;
+  const pwEl = document.getElementById('reset-guard-new-password');
+  const confEl = document.getElementById('reset-guard-confirm-password');
+  const phoneCb = document.getElementById('reset-guard-to-phone');
+  const mustChangeCb = document.getElementById('reset-guard-must-change');
+  const errEl = document.getElementById('reset-guard-error');
+  const submitBtn = document.getElementById('btn-submit-reset-guard-password');
+
+  const setErr = (msg) => {
+    if (!errEl) return;
+    if (!msg) { errEl.style.display = 'none'; errEl.innerText = ''; return; }
+    errEl.style.display = 'block';
+    errEl.innerText = msg;
+  };
+  setErr(null);
+
+  const usePhone = !!(phoneCb && phoneCb.checked);
+  const newPw = pwEl ? pwEl.value : '';
+  const confirmPw = confEl ? confEl.value : '';
+  let bodyPayload = {};
+
+  if (usePhone) {
+    bodyPayload = {
+      must_change_password: !!(mustChangeCb && mustChangeCb.checked),
+    };
+  } else {
+    if (!newPw || newPw.trim().length < 6) {
+      setErr('Please enter a new password of at least 6 characters (or check reset to phone number).');
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setErr('New password and confirmation do not match.');
+      return;
+    }
+    bodyPayload = {
+      new_password: newPw,
+      confirm_password: confirmPw,
+      must_change_password: !!(mustChangeCb && mustChangeCb.checked),
+    };
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Saving...';
+  }
   try {
     const res = await apiFetch(`/guards/${guardId}/reset-password`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to reset guard password');
-    showToast(data.message || 'Guard password reset to registered phone number.', 'success');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to save new guard password');
+    closeResetGuardPasswordModal();
+    showToast(data.message || 'New guard password saved in database.', 'success');
   } catch (err) {
-    showToast(err.message || 'Could not reset guard password', 'danger');
+    setErr(err.message || 'Could not reset guard password');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Save New Password';
+    }
   }
 }
 
 window.switchGuardSubTab = switchGuardSubTab;
 window.resetGuardPasswordToPhone = resetGuardPasswordToPhone;
+window.closeResetGuardPasswordModal = closeResetGuardPasswordModal;
+window.toggleResetGuardPhoneMode = toggleResetGuardPhoneMode;
+window.submitResetGuardPassword = submitResetGuardPassword;
 window.openDeactivateGuardModal = openDeactivateGuardModal;
 window.closeDeactivateGuardModal = closeDeactivateGuardModal;
 window.onDeactivateCategoryChange = onDeactivateCategoryChange;

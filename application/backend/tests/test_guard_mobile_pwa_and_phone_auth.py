@@ -99,6 +99,8 @@ def test_guard_portal_has_no_corpsec_logo_image_and_no_admin_assets(client):
     assert "/static/js/app.js" not in html
     assert "portal-login-section" in html
     assert "portal-force-password-section" in html
+    assert "portal-forgot-box" not in html
+    assert "togglePortalForgotBox" not in html
 
     sw_resp = client.get("/guard-sw.js")
     assert sw_resp.status_code == 200
@@ -129,7 +131,8 @@ def test_guard_portal_mobile_css_responsiveness_rules(client):
     """Verify border-box sizing, responsive tables/modals, and mobile input/button sizing."""
     css = client.get("/static/css/portal.css?v=20261128_v1").text
     assert "box-sizing: border-box" in css
-    assert "overflow-x: hidden" in css
+    assert ("overflow-x: clip" in css or "overflow-x: hidden" in css)
+    assert "overscroll-behavior: none" not in css
     assert ".table-responsive" in css
     assert "font-size: 16px" in css
     assert "safe-area-inset-bottom" in css
@@ -302,6 +305,39 @@ def test_new_guard_phone_login_normalization_and_forced_password_change(client, 
     assert post_reset_login.status_code == 200
     assert post_reset_login.json()["must_change_password"] is True
 
+    # 9. Admin sets a specific custom password -> persisted directly in database
+    custom_reset = client.post(
+        f"/api/v1/guards/{created['id']}/reset-password",
+        json={
+            "new_password": "AdminAssigned#2026",
+            "confirm_password": "AdminAssigned#2026",
+            "must_change_password": False,
+        },
+        headers=headers,
+    )
+    assert custom_reset.status_code == 200
+    assert custom_reset.json()["custom_password_set"] is True
+    assert "AdminAssigned#2026" not in json.dumps(custom_reset.json())
+
+    db.expire_all()
+    saved_user = db.query(User).filter(User.guard_id == created["id"]).first()
+    assert saved_user is not None
+    assert verify_password("AdminAssigned#2026", saved_user.password_hash)
+    assert saved_user.must_change_password is False
+
+    old_phone_rejected = client.post(
+        "/api/v1/auth/login/guard",
+        json={"phone": "0799112233", "password": "0799112233"},
+    )
+    assert old_phone_rejected.status_code == 401
+
+    custom_login = client.post(
+        "/api/v1/auth/login/guard",
+        json={"phone": "+254799112233", "password": "AdminAssigned#2026"},
+    )
+    assert custom_login.status_code == 200
+    assert custom_login.json()["must_change_password"] is False
+
 
 def test_migration_preserves_custom_passwords_and_non_guard_accounts(db):
     """Existing guard migration normalizes phones safely without resetting Admin/HR/Supervisor or custom guard passwords."""
@@ -380,3 +416,54 @@ def test_migration_preserves_custom_passwords_and_non_guard_accounts(db):
     assert custom_user.phone == "0788223344"
     assert verify_password("CustomGuardSecret#9", custom_user.password_hash)
     assert custom_user.must_change_password is False
+
+
+def test_management_vs_guard_login_page_separation(client, db):
+    """Ensure `/` is Management-Only (Admin/HR/Staff/Supervisors) and `/portal` is Guard-Only."""
+    mgmt_html = client.get("/").text
+    assert "Management Portal" in mgmt_html
+    assert "Log in to your account" in mgmt_html
+    assert 'href="/portal"' in mgmt_html
+
+    guard_html = client.get("/portal").text
+    assert "Guards Only" in guard_html
+    assert "Log in to your account" in guard_html
+    assert 'href="/"' in guard_html
+
+    # 1. Management endpoint allows Admin & rejects Guard with 403
+    adm_resp = client.post(
+        "/api/v1/auth/login/management",
+        json={
+            "email": "admin@corpsec.co.ke",
+            "password": os.getenv("ADMIN_INITIAL_PASSWORD", "TestAdminSecretPass123!"),
+            "portal": "management",
+        },
+    )
+    assert adm_resp.status_code == 200
+    assert adm_resp.json()["role"] == "ADMIN"
+
+    guard_blocked_on_mgmt = client.post(
+        "/api/v1/auth/login/management",
+        json={"email": "peter.otieno@corpsec.co.ke", "password": "Guard@123456", "portal": "management"},
+    )
+    assert guard_blocked_on_mgmt.status_code == 403
+    assert "/portal" in guard_blocked_on_mgmt.json()["detail"]
+
+    # 2. Guard endpoint allows Guard & rejects Admin with 401
+    guard_ok = client.post(
+        "/api/v1/auth/login/guard",
+        json={"phone": "0713345678", "password": "Guard@123456"},
+    )
+    assert guard_ok.status_code == 200
+    assert guard_ok.json()["role"] == "GUARD"
+
+    adm_blocked_on_guard = client.post(
+        "/api/v1/auth/login/guard",
+        json={"phone": "admin@corpsec.co.ke", "password": os.getenv("ADMIN_INITIAL_PASSWORD", "TestAdminSecretPass123!")},
+    )
+    assert adm_blocked_on_guard.status_code == 401
+
+    app_js = client.get("/static/js/app.js?v=20261128_v5").text
+    assert "/auth/login/management" in app_js
+    assert "if (res.status === 404)" in app_js
+    assert "(data.role || '').toUpperCase() === 'GUARD'" in app_js

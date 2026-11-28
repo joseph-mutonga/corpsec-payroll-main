@@ -135,3 +135,9 @@ class ShiftMinimal(BaseModel):
 class GuardDetailResponse(GuardResponse):
     site: Optional[SiteMinimal] = None
     shift: Optional[ShiftMinimal] = None
+
+
+class GuardPasswordResetRequest(BaseModel):
+    new_password: Optional[str] = None
+    confirm_password: Optional[str] = None
+    must_change_password: Optional[bool] = None

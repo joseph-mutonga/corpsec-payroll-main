@@ -27,18 +27,19 @@ def test_admin_login_invalid_password(client):
 
 
 def test_login_rate_limiting(client):
-    """Verify that rapid invalid login attempts (>20 per 15 min) trigger HTTP 429 Too Many Requests."""
+    """Verify that rapid invalid login attempts (>25 per 1 min) trigger HTTP 429 Too Many Requests."""
     from application.backend.app.core.limiter import limiter
     limiter.enabled = True
     try:
-        for _ in range(20):
+        for _ in range(25):
             client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
 
-        # 21st attempt should be blocked with 429
+        # 26th attempt should be blocked with 429
         blocked_resp = client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
         assert blocked_resp.status_code == 429
         assert "Too many login attempts" in blocked_resp.json()["detail"]
         assert "Retry-After" in blocked_resp.headers
+        assert int(blocked_resp.headers["Retry-After"]) <= 60
     finally:
         limiter.enabled = False
         limiter.reset()
@@ -192,11 +193,16 @@ def test_forgot_password_all_roles_and_identifiers(client, db, monkeypatch):
             db.add(u)
     db.commit()
 
-    # Test every role using different username formats:
-    # Admin (exact email), Guard (Employee ID), HR (email prefix/username), Supervisor (full name), Staff (phone)
+    # Guards must NOT be allowed to reset via forgot-password
+    guard_before = len(sent_emails)
+    guard_resp = client.post("/api/v1/auth/forgot-password", json={"username": "CS-00452"})
+    assert guard_resp.status_code == 403
+    assert len(sent_emails) == guard_before
+
+    # Test every Management role using different username formats:
+    # Admin (exact email), HR (email prefix/username), Supervisor (full name), Staff (phone)
     cases = [
         ("admin@corpsec.co.ke", "admin@corpsec.co.ke", "ADMIN"),
-        ("CS-00452", None, "GUARD"),
         ("hr.tester", "hr.tester@corpsec.co.ke", "HR"),
         ("Sup Tester", "sup.tester@corpsec.co.ke", "SUPERVISOR"),
         ("0799000103", "staff.tester@corpsec.co.ke", "STAFF"),
@@ -370,9 +376,40 @@ def test_production_email_hardening_and_otp_failure_handling(client, db, monkeyp
     resend_res = client.post("/api/v1/auth/resend-otp", json={"email": "otp_fail_sup@corpsec.co.ke"})
     assert resend_res.status_code == 503
 
+    # 4. SMTP resilience: 587 timeout falls back to 465 SSL, retries transient SSL timeout, and caches working port
+    otp_service._PREFERRED_SMTP_PORT_CACHE.clear()
+    called_ports = []
 
-def test_login_security_middleware_ip_limit_20_per_15min(client):
-    """Layer 1: Middleware enforces 20 attempts per 15 minutes per IP with HTTP 429 + Retry-After."""
+    def flaky_send_via_port(**kwargs):
+        called_ports.append(kwargs["port"])
+        if kwargs["port"] == 587:
+            raise TimeoutError("timed out")
+        if len([p for p in called_ports if p == 465]) == 1:
+            raise TimeoutError("Connection unexpectedly closed: The read operation timed out")
+        return None
+
+    monkeypatch.setattr(otp_service, "_send_via_port", flaky_send_via_port)
+    ok_smtp, err_smtp = otp_service._send_smtp_sync(
+        {
+            "host": "smtp.gmail.com",
+            "port": 587,
+            "user": "corpsec.prod@gmail.com",
+            "password": "apppassword",
+            "from_addr": "CorpSec <corpsec.prod@gmail.com>",
+            "envelope_from": "corpsec.prod@gmail.com",
+            "use_tls": True,
+        },
+        ["user@example.com"],
+        "MIME-DATA",
+    )
+    assert ok_smtp is True
+    assert err_smtp is None
+    assert called_ports == [587, 465, 465]
+    assert otp_service._PREFERRED_SMTP_PORT_CACHE.get(("smtp.gmail.com", 587)) == 465
+
+
+def test_login_security_middleware_ip_limit_25_per_1min(client):
+    """Layer 1: Middleware enforces 25 attempts per 1 minute per IP with HTTP 429 + Retry-After."""
     from application.backend.app.core.login_security import login_security_store
 
     login_security_store.reset()
@@ -381,8 +418,8 @@ def test_login_security_middleware_ip_limit_20_per_15min(client):
         ip_a = {"X-Forwarded-For": "203.0.113.10"}
         ip_b = {"X-Forwarded-For": "203.0.113.11"}
 
-        # First 20 attempts from IP A reach the route (401 on wrong password)
-        for i in range(20):
+        # First 25 attempts from IP A reach the route (401 on wrong password)
+        for i in range(25):
             r = client.post(
                 "/api/v1/auth/login",
                 json={"email": f"user{i}@corpsec.co.ke", "password": "WrongPassword!"},
@@ -390,7 +427,7 @@ def test_login_security_middleware_ip_limit_20_per_15min(client):
             )
             assert r.status_code == 401
 
-        # 21st attempt from IP A is blocked with HTTP 429 + Retry-After
+        # 26th attempt from IP A is blocked with HTTP 429 + Retry-After
         blocked = client.post(
             "/api/v1/auth/login",
             json={"email": "admin@corpsec.co.ke", "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
@@ -398,7 +435,7 @@ def test_login_security_middleware_ip_limit_20_per_15min(client):
         )
         assert blocked.status_code == 429
         assert "Retry-After" in blocked.headers
-        assert int(blocked.headers["Retry-After"]) <= 900
+        assert int(blocked.headers["Retry-After"]) <= 60
         assert "Too many login attempts" in blocked.json()["detail"]
 
         # Different IP B is still permitted
@@ -414,7 +451,7 @@ def test_login_security_middleware_ip_limit_20_per_15min(client):
 
 
 def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
-    """Layer 2: Increasing delay after 3 failures, 15-min lockout after 20 failures, and reset on success."""
+    """Layer 2: Increasing delay after 3 failures, 1-min lockout after 25 failures, and reset on success."""
     from application.backend.app.core import login_security
 
     store = login_security.login_security_store
@@ -456,7 +493,7 @@ def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
         assert r4.status_code == 401
         assert recorded_delays == [2.0]
 
-        # Attempt 5 (after 4 failures) triggers higher delay (4.0s), still NOT locked out yet (threshold is 20)
+        # Attempt 5 (after 4 failures) triggers higher delay (4.0s), still NOT locked out yet (threshold is 25)
         r5 = client.post(
             "/api/v1/auth/login",
             json={"email": target_email, "password": "WrongPassword!"},
@@ -465,8 +502,8 @@ def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
         assert r5.status_code == 401
         assert recorded_delays == [2.0, 4.0]
 
-        # Attempts 6..20 continue until 20 consecutive failures accumulate
-        for idx in range(6, 21):
+        # Attempts 6..25 continue until 25 consecutive failures accumulate
+        for idx in range(6, 26):
             ri = client.post(
                 "/api/v1/auth/login",
                 json={"email": target_email, "password": "WrongPassword!"},
@@ -474,14 +511,14 @@ def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
             )
             assert ri.status_code == 401
 
-        # Attempt 21 (even with the CORRECT password from a fresh IP) is locked out for 15 minutes
+        # Attempt 26 (even with the CORRECT password from a fresh IP) is locked out for 1 minute
         locked_resp = client.post(
             "/api/v1/auth/login",
             json={"email": target_email, "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
-            headers={"X-Forwarded-For": "198.51.100.21"},
+            headers={"X-Forwarded-For": "198.51.100.26"},
         )
         assert locked_resp.status_code == 429
-        assert int(locked_resp.headers["Retry-After"]) >= 890
+        assert 50 <= int(locked_resp.headers["Retry-After"]) <= 60
         assert "temporarily locked" in locked_resp.json()["detail"].lower()
 
         # Reset via expiry or clean state -> 3 failures followed by successful login resets counter

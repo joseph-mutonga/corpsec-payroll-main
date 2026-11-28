@@ -3,6 +3,7 @@
 const API_BASE = '/api/v1';
 const INSTALL_DISMISSED_KEY = 'corpsec_guard_install_dismissed_v2';
 let deferredInstallPrompt = null;
+let installPromptWaiters = [];
 let dashboardInFlight = null;
 
 // Token & Session Storage Helpers
@@ -158,24 +159,17 @@ async function apiFetch(endpoint, options = {}) {
 function registerPortalServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
-  const startReg = () => {
-    navigator.serviceWorker.register('/guard-sw.js', { scope: '/portal', updateViaCache: 'none' })
-      .then((reg) => {
-        if (reg && reg.update) {
-          // Non-blocking background SW check; does not delay login or dashboard use
-          setTimeout(() => reg.update().catch(() => {}), 4000);
-        }
-      })
-      .catch((err) => {
-        console.warn('Guard SW registration note:', err);
-      });
-  };
-
-  if (document.readyState === 'complete') {
-    setTimeout(startReg, 50);
-  } else {
-    window.addEventListener('load', () => setTimeout(startReg, 50), { once: true });
-  }
+  // Register immediately so Chromium beforeinstallprompt is ready before user taps Download
+  navigator.serviceWorker.register('/guard-sw.js', { scope: '/portal', updateViaCache: 'none' })
+    .then((reg) => {
+      if (reg && reg.update) {
+        // Non-blocking background SW check; does not delay login or dashboard use
+        setTimeout(() => reg.update().catch(() => {}), 5000);
+      }
+    })
+    .catch((err) => {
+      console.warn('Guard SW registration note:', err);
+    });
 }
 
 function isPortalStandalone() {
@@ -193,77 +187,147 @@ function isIosDevice() {
 function hideInstallBanner(rememberChoice = false) {
   const banner = document.getElementById('install-app-banner');
   if (banner) banner.hidden = true;
-  if (rememberChoice) localStorage.setItem(INSTALL_DISMISSED_KEY, 'true');
+  if (rememberChoice) {
+    try { localStorage.setItem(INSTALL_DISMISSED_KEY, 'true'); } catch (e) {}
+  }
 }
 
-function showInstallBanner() {
-  if (isPortalStandalone()) return;
-  if (localStorage.getItem(INSTALL_DISMISSED_KEY)) return;
-  const banner = document.getElementById('install-app-banner');
-  if (banner) banner.hidden = false;
+function setPortalInstallStatus(message, tone = 'info') {
+  ['portal-install-status', 'profile-install-status'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = '';
+      el.className = 'portal-install-status';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+    el.className = `portal-install-status ${tone === 'success' ? 'is-success' : ''}`;
+  });
 }
 
-function showManualInstallHelp() {
+function syncInstallUiState(installedNow = false) {
+  const standalone = isPortalStandalone();
+  const hideDownloadAction = standalone || installedNow;
+  const loginWrap = document.getElementById('portal-login-install-wrap');
+  const loginBtn = document.getElementById('btn-download-guard-app');
+  const profileBtn = document.getElementById('btn-profile-install-app');
+
+  if (loginWrap) {
+    loginWrap.style.display = standalone ? 'none' : 'flex';
+  }
+  if (loginBtn) {
+    loginBtn.style.display = hideDownloadAction ? 'none' : '';
+    loginBtn.disabled = hideDownloadAction;
+  }
+  if (profileBtn) {
+    profileBtn.disabled = hideDownloadAction;
+    profileBtn.textContent = hideDownloadAction ? 'Guard App Installed on Phone' : 'Download App to Phone';
+  }
+}
+
+function waitForInstallPrompt(timeoutMs = 1800) {
+  if (deferredInstallPrompt) return Promise.resolve(deferredInstallPrompt);
+  if (isIosDevice() || isPortalStandalone()) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ev) => {
+      if (settled) return;
+      settled = true;
+      resolve(ev || null);
+    };
+    installPromptWaiters.push(finish);
+    setTimeout(() => finish(null), timeoutMs);
+  });
+}
+
+function showManualInstallHint() {
   if (isIosDevice()) {
-    alert('To install CorpSec Guard: tap the Share button, then tap “Add to Home Screen”.');
+    setPortalInstallStatus('On iPhone: tap Share, then "Add to Home Screen". You can sign in normally.');
     return;
   }
-  alert('To install CorpSec Guard: tap the Chrome menu (⋮) and choose “Install app” or “Add to Home screen”.');
+  setPortalInstallStatus('Tap browser menu (⋮) → "Install app" or "Add to Home screen". You can sign in normally.');
 }
 
 window.triggerPortalPwaInstall = async function () {
-  if (deferredInstallPrompt) {
-    deferredInstallPrompt.prompt();
-    const { outcome } = await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    hideInstallBanner(true);
-    if (outcome === 'accepted') {
-      alert('🎉 CorpSec Guard App installed successfully!');
-    }
-  } else if (isPortalStandalone()) {
-    alert('✅ CorpSec Guard App is already installed and running on your device!');
-  } else {
-    showManualInstallHelp();
+  if (isPortalStandalone()) {
+    syncInstallUiState(true);
+    setPortalInstallStatus('Guard App is already installed on this phone.', 'success');
+    return;
   }
+
+  const loginBtn = document.getElementById('btn-download-guard-app');
+  const profileBtn = document.getElementById('btn-profile-install-app');
+  const setBusy = (busy) => {
+    [loginBtn, profileBtn].forEach((b) => {
+      if (!b) return;
+      b.disabled = busy;
+      b.textContent = busy ? 'Preparing App Download...' : 'Download App to Phone';
+    });
+  };
+
+  let promptEvent = deferredInstallPrompt;
+  if (!promptEvent) {
+    setBusy(true);
+    promptEvent = await waitForInstallPrompt(1800);
+    setBusy(false);
+  }
+
+  if (promptEvent) {
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      deferredInstallPrompt = null;
+      hideInstallBanner(true);
+      if (choice && choice.outcome === 'accepted') {
+        syncInstallUiState(true);
+        setPortalInstallStatus('App downloaded to your phone. Continue signing in above.', 'success');
+        return;
+      }
+      setPortalInstallStatus('Download cancelled. You can continue signing in above.');
+      return;
+    } catch (e) {
+      deferredInstallPrompt = null;
+    }
+  }
+
+  showManualInstallHint();
 };
 
 function setupInstallPrompt() {
-  const installButton = document.getElementById('install-app-button');
-  const dismissButton = document.getElementById('dismiss-install-button');
+  hideInstallBanner(false);
+  syncInstallUiState(false);
 
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     deferredInstallPrompt = event;
-    showInstallBanner();
+    const waiters = installPromptWaiters.splice(0, installPromptWaiters.length);
+    waiters.forEach((fn) => fn(event));
+    // Quietly keep inline Download button available without popping a floating banner over login
+    syncInstallUiState(false);
   });
 
   window.addEventListener('appinstalled', () => {
     deferredInstallPrompt = null;
     hideInstallBanner(true);
+    syncInstallUiState(true);
+    setPortalInstallStatus('App downloaded to your phone. Continue signing in above.', 'success');
   });
 
-  installButton?.addEventListener('click', async (event) => {
+  const installButton = document.getElementById('install-app-button');
+  const dismissButton = document.getElementById('dismiss-install-button');
+  installButton?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-
-    if (deferredInstallPrompt) {
-      deferredInstallPrompt.prompt();
-      const choice = await deferredInstallPrompt.userChoice;
-      deferredInstallPrompt = null;
-      if (choice.outcome === 'accepted') hideInstallBanner(true);
-      return;
-    }
-
-    showManualInstallHelp();
+    window.triggerPortalPwaInstall();
   });
-
   dismissButton?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
     hideInstallBanner(true);
   });
-
-  showInstallBanner();
 }
 
 // App Initialization
@@ -409,49 +473,12 @@ window.togglePortalPassword = function (inputId, btnEl) {
   if (!input) return;
   const hidden = input.type === 'password';
   input.type = hidden ? 'text' : 'password';
-  if (btnEl) btnEl.textContent = hidden ? 'Hide' : 'Show';
-};
-
-window.togglePortalForgotBox = function () {
-  const box = document.getElementById('portal-forgot-box');
-  if (!box) return;
-  box.style.display = box.style.display === 'none' ? 'block' : 'none';
-};
-
-window.handlePortalForgotPassword = async function () {
-  const input = document.getElementById('portal-forgot-input');
-  const btn = document.getElementById('btn-portal-forgot');
-  const ident = (input ? input.value : '').trim();
-  if (!ident) {
-    setLoginAlert('Enter your registered phone number or Guard ID first.', 'danger');
-    return;
-  }
-  if (!navigator.onLine) {
-    setLoginAlert('You appear offline. Reconnect to internet to request a password reset.', 'danger');
-    return;
-  }
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
-  }
-  try {
-    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: ident }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setLoginAlert(data.detail || 'Could not reset password via email. Please contact HR or Admin to reset your password to your phone number.', 'danger');
-      return;
-    }
-    setLoginAlert(data.message || 'Password reset email dispatched.', 'success');
-  } catch (e) {
-    setLoginAlert('Connection error while contacting server. Check your mobile data and try again.', 'danger');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Send Reset Email';
+  if (btnEl) {
+    btnEl.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+    if (btnEl.querySelector('svg')) {
+      btnEl.style.color = hidden ? '#2563EB' : '#64748B';
+    } else {
+      btnEl.textContent = hidden ? 'Hide' : 'Show';
     }
   }
 };
@@ -520,7 +547,7 @@ window.handlePortalLogin = async function (event) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Sign In';
+      btn.textContent = 'Sign in';
     }
   }
 };

@@ -22,6 +22,9 @@ from application.backend.app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
 
+# Process-local cache remembering the working SMTP port (e.g. 465 when 587 is blocked)
+_PREFERRED_SMTP_PORT_CACHE: dict[tuple[str, int], int] = {}
+
 
 def requiresOTPVerification(role: Optional[str]) -> bool:
     """
@@ -158,16 +161,17 @@ def _send_via_port(
     envelope_from: str,
     target_recipients: list[str],
     msg_str: str,
+    timeout: int = 20,
 ) -> None:
     ctx = ssl.create_default_context()
     if use_ssl:
-        with smtplib.SMTP_SSL(smtp_host, port, timeout=15, context=ctx) as server:
+        with smtplib.SMTP_SSL(smtp_host, port, timeout=timeout, context=ctx) as server:
             server.ehlo()
             if smtp_user and smtp_pass:
                 server.login(smtp_user, smtp_pass)
             server.sendmail(envelope_from, target_recipients, msg_str)
     else:
-        with smtplib.SMTP(smtp_host, port, timeout=15) as server:
+        with smtplib.SMTP(smtp_host, port, timeout=timeout) as server:
             server.ehlo()
             if use_starttls:
                 server.starttls(context=ctx)
@@ -192,27 +196,40 @@ def _send_smtp_sync(smtp_cfg: dict, target_recipients: list[str], msg_str: str) 
     elif smtp_port == 465:
         attempts.append((587, False, True))
 
+    cache_key = (smtp_host.lower(), int(smtp_port))
+    cached_port = _PREFERRED_SMTP_PORT_CACHE.get(cache_key)
+    if cached_port is not None:
+        attempts.sort(key=lambda item: 0 if item[0] == cached_port else 1)
+
     last_err = None
     for port, is_ssl, is_starttls in attempts:
-        try:
-            _send_via_port(
-                smtp_host=smtp_host,
-                port=port,
-                use_ssl=is_ssl,
-                use_starttls=is_starttls,
-                smtp_user=smtp_user,
-                smtp_pass=smtp_pass,
-                envelope_from=envelope_from,
-                target_recipients=target_recipients,
-                msg_str=msg_str,
-            )
-            return True, None
-        except smtplib.SMTPAuthenticationError as auth_exc:
-            logger.error("SMTP authentication failed for host=%s port=%s: %s", smtp_host, port, auth_exc)
-            return False, f"SMTP authentication failed: {auth_exc.smtp_error.decode('utf-8', 'ignore') if isinstance(auth_exc.smtp_error, bytes) else auth_exc.smtp_error}"
-        except Exception as exc:
-            last_err = str(exc)
-            logger.warning("SMTP transport attempt failed on %s:%s (%s).", smtp_host, port, exc)
+        # Fail fast (6s) on non-cached STARTTLS 587 in case outbound 587 is blocked; allow 20s on SSL 465
+        port_timeout = 20 if is_ssl else (15 if port == cached_port else 6)
+        max_tries = 2 if is_ssl else 1
+        for attempt_idx in range(max_tries):
+            try:
+                _send_via_port(
+                    smtp_host=smtp_host,
+                    port=port,
+                    use_ssl=is_ssl,
+                    use_starttls=is_starttls,
+                    smtp_user=smtp_user,
+                    smtp_pass=smtp_pass,
+                    envelope_from=envelope_from,
+                    target_recipients=target_recipients,
+                    msg_str=msg_str,
+                    timeout=port_timeout,
+                )
+                _PREFERRED_SMTP_PORT_CACHE[cache_key] = port
+                return True, None
+            except smtplib.SMTPAuthenticationError as auth_exc:
+                logger.error("SMTP authentication failed for host=%s port=%s: %s", smtp_host, port, auth_exc)
+                return False, f"SMTP authentication failed: {auth_exc.smtp_error.decode('utf-8', 'ignore') if isinstance(auth_exc.smtp_error, bytes) else auth_exc.smtp_error}"
+            except Exception as exc:
+                last_err = str(exc)
+                logger.warning("SMTP transport attempt failed on %s:%s (%s).", smtp_host, port, exc)
+                if cached_port == port and attempt_idx == max_tries - 1:
+                    _PREFERRED_SMTP_PORT_CACHE.pop(cache_key, None)
 
     return False, last_err or "SMTP transport failure"
 

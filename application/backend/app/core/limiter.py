@@ -12,7 +12,7 @@ limiter = Limiter(key_func=get_remote_address, storage_uri=_storage_uri)
 
 def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
     """Custom HTTP 429 handler returning JSON error and Retry-After header."""
-    retry_after = getattr(exc, 'retry_after', 900) or 900
+    retry_after = getattr(exc, 'retry_after', 60) or 60
     retry_seconds = math.ceil(retry_after)
     
     return JSONResponse(

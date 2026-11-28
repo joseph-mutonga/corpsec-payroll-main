@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/static/css/styles.css?v=20261128_v2">
   <link rel="stylesheet" href="/static/css/call-center.css?v=20261128_v2">
   <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261128_v2">
-  <script src="/static/js/app.js?v=20261128_v3" defer></script>
+  <script src="/static/js/app.js?v=20261128_v5" defer></script>
   <script src="/static/js/silent-updater.js?v=20261128_v2" defer></script>
   <script src="/static/js/call-center.js?v=20261128_v3" defer></script>
   <script src="/static/js/ai-assistant.js?v=20261128_v3" defer></script>
@@ -22,7 +22,7 @@
 
 <body>
 
-  <!-- UNIFIED LOGIN OVERLAY (Shown when unauthenticated) -->
+  <!-- MANAGEMENT LOGIN OVERLAY (System Admin, HR, Staff & Supervisors Only) -->
   <div id="unified-login-overlay" class="unified-login-overlay">
     <div class="login-mesh-bg"></div>
     <div class="login-container">
@@ -30,64 +30,58 @@
 
         <!-- Brand & Header -->
         <div class="login-brand-header">
-          <div class="login-brand-badge">
-            <img src="/static/images/corpsec_logo_badge.png?v=20261127_v1" alt="CorpSec Logo" class="login-brand-icon">
+          <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
+            Management Portal
           </div>
-          <h1 class="login-title">CORPSEC ENTERPRISE</h1>
-          <p class="login-tagline">Security Workforce, Roster & Statutory Payroll</p>
-          <div class="login-access-chip">
-            <span class="chip-pulse"></span>
-            <span>Unified Access Portal</span>
-          </div>
+          <h1 class="login-title">Log in to your account</h1>
+          <p class="login-tagline">System Admin, HR, Staff &amp; Supervisors</p>
         </div>
 
         <!-- Dynamic Alert Banner -->
         <div id="unified-login-alert" class="login-alert-banner" style="display:none;"></div>
 
-        <!-- Universal Sign-In Form -->
+        <!-- Management Sign-In Form -->
         <form id="unified-login-form" onsubmit="handleUnifiedLogin(event)">
           <div class="login-field-group">
             <div class="login-field-label">
-              <label for="unified-login-id">Username / Identity Credential</label>
-              <span class="label-helper-hint">Username, Email, Guard ID (CS-XXXXX), or Phone</span>
+              <label for="unified-login-id">Email</label>
             </div>
             <div class="login-input-wrapper">
-              <span class="input-icon">👤</span>
               <input type="text" id="unified-login-id" class="login-text-input"
-                placeholder="e.g. username, email@corpsec.co.ke or CS-00431" required autocomplete="username">
+                placeholder="Enter your email" required autocomplete="username">
             </div>
           </div>
 
           <div class="login-field-group">
             <div class="login-field-label">
               <label for="unified-login-password">Password</label>
-              <button type="button" id="btn-forgot-password-link" onclick="openForgotPasswordView()"
-                style="background:none; border:none; color:#38BDF8; font-size:12px; font-weight:700; cursor:pointer; padding:0; text-decoration:underline;">
-                🔑 Forgot Password?
-              </button>
             </div>
             <div class="login-input-wrapper">
-              <span class="input-icon">🔒</span>
               <input type="password" id="unified-login-password" class="login-text-input"
-                placeholder="Enter account password" required autocomplete="current-password">
+                placeholder="Enter password" required autocomplete="current-password">
               <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility()"
-                aria-label="Toggle password visibility">👁️</button>
+                aria-label="Toggle password visibility">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
             </div>
           </div>
 
-          <!-- Location Verification Strip (Suspended for now; ready to reactivate later) -->
+          <!-- Location Verification Strip -->
           <div id="login-location-strip" style="display:none;"></div>
 
           <button type="submit" id="unified-login-btn" class="btn-login-submit">
-            <span id="btn-login-text">Sign In to CorpSec</span>
+            <span id="btn-login-text">Sign in</span>
             <span id="btn-login-spinner" class="login-spinner" style="display:none;"></span>
           </button>
 
-          <div style="text-align:center; margin-top:12px;">
-            <button type="button" onclick="openForgotPasswordView()"
-              style="background:none; border:none; color:#94A3B8; font-size:12px; font-weight:600; cursor:pointer; padding:4px 8px;">
-              Forgot your password? <span style="color:#38BDF8; text-decoration:underline;">Send a new password to your email</span>
-            </button>
+          <div class="login-switch-footer">
+            <div>Security guard? <a href="/portal">Guard Portal Sign In</a></div>
+            <div style="margin-top:8px;">
+              <button type="button" id="btn-forgot-password-link" onclick="openForgotPasswordView()"
+                style="background:none; border:none; color:#64748B; font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 8px;">
+                Forgot password?
+              </button>
+            </div>
           </div>
         </form>
 
@@ -151,36 +145,33 @@
 
         <!-- Forgot Password / Email Password Recovery Form (Available to All Roles & Users) -->
         <div id="unified-forgot-password-container" style="display:none;">
-          <div style="text-align:center; margin-bottom:18px;">
-            <div style="font-size:32px; margin-bottom:6px;">🔑</div>
-            <h2 style="font-size:18px; font-weight:800; color:#F8FAFC; margin:0 0 6px 0;">Reset Password via Email</h2>
-            <p style="font-size:12.5px; color:#94A3B8; margin:0; line-height:1.5;">
-              Enter your username, email, phone number, or Guard ID. A new password will be sent directly to your registered email address.
+          <div style="text-align:left; margin-bottom:18px;">
+            <h2 style="font-size:20px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Reset Password</h2>
+            <p style="font-size:13px; color:#64748B; margin:0; line-height:1.5;">
+              Enter your email or username. A temporary password will be sent to your registered email address.
             </p>
           </div>
 
           <form id="unified-forgot-password-form" onsubmit="handleForgotPasswordSubmit(event)">
             <div class="login-field-group">
               <div class="login-field-label">
-                <label for="forgot-password-username">Username / Credential</label>
-                <span class="label-helper-hint">Username, Email, CS-XXXXX, or Phone</span>
+                <label for="forgot-password-username">Email or Username</label>
               </div>
               <div class="login-input-wrapper">
-                <span class="input-icon">👤</span>
                 <input type="text" id="forgot-password-username" class="login-text-input"
-                  placeholder="Enter your username, email, or Guard ID" required autocomplete="username">
+                  placeholder="Enter your email or username" required autocomplete="username">
               </div>
             </div>
 
             <button type="submit" id="btn-forgot-password-submit" class="btn-login-submit">
-              <span id="btn-forgot-password-text">📧 Send Password to Email</span>
+              <span id="btn-forgot-password-text">Send Password to Email</span>
               <span id="btn-forgot-password-spinner" class="login-spinner" style="display:none;"></span>
             </button>
 
-            <div style="text-align:center; margin-top:16px;">
+            <div style="text-align:center; margin-top:14px;">
               <button type="button" onclick="handleBackToLogin()"
-                style="background:none; border:none; color:#94A3B8; font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 8px;">
-                ← Back to Sign In
+                style="background:none; border:none; color:#64748B; font-size:13px; font-weight:600; cursor:pointer; padding:4px 8px;">
+                ← Back to Sign in
               </button>
             </div>
           </form>
@@ -188,10 +179,9 @@
 
         <!-- Set Custom New Password Form (Shown after signing in with emailed password) -->
         <div id="unified-set-password-container" style="display:none;">
-          <div style="text-align:center; margin-bottom:18px;">
-            <div style="font-size:32px; margin-bottom:6px;">🔐</div>
-            <h2 style="font-size:18px; font-weight:800; color:#F8FAFC; margin:0 0 6px 0;">Set Your New Password</h2>
-            <p style="font-size:12.5px; color:#94A3B8; margin:0; line-height:1.5;">
+          <div style="text-align:left; margin-bottom:18px;">
+            <h2 style="font-size:20px; font-weight:800; color:#0F172A; margin:0 0 6px 0;">Set Your New Password</h2>
+            <p style="font-size:13px; color:#64748B; margin:0; line-height:1.5;">
               Please enter the password you want to use and repeat it below to confirm.
             </p>
           </div>
@@ -203,53 +193,47 @@
                 <span class="label-helper-hint">Minimum 6 characters</span>
               </div>
               <div class="login-input-wrapper">
-                <span class="input-icon">🔒</span>
                 <input type="password" id="set-new-password" class="login-text-input"
-                  placeholder="Enter your desired new password" minlength="6" required autocomplete="new-password">
+                  placeholder="Enter new password" minlength="6" required autocomplete="new-password">
                 <button type="button" class="btn-toggle-password" onclick="toggleInputPassword('set-new-password', this)"
-                  aria-label="Toggle new password visibility">👁️</button>
+                  aria-label="Toggle new password visibility">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
               </div>
             </div>
 
             <div class="login-field-group">
               <div class="login-field-label">
                 <label for="set-confirm-password">Confirm New Password</label>
-                <span class="label-helper-hint">Repeat password to confirm</span>
               </div>
               <div class="login-input-wrapper">
-                <span class="input-icon">🔒</span>
                 <input type="password" id="set-confirm-password" class="login-text-input"
-                  placeholder="Repeat your new password" minlength="6" required autocomplete="new-password">
+                  placeholder="Repeat new password" minlength="6" required autocomplete="new-password">
                 <button type="button" class="btn-toggle-password" onclick="toggleInputPassword('set-confirm-password', this)"
-                  aria-label="Toggle confirm password visibility">👁️</button>
+                  aria-label="Toggle confirm password visibility">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
               </div>
             </div>
 
             <button type="submit" id="btn-set-password-submit" class="btn-login-submit">
-              <span id="btn-set-password-text">✅ Save Password &amp; Continue</span>
+              <span id="btn-set-password-text">Save Password &amp; Continue</span>
               <span id="btn-set-password-spinner" class="login-spinner" style="display:none;"></span>
             </button>
 
-            <div style="text-align:center; margin-top:16px;">
+            <div style="text-align:center; margin-top:14px;">
               <button type="button" onclick="handleBackToLogin()"
-                style="background:none; border:none; color:#94A3B8; font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 8px;">
-                ← Back to Sign In
+                style="background:none; border:none; color:#64748B; font-size:13px; font-weight:600; cursor:pointer; padding:4px 8px;">
+                ← Back to Sign in
               </button>
             </div>
           </form>
         </div>
 
-        <!-- Role-Based Auto-Dispatch Note -->
-        <div class="login-routing-note">
-          <div class="routing-badge">
-            <span class="routing-icon">⚡</span>
-            <div><strong>Automatic Role Dispatch:</strong> Sign in with any authorized CorpSec account. Administrators
-              are routed to the Management Hub; Guards are routed to the Mobile Shift Portal.</div>
-          </div>
-        </div>
+        <div class="login-routing-note"></div>
 
-        <div class="login-footer-legal">
-          <span>© 2026 CorpSec Investigations & Guarding Services Ltd. Compliant with Laws of Kenya.</span>
+        <div class="login-footer-legal" style="margin-top:14px; text-align:center; font-size:11px; color:#94A3B8;">
+          <span>© 2026 CorpSec Investigations &amp; Guarding Services Ltd.</span>
         </div>
 
       </div>
@@ -9053,6 +9037,60 @@
           <button type="submit" class="btn"
             style="background:#DC2626; color:#FFFFFF; font-weight:700; padding:8px 16px; border-radius:6px; border:none; cursor:pointer;">🛑
             Confirm Deactivation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Reset Guard Portal Password -->
+  <div id="modal-reset-guard-password" class="modal-overlay"
+    style="display:none; align-items:flex-start; padding:20px 16px; overflow-y:auto;"
+    onclick="if(event.target===this)closeResetGuardPasswordModal()">
+    <div class="modal-content" style="max-width:480px; width:100%; margin:auto;">
+      <div class="modal-header"
+        style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:12px;">
+        <h3 style="font-size:18px; font-weight:800; color:#0F172A; margin:0; display:flex; align-items:center; gap:8px;">
+          <span>🔑 Reset Guard Portal Password</span>
+        </h3>
+        <button type="button" onclick="closeResetGuardPasswordModal()"
+          style="background:none; border:none; font-size:18px; cursor:pointer; color:#64748B;">✕</button>
+      </div>
+
+      <form id="reset-guard-password-form" onsubmit="submitResetGuardPassword(event)" style="margin-top:16px;">
+        <input type="hidden" id="reset-guard-id">
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; margin-bottom:16px;">
+          <div style="font-size:12px; color:#64748B;">Guard Account:</div>
+          <div style="font-size:15px; font-weight:700; color:#0F172A;" id="reset-guard-name">—</div>
+          <div style="font-size:12px; color:#475569;" id="reset-guard-emp">—</div>
+        </div>
+
+        <div id="reset-guard-error" style="display:none; background:#FEF2F2; border:1px solid #FECACA; color:#991B1B; padding:10px 12px; border-radius:8px; font-size:12.5px; font-weight:600; margin-bottom:14px;"></div>
+
+        <div style="margin-bottom:14px;">
+          <label for="reset-guard-new-password" style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">New Password (min 6 characters)</label>
+          <input type="password" id="reset-guard-new-password" class="form-control" minlength="6" placeholder="Enter new password for this guard" autocomplete="new-password">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label for="reset-guard-confirm-password" style="font-size:12px; font-weight:700; display:block; margin-bottom:4px; color:#334155;">Confirm New Password</label>
+          <input type="password" id="reset-guard-confirm-password" class="form-control" minlength="6" placeholder="Confirm new password" autocomplete="new-password">
+        </div>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#334155; margin-bottom:10px; cursor:pointer;">
+          <input type="checkbox" id="reset-guard-to-phone" onchange="toggleResetGuardPhoneMode()">
+          <span>Reset to guard's registered phone number instead</span>
+        </label>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#475569; margin-bottom:18px; cursor:pointer;">
+          <input type="checkbox" id="reset-guard-must-change">
+          <span>Require guard to change password on next sign-in</span>
+        </label>
+
+        <div class="modal-footer"
+          style="padding-top:14px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="closeResetGuardPasswordModal()">Cancel</button>
+          <button type="submit" id="btn-submit-reset-guard-password" class="btn"
+            style="background:#0F172A; color:#FFFFFF; font-weight:700; padding:8px 16px; border-radius:6px; border:none; cursor:pointer;">Save New Password</button>
         </div>
       </form>
     </div>

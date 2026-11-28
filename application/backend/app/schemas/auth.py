@@ -4,8 +4,9 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(..., description="Email address, Guard Employee ID (e.g. CS-00452), or Phone Number")
+    email: str = Field(..., description="Email address, username, or credential")
     password: str = Field(..., min_length=1)
+    portal: Optional[str] = Field(None, description="Optional portal scope ('management' restricts Guard accounts)")
     remember_me: Optional[bool] = False
     latitude: Optional[float] = None
     longitude: Optional[float] = None

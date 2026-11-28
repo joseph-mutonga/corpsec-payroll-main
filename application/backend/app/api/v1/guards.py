@@ -2,13 +2,14 @@ import re
 import secrets
 from datetime import datetime
 from typing import List, Optional, Tuple
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from application.backend.app.api.deps import get_db, require_admin, require_admin_or_hr, get_current_user
 from application.backend.app.core.phone import validate_kenyan_phone, kenyan_phone_variants, normalize_kenyan_phone
 from application.backend.app.core.security import get_password_hash
+from application.backend.app.core.login_security import login_security_store
 from application.backend.app.services.guard_auth_migration import initialize_guard_phone_credentials
 from application.backend.app.models.guard import Guard
 from application.backend.app.models.site import Site
@@ -16,7 +17,8 @@ from application.backend.app.models.shift import Shift
 from application.backend.app.models.user import User, UserRole, UserStatus
 from application.backend.app.models.audit import AuditLog
 from application.backend.app.schemas.guard import (
-    GuardCreate, GuardUpdate, GuardDeactivateRequest, GuardResponse, GuardDetailResponse, NextEmployeeNumberResponse
+    GuardCreate, GuardUpdate, GuardDeactivateRequest, GuardResponse, GuardDetailResponse,
+    NextEmployeeNumberResponse, GuardPasswordResetRequest
 )
 
 router = APIRouter(prefix="/guards", tags=["Guards Workforce Management"])
@@ -718,55 +720,95 @@ def assign_super_guard_mandate(
 @router.post("/{guard_id}/reset-password")
 def reset_guard_password_to_phone(
     guard_id: int,
+    payload: Optional[GuardPasswordResetRequest] = Body(default=None),
     db: Session = Depends(get_db),
     actor: User = Depends(require_admin_or_hr)
 ):
     """
-    Admin or HR action: Reset a guard's password back to their registered normalized
-    Kenyan phone number and require an immediate password change on next login.
+    Admin or HR action: Reset a guard's password to a specific admin-entered new password
+    (persisted directly in users.password_hash) or back to their registered normalized Kenyan phone number.
     Never resets non-Guard accounts and never returns or logs plaintext passwords.
     """
     guard = db.query(Guard).filter(Guard.id == guard_id).first()
     if not guard:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guard not found")
 
+    custom_pw = payload.new_password if (payload and payload.new_password and payload.new_password.strip()) else None
     valid_phone, norm_phone, phone_err = validate_kenyan_phone(guard.phone)
-    if not valid_phone:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=phone_err or "Guard does not have a valid registered Kenyan phone number."
-        )
 
-    guard.phone = norm_phone
+    if custom_pw is not None:
+        if len(custom_pw.strip()) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be at least 6 characters long."
+            )
+        if payload.confirm_password is not None and payload.confirm_password != custom_pw:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password and confirmation do not match."
+            )
+        target_password = custom_pw
+        must_change = bool(payload.must_change_password) if payload.must_change_password is not None else False
+    else:
+        if not valid_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=phone_err or "Guard does not have a valid registered Kenyan phone number."
+            )
+        target_password = norm_phone
+        must_change = True if (payload is None or payload.must_change_password is None) else bool(payload.must_change_password)
+
+    if valid_phone and norm_phone:
+        guard.phone = norm_phone
     guard.updated_at = datetime.now()
 
+    candidate_email = (guard.email or f"{guard.employee_number.lower()}@corpsec.co.ke").strip().lower()
     user_acc = db.query(User).filter(User.guard_id == guard.id).first()
+    if not user_acc and valid_phone and norm_phone:
+        user_acc = db.query(User).filter(
+            User.phone.in_(kenyan_phone_variants(norm_phone)),
+            func.upper(User.role) == UserRole.GUARD.value,
+        ).first()
+    if not user_acc:
+        user_acc = db.query(User).filter(
+            func.lower(User.email) == candidate_email,
+            func.upper(User.role) == UserRole.GUARD.value,
+        ).first()
+
+    new_hash = get_password_hash(target_password)
     if user_acc:
         if (user_acc.role or "").upper() != UserRole.GUARD.value:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot reset non-guard user credentials via guard password reset."
             )
-        user_acc.phone = norm_phone
-        user_acc.password_hash = get_password_hash(norm_phone)
-        user_acc.must_change_password = True
+        user_acc.guard_id = guard.id
+        if valid_phone and norm_phone:
+            user_acc.phone = norm_phone
+        user_acc.password_hash = new_hash
+        user_acc.must_change_password = must_change
         user_acc.updated_at = datetime.now()
     else:
-        user_email = (guard.email or f"{guard.employee_number.lower()}@corpsec.co.ke").strip().lower()
+        resolved_phone = norm_phone if (valid_phone and norm_phone) else (guard.phone or guard.employee_number)
         user_acc = User(
             full_name=guard.full_name,
-            email=user_email,
-            phone=norm_phone,
-            password_hash=get_password_hash(norm_phone),
+            email=candidate_email,
+            phone=resolved_phone,
+            password_hash=new_hash,
             role=UserRole.GUARD.value,
             status=UserStatus.ACTIVE.value if guard.status == "ACTIVE" else UserStatus.SUSPENDED.value,
-            must_change_password=True,
+            must_change_password=must_change,
             guard_id=guard.id,
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
         db.add(user_acc)
 
+    audit_reason = (
+        f"Guard new password saved in database by {actor.role}"
+        if custom_pw is not None
+        else f"Guard password reset to registered phone number by {actor.role} (password change required on next login)"
+    )
     audit_entry = AuditLog(
         user_id=actor.id,
         user_name=actor.email,
@@ -774,17 +816,28 @@ def reset_guard_password_to_phone(
         action="RESET_GUARD_PASSWORD",
         target_entity="Guard",
         target_id=str(guard.id),
-        reason=f"Guard password reset to registered phone number by {actor.role} (password change required on next login)"
+        reason=audit_reason,
     )
     db.add(audit_entry)
     db.commit()
+    db.refresh(user_acc)
+
+    # Clear any prior failed login lockout for this guard
+    for ident in (norm_phone, candidate_email, (user_acc.email or "").lower(), (guard.employee_number or "").lower()):
+        if ident:
+            login_security_store.reset_account(ident)
 
     return {
         "status": "SUCCESS",
         "guard_id": guard.id,
         "employee_number": guard.employee_number,
-        "must_change_password": True,
-        "message": "Guard password has been reset to their registered phone number. Guard must set a new password on next login."
+        "must_change_password": bool(user_acc.must_change_password),
+        "custom_password_set": custom_pw is not None,
+        "message": (
+            "New guard password saved in database."
+            if custom_pw is not None
+            else "Guard password has been reset to their registered phone number. Guard must set a new password on next login."
+        ),
     }
 
 
