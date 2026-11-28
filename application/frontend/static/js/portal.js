@@ -334,7 +334,12 @@ function resetPortalDomState() {
   };
   Object.entries(textResets).forEach(([id, val]) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = val;
+    if (el) {
+      el.textContent = val;
+      if (el.dataset && 'hydrated' in el.dataset) {
+        el.dataset.hydrated = 'false';
+      }
+    }
   });
 
   ['leave-history-list', 'incidents-history-list', 'payslips-list-container', 'offday-history-list'].forEach((id) => {
@@ -402,6 +407,8 @@ function showPortalView() {
     const displayName = user.full_name || (user.email ? user.email.split('@')[0].replace('.', ' ') : 'GUARD PORTAL');
     document.getElementById('header-guard-name').innerText = displayName.toUpperCase();
   }
+  // Dismiss cold-start splash immediately once the portal shell is visible (zero network wait)
+  dismissGuardSplash();
 }
 
 window.togglePortalPassword = function (inputId, btnEl) {
@@ -661,18 +668,23 @@ async function loadDashboard() {
     const empEl = document.getElementById('dash-emp-num');
     const siteEl = document.getElementById('dash-site-name');
     const shiftEl = document.getElementById('dash-shift-name');
-    if (empEl && empEl.innerText === '--') empEl.innerText = cachedSnap.employee_number || '--';
-    if (siteEl && cachedSnap.today_shift && siteEl.innerText === 'Loading...') {
-      siteEl.innerText = cachedSnap.today_shift.site_name || 'Assigned Site';
+    if (empEl && empEl.dataset.hydrated !== 'live') {
+      empEl.innerText = cachedSnap.employee_number || '--';
+      empEl.dataset.hydrated = 'cache';
     }
-    if (shiftEl && cachedSnap.today_shift && shiftEl.innerText === '--') {
+    if (siteEl && cachedSnap.today_shift && siteEl.dataset.hydrated !== 'live') {
+      siteEl.innerText = cachedSnap.today_shift.site_name || 'Assigned Site';
+      siteEl.dataset.hydrated = 'cache';
+    }
+    if (shiftEl && cachedSnap.today_shift && shiftEl.dataset.hydrated !== 'live') {
       const sh = cachedSnap.today_shift;
       const tr = (sh.start_time && sh.end_time && sh.start_time !== '--:--') ? ` (${sh.start_time} - ${sh.end_time})` : '';
       shiftEl.innerText = `${sh.shift_name || 'Shift'}${tr}`;
+      shiftEl.dataset.hydrated = 'cache';
     }
-    dismissGuardSplash();
   }
-  if (clockStatus && clockStatus.innerText === 'Loading...') {
+  dismissGuardSplash();
+  if (clockStatus && clockStatus.dataset.hydrated !== 'live') {
     clockStatus.innerText = '⏳ Refreshing shift...';
   }
   if (clockBtn && !currentShiftId) {
@@ -703,7 +715,16 @@ async function loadDashboard() {
     if (data.full_name) {
       document.getElementById('header-guard-name').innerText = data.full_name.toUpperCase();
     }
-    document.getElementById('dash-emp-num').innerText = data.employee_number || '--';
+    const empNumEl = document.getElementById('dash-emp-num');
+    if (empNumEl) {
+      empNumEl.innerText = data.employee_number || '--';
+      empNumEl.dataset.hydrated = 'live';
+    }
+    const siteNameEl = document.getElementById('dash-site-name');
+    const shiftNameEl = document.getElementById('dash-shift-name');
+    if (siteNameEl) siteNameEl.dataset.hydrated = 'live';
+    if (shiftNameEl) shiftNameEl.dataset.hydrated = 'live';
+    if (clockStatus) clockStatus.dataset.hydrated = 'live';
     
     const shift = data.today_shift || {};
     
