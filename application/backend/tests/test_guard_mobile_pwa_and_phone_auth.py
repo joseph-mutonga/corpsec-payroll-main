@@ -49,7 +49,10 @@ def test_guard_portal_dedicated_manifest_and_admin_pwa_intact(client):
     assert gdata["start_url"] == "/portal"
     assert gdata["scope"] == "/portal"
     assert gdata["display"] == "standalone"
-    assert len(gdata["icons"]) >= 2
+    assert gdata["background_color"] == "#000000"
+    assert gdata["theme_color"] == "#000000"
+    assert any("guard_pwa_192.png" in i["src"] for i in gdata["icons"])
+    assert any("guard_pwa_512_maskable.png" in i["src"] and i.get("purpose") == "maskable" for i in gdata["icons"])
 
     # Admin manifest remains untouched
     admin_mf = client.get("/manifest.json")
@@ -57,6 +60,34 @@ def test_guard_portal_dedicated_manifest_and_admin_pwa_intact(client):
     adata = admin_mf.json()
     assert adata["start_url"] == "/"
     assert adata["short_name"] == "CorpSec ERP"
+
+
+def test_guard_portal_inline_svg_splash_and_gzip_and_responsive_admin(client):
+    """Verify /portal cold-start SVG splash, GZip compression, and full-app responsive setup."""
+    html = client.get("/portal").text
+    assert 'id="guard-launch-splash"' in html
+    assert "#F67426" in html and "#00AEEA" in html and "#313596" in html
+    assert "guard_splash_seen" in html
+    assert "guard_apple_touch_icon.png" in html
+    assert 'content="#000000"' in html
+    assert "clamp(104px, 34vw, 160px)" in html
+    assert "prefers-reduced-motion: reduce" in html
+
+    # GZipMiddleware compresses responses cleanly
+    gz_resp = client.get("/static/js/portal.js?v=20261128_v2", headers={"Accept-Encoding": "gzip"})
+    assert gz_resp.status_code == 200
+    assert gz_resp.headers.get("content-encoding") == "gzip"
+
+    # Main admin index & styles responsive upgrades
+    idx = client.get("/").text
+    assert "viewport-fit=cover" in idx
+    assert 'id="mobile-bottom-nav"' in idx
+    assert "defer" in idx
+
+    css = client.get("/static/css/styles.css?v=20261128_v2").text
+    assert "100dvh" in css
+    assert "@media (min-width: 1025px)" in css
+    assert "@media (max-width: 639px)" in css
 
 
 def test_guard_portal_has_no_corpsec_logo_image_and_no_admin_assets(client):
@@ -81,8 +112,8 @@ def test_guard_portal_has_no_corpsec_logo_image_and_no_admin_assets(client):
 
 def test_guard_portal_versioned_static_asset_caching_headers(client):
     """Versioned guard JS/CSS support caching while HTML/SW stay revalidated."""
-    js_resp = client.get("/static/js/portal.js?v=20261128_v1")
-    css_resp = client.get("/static/css/portal.css?v=20261128_v1")
+    js_resp = client.get("/static/js/portal.js?v=20261128_v2")
+    css_resp = client.get("/static/css/portal.css?v=20261128_v2")
     assert js_resp.status_code == 200
     assert css_resp.status_code == 200
     assert "max-age=" in js_resp.headers.get("Cache-Control", "")

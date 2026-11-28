@@ -1,23 +1,19 @@
-const CACHE_NAME = 'corpsec-auto-update-v41';
+const CACHE_NAME = 'corpsec-auto-update-v42';
 const APP_SHELL = [
   '/',
-  '/portal',
   '/version.json',
   '/manifest.json',
   '/portal-sw.js',
-  '/static/css/styles.css',
-  '/static/js/app.js',
-  '/static/css/portal.css',
-  '/static/js/portal.js',
-  '/static/js/silent-updater.js',
-  '/static/js/call-center.js',
-  '/static/css/call-center.css',
-  '/static/js/ai-assistant.js',
-  '/static/css/ai-assistant.css',
+  '/static/css/styles.css?v=20261128_v2',
+  '/static/js/app.js?v=20261128_v3',
+  '/static/js/silent-updater.js?v=20261128_v2',
+  '/static/js/call-center.js?v=20261128_v3',
+  '/static/css/call-center.css?v=20261128_v2',
+  '/static/js/ai-assistant.js?v=20261128_v3',
+  '/static/css/ai-assistant.css?v=20261128_v2',
   '/static/images/corpsec_logo_badge.png',
   '/static/images/corpsec_pwa_192.png',
   '/static/images/corpsec_pwa_512.png',
-  '/static/images/corpsec_logo_full.jpg',
   '/static/images/favicon.ico'
 ];
 
@@ -103,22 +99,25 @@ async function networkFirstDocument(request, pathname) {
   }
 }
 
-// Network-First for JS, CSS, and static assets: Always fetch newest bundle from server
-async function networkFirstAsset(request) {
-  try {
-    const response = await fetch(request, { cache: 'no-cache' });
+// Stale-While-Revalidate / Cache-First for versioned static assets (avoids slow cold starts on mobile)
+async function cacheFirstOrRevalidateAsset(request) {
+  const url = new URL(request.url);
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached && url.searchParams.has('v')) {
+    return cached;
+  }
+  const networkPromise = fetch(request).then((response) => {
     if (!isUnsafeToCache(response)) {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.put(request, response.clone());
+      cache.put(request, response.clone()).catch(() => {});
     }
     return response;
-  } catch (error) {
-    const cached = await caches.match(request);
-    if (cached && !isUnsafeToCache(cached)) {
-      return cached;
-    }
-    throw error;
-  }
+  }).catch(() => null);
+
+  if (cached) return cached;
+  const netResp = await networkPromise;
+  if (netResp) return netResp;
+  throw new Error('Offline asset unavailable');
 }
 
 self.addEventListener('message', (event) => {
@@ -163,6 +162,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for all scripts, CSS, and static files
-  event.respondWith(networkFirstAsset(request));
+  // Cache-first for versioned static files / stale-while-revalidate for unversioned assets
+  event.respondWith(cacheFirstOrRevalidateAsset(request));
 });

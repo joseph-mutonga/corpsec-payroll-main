@@ -1,15 +1,14 @@
 /**
  * CorpSec Guard Mobile Portal Dedicated Service Worker
  *
- * Security & Performance Design:
  * - Scoped strictly to /portal (never conflicts with Admin ERP SW at /).
- * - Pre-caches ONLY Guard Portal app shell & versioned assets (zero Admin/Payroll/AI/CallCenter/Logo downloads).
- * - Cache-First for versioned static assets (?v=...) -> instant mobile launch without repeated downloads.
- * - Stale-While-Revalidate for /portal shell -> fast startup with automatic background freshness.
- * - STRICT NO-CACHE for /api/* (login, logout, attendance, dashboard, leave, payslips) -> zero shared guard data leakage.
+ * - Pre-caches ONLY Guard Portal shell, versioned assets, and splash/app icons.
+ * - Static assets: Cache-First for versioned (?v=...) assets.
+ * - Shell navigation (/portal): Stale-While-Revalidate + offline fallback page.
+ * - API security: Strict bypass for /api/* (never caches auth/OTP/payroll/personal data).
  */
 
-const GUARD_SW_VERSION = '20261128_v1';
+const GUARD_SW_VERSION = '20261128_v2';
 const GUARD_SHELL_CACHE = `corpsec-guard-shell-${GUARD_SW_VERSION}`;
 
 const GUARD_APP_SHELL = [
@@ -17,12 +16,19 @@ const GUARD_APP_SHELL = [
   '/portal-manifest.json',
   `/static/css/portal.css?v=${GUARD_SW_VERSION}`,
   `/static/js/portal.js?v=${GUARD_SW_VERSION}`,
+  `/static/images/guard_pwa_192.png?v=${GUARD_SW_VERSION}`,
+  `/static/images/guard_apple_touch_icon.png?v=${GUARD_SW_VERSION}`,
 ];
 
 const GUARD_STATIC_ASSETS = [
   '/static/css/portal.css',
   '/static/js/portal.js',
   '/portal-manifest.json',
+  '/static/images/guard_pwa_192.png',
+  '/static/images/guard_pwa_512.png',
+  '/static/images/guard_pwa_192_maskable.png',
+  '/static/images/guard_pwa_512_maskable.png',
+  '/static/images/guard_apple_touch_icon.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -66,7 +72,7 @@ self.addEventListener('message', (event) => {
   }
 });
 
-async function cacheFirstVersionedAsset(request) {
+async function cacheFirstStaticAsset(request) {
   const cache = await caches.open(GUARD_SHELL_CACHE);
   const cached = await cache.match(request);
   if (cached) {
@@ -104,7 +110,7 @@ async function staleWhileRevalidateShell(request) {
   }
 
   return new Response(
-    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guard Portal Offline</title><style>body{font-family:system-ui,sans-serif;background:#EBF1F7;color:#0F172A;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px}.card{background:#fff;border-radius:18px;padding:24px;max-width:360px;text-align:center;box-shadow:0 8px 24px rgba(15,23,42,.08)}button{margin-top:14px;background:#7C3AED;color:#fff;border:0;border-radius:9999px;padding:12px 20px;font-weight:700;font-size:15px}</style></head><body><div class="card"><h2>You Are Offline</h2><p>Unable to connect to CorpSec servers. Check your mobile data or Wi-Fi connection and try again.</p><button onclick="location.reload()">Retry Connection</button></div></body></html>',
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000000"><title>Guard Portal Offline</title><style>body{font-family:system-ui,sans-serif;background:#000000;color:#F8FAFC;display:flex;align-items:center;justify-content:center;min-height:100dvh;margin:0;padding:16px}.card{background:#0F172A;border:1px solid #1E293B;border-radius:18px;padding:24px;max-width:360px;text-align:center}button{margin-top:14px;background:#F67426;color:#fff;border:0;border-radius:9999px;padding:12px 20px;min-height:44px;font-weight:700;font-size:16px;width:100%}</style></head><body><div class="card"><h2>You Are Offline</h2><p>Unable to reach CorpSec servers. Check your mobile data or Wi-Fi connection and retry.</p><button onclick="location.reload()">Retry Connection</button></div></body></html>',
     {
       status: 503,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -118,16 +124,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // SECURITY: Never cache authenticated API calls, tokens, attendance, or user data
+  // SECURITY: Never cache auth, OTP, payroll, attendance, or personal API data
   if (url.pathname.startsWith('/api/')) return;
 
-  // Serve versioned Guard Portal assets cache-first for fast repeated startup
   if (GUARD_STATIC_ASSETS.includes(url.pathname)) {
-    event.respondWith(cacheFirstVersionedAsset(event.request));
+    event.respondWith(cacheFirstStaticAsset(event.request));
     return;
   }
 
-  // Serve Guard Portal shell stale-while-revalidate for instant launch
   if (url.pathname === '/portal' || url.pathname === '/portal.html') {
     event.respondWith(staleWhileRevalidateShell(event.request));
   }

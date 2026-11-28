@@ -202,7 +202,7 @@ def find_user_by_credential(db: Session, login_id: str) -> Optional[User]:
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("5/15minutes")
+@limiter.limit("20/15minutes")
 def login_for_access_token(
     request: Request,
     payload: LoginRequest,
@@ -352,7 +352,7 @@ def login_for_access_token(
         429: {"description": "Too many login attempts - Rate limit exceeded"}
     }
 )
-@limiter.limit("5/15minutes")
+@limiter.limit("20/15minutes")
 def guard_login(
     request: Request,
     payload: GuardLoginRequest,

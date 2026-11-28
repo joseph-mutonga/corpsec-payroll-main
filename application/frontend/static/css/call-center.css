@@ -1096,3 +1096,45 @@
   color: #C7D2FE;
 }
 
+@media (max-width: 1024px) {
+  .cc-wrapper {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .cc-sub-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--cc-border);
+    padding: 12px;
+  }
+
+  .cc-workspace-header {
+    padding: 12px 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .cc-table-scrollable,
+  .cc-history-scroll-container,
+  .cc-recordings-scroll-container {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .softphone-expanded-card {
+    width: calc(100vw - 24px);
+    max-width: 380px;
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+@media (max-width: 639px) {
+  .cc-sim-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+

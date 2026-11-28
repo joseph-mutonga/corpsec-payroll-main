@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CorpSec</title>
   <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico?v=20261127_v1">
   <link rel="manifest" href="/manifest.json">
@@ -11,13 +11,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CorpSec ERP">
-  <link rel="stylesheet" href="/static/css/styles.css?v=20261119_v3">
-  <link rel="stylesheet" href="/static/css/call-center.css?v=20261126_v16">
-  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261126_v16">
-  <script src="/static/js/app.js?v=20261128_v2"></script>
-  <script src="/static/js/silent-updater.js?v=20261126_v16"></script>
-  <script src="/static/js/call-center.js?v=20261128_v2"></script>
-  <script src="/static/js/ai-assistant.js?v=20261128_v2"></script>
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261128_v2">
+  <link rel="stylesheet" href="/static/css/call-center.css?v=20261128_v2">
+  <link rel="stylesheet" href="/static/css/ai-assistant.css?v=20261128_v2">
+  <script src="/static/js/app.js?v=20261128_v3" defer></script>
+  <script src="/static/js/silent-updater.js?v=20261128_v2" defer></script>
+  <script src="/static/js/call-center.js?v=20261128_v3" defer></script>
+  <script src="/static/js/ai-assistant.js?v=20261128_v3" defer></script>
 </head>
 
 <body>
@@ -1858,7 +1858,7 @@
           </div>
         </div>
 
-        <div class="table-container" style="overflow-x:auto;">
+        <div class="table-container roster-matrix-wrap" style="overflow-x:auto;">
           <table class="data-table" style="font-size:12px; text-align:center; min-width:1000px;">
             <thead id="roster-grid-thead">
               <!-- Dynamically populated header -->
@@ -7099,6 +7099,30 @@
       </div>
 
     </div><!-- /.content-container -->
+
+    <!-- Fixed Mobile/Tablet Bottom Navigation Bar (hidden on desktop >= 1025px) -->
+    <nav id="mobile-bottom-nav" class="bottom-nav" aria-label="Quick Mobile Navigation">
+      <button type="button" class="bottom-nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+        <span class="bottom-nav-icon">📊</span>
+        <span>Dashboard</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-tab="guards" onclick="switchTab('guards')">
+        <span class="bottom-nav-icon">🛡️</span>
+        <span>Guards</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-tab="shifts" onclick="switchTab('shifts')">
+        <span class="bottom-nav-icon">📅</span>
+        <span>Roster</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-tab="incidents" onclick="switchTab('incidents')">
+        <span class="bottom-nav-icon">🚨</span>
+        <span>Alerts</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-tab="menu" onclick="toggleSidebar()">
+        <span class="bottom-nav-icon">☰</span>
+        <span>Menu</span>
+      </button>
+    </nav>
   </div><!-- /#main-content -->
 
 

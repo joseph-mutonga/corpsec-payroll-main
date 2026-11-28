@@ -952,3 +952,34 @@
   font-weight: 700;
   color: #0F172A;
 }
+
+@media (max-width: 1024px) {
+  .ai-assistant-header {
+    padding: 12px 14px;
+  }
+
+  .ai-starter-chips-container {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .ai-chip-btn,
+  .ai-btn-sm {
+    min-height: 44px;
+  }
+
+  .ai-messages-container {
+    padding: 12px;
+    max-height: 60dvh;
+  }
+}
+
+@media (max-width: 639px) {
+  .ai-message {
+    gap: 8px;
+  }
+
+  .ai-message-bubble {
+    padding: 10px 12px;
+  }
+}

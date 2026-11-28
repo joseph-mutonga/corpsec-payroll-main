@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
-      if (window.innerWidth <= 768) {
+      if (window.innerWidth <= 1024) {
         if (sidebar) sidebar.classList.remove('open');
         if (overlay) overlay.classList.remove('show');
       }
@@ -141,7 +141,7 @@ async function checkAuthStatus() {
     if (window.SystemAIAssistant && typeof window.SystemAIAssistant.init === 'function') {
       window.SystemAIAssistant.init();
     }
-    await initApp();
+    await initApp(liveUser);
     restoreTabFromHash();
   } catch (err) {
     console.warn('Session check failed:', err);
@@ -173,6 +173,7 @@ function stopSessionHeartbeat() {
 }
 
 async function sendHeartbeatPing() {
+  if (document.hidden) return;
   const token = localStorage.getItem('corpsec_token') || authToken;
   if (!token) return;
 
@@ -1154,32 +1155,39 @@ function logout() {
   setTimeout(() => { isLoggingOut = false; }, 400);
 }
 
-async function initApp() {
+async function initApp(preloadedUser = null) {
   const subtitleEl = document.getElementById('top-bar-date-subtitle');
   if (subtitleEl) {
     const todayStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     subtitleEl.innerText = `Data summary for ${todayStr}`;
   }
 
-  // Retrieve live user record from database
-  await fetchCurrentAuthenticatedUser();
-  const user = getLoggedInUser();
+  // Avoid duplicate /auth/me request when caller already verified live user
+  if (!preloadedUser) {
+    await fetchCurrentAuthenticatedUser();
+  }
+  const user = preloadedUser || getLoggedInUser();
 
   try {
-    // 1. Load baseline directories from DB first
-    await Promise.all([loadGuards(), loadSites(), (!user || user.role !== 'SUPERVISOR') ? loadShifts() : Promise.resolve()]);
-
-    // 2. Load operational records from DB
+    // Load Dashboard KPIs & baseline directories in parallel first for fast interactive render
     await Promise.all([
-      loadAttendance(),
-      loadAdminIncidents(),
-      loadAdminLeave(),
-      (!user || user.role !== 'SUPERVISOR') ? loadPayrollReview() : loadSupervisorAttendanceRoll(),
-      (user && user.role === 'ADMIN') ? loadAuditLogs() : Promise.resolve()
+      loadDashboardData(),
+      loadGuards(),
+      loadSites(),
+      (!user || user.role !== 'SUPERVISOR') ? loadShifts() : Promise.resolve()
     ]);
 
-    // 3. Populate Executive Operations Dashboard
-    loadDashboardData();
+    // Defer secondary operational module preloads cleanly off the first paint critical path
+    setTimeout(() => {
+      if (!authToken) return;
+      Promise.allSettled([
+        loadAttendance(),
+        loadAdminIncidents(),
+        loadAdminLeave(),
+        (!user || user.role !== 'SUPERVISOR') ? loadPayrollReview() : loadSupervisorAttendanceRoll(),
+        (user && user.role === 'ADMIN') ? loadAuditLogs() : Promise.resolve()
+      ]).catch(() => {});
+    }, 150);
   } catch (err) {
     console.error('Error during app initialization:', err);
   }
@@ -1279,6 +1287,16 @@ function switchTab(tabId, updateHistory = true) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
   const activeNav = document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
   if (activeNav) activeNav.classList.add('active');
+
+  document.querySelectorAll('#mobile-bottom-nav .bottom-nav-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset && btn.dataset.tab === tabId);
+  });
+  if (window.innerWidth <= 1024) {
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('sidebar-overlay');
+    if (sb) sb.classList.remove('open');
+    if (ov) ov.classList.remove('show');
+  }
 
   window.currentActiveTab = tabId;
 
@@ -16637,7 +16655,9 @@ async function fetchGlobalTeamChatUnread() {
 function startTeamChatUnreadPoller() {
   if (waGlobalUnreadTimer) clearInterval(waGlobalUnreadTimer);
   fetchGlobalTeamChatUnread();
-  waGlobalUnreadTimer = setInterval(fetchGlobalTeamChatUnread, 5000);
+  waGlobalUnreadTimer = setInterval(() => {
+    if (!document.hidden) fetchGlobalTeamChatUnread();
+  }, 20000);
 }
 
 async function initWhatsAppChat() {
@@ -16652,7 +16672,7 @@ async function initWhatsAppChat() {
     if (!waContainer._scrollLockAttached) {
       waContainer.addEventListener('scroll', () => {
         if (waContainer.scrollLeft !== 0) waContainer.scrollLeft = 0;
-      });
+      }, { passive: true });
       waContainer._scrollLockAttached = true;
     }
   }
@@ -16710,8 +16730,9 @@ async function initWhatsAppChat() {
     renderWhatsAppContacts();
     await loadWhatsAppActiveMessages();
 
-    // Start auto-poll every 3 seconds while viewing team-chat tab
+    // Start auto-poll every 5 seconds while viewing active team-chat tab
     waPollTimer = setInterval(() => {
+      if (document.hidden) return;
       if (window.currentActiveTab === 'team-chat') {
         loadWhatsAppActiveMessages(true);
         pollWhatsAppContacts();
@@ -16719,7 +16740,7 @@ async function initWhatsAppChat() {
         clearInterval(waPollTimer);
         waPollTimer = null;
       }
-    }, 3000);
+    }, 5000);
 
   } catch (err) {
     console.error('initWhatsAppChat error:', err);

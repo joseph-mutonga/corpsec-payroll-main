@@ -9,6 +9,7 @@ if _workspace_root not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -44,6 +45,9 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Enable GZip compression for HTML, CSS, JS, SVG, and JSON payloads (critical for mobile data)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # Set up CORS
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
@@ -65,7 +69,7 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         path = request.url.path
         has_version_tag = bool(request.query_params.get("v"))
-        if path in ["/static/js/portal.js", "/static/css/portal.css"] and has_version_tag:
+        if path.startswith("/static/") and has_version_tag:
             response.headers["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
             return response
 

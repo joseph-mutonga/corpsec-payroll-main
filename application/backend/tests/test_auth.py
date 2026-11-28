@@ -27,14 +27,14 @@ def test_admin_login_invalid_password(client):
 
 
 def test_login_rate_limiting(client):
-    """Verify that rapid invalid login attempts (>5 per 15 min) trigger HTTP 429 Too Many Requests."""
+    """Verify that rapid invalid login attempts (>20 per 15 min) trigger HTTP 429 Too Many Requests."""
     from application.backend.app.core.limiter import limiter
     limiter.enabled = True
     try:
-        for _ in range(5):
+        for _ in range(20):
             client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
 
-        # 6th attempt should be blocked with 429
+        # 21st attempt should be blocked with 429
         blocked_resp = client.post("/api/v1/auth/login", json={"email": "ratelimit_test@corpsec.co.ke", "password": "BadPassword123!"})
         assert blocked_resp.status_code == 429
         assert "Too many login attempts" in blocked_resp.json()["detail"]
@@ -371,8 +371,8 @@ def test_production_email_hardening_and_otp_failure_handling(client, db, monkeyp
     assert resend_res.status_code == 503
 
 
-def test_login_security_middleware_ip_limit_5_per_15min(client):
-    """Layer 1: Middleware enforces 5 attempts per 15 minutes per IP with HTTP 429 + Retry-After."""
+def test_login_security_middleware_ip_limit_20_per_15min(client):
+    """Layer 1: Middleware enforces 20 attempts per 15 minutes per IP with HTTP 429 + Retry-After."""
     from application.backend.app.core.login_security import login_security_store
 
     login_security_store.reset()
@@ -381,8 +381,8 @@ def test_login_security_middleware_ip_limit_5_per_15min(client):
         ip_a = {"X-Forwarded-For": "203.0.113.10"}
         ip_b = {"X-Forwarded-For": "203.0.113.11"}
 
-        # First 5 attempts from IP A reach the route (401 on wrong password)
-        for i in range(5):
+        # First 20 attempts from IP A reach the route (401 on wrong password)
+        for i in range(20):
             r = client.post(
                 "/api/v1/auth/login",
                 json={"email": f"user{i}@corpsec.co.ke", "password": "WrongPassword!"},
@@ -390,7 +390,7 @@ def test_login_security_middleware_ip_limit_5_per_15min(client):
             )
             assert r.status_code == 401
 
-        # 6th attempt from IP A is blocked with HTTP 429 + Retry-After
+        # 21st attempt from IP A is blocked with HTTP 429 + Retry-After
         blocked = client.post(
             "/api/v1/auth/login",
             json={"email": "admin@corpsec.co.ke", "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
@@ -414,7 +414,7 @@ def test_login_security_middleware_ip_limit_5_per_15min(client):
 
 
 def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
-    """Layer 2: Increasing delay after 3 failures, 15-min lockout after 5 failures, and reset on success."""
+    """Layer 2: Increasing delay after 3 failures, 15-min lockout after 20 failures, and reset on success."""
     from application.backend.app.core import login_security
 
     store = login_security.login_security_store
@@ -456,7 +456,7 @@ def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
         assert r4.status_code == 401
         assert recorded_delays == [2.0]
 
-        # Attempt 5 (after 4 failures) triggers higher delay (4.0s), then locks account for 15 minutes
+        # Attempt 5 (after 4 failures) triggers higher delay (4.0s), still NOT locked out yet (threshold is 20)
         r5 = client.post(
             "/api/v1/auth/login",
             json={"email": target_email, "password": "WrongPassword!"},
@@ -465,11 +465,20 @@ def test_account_lockout_progressive_delays_and_reset(client, monkeypatch):
         assert r5.status_code == 401
         assert recorded_delays == [2.0, 4.0]
 
-        # Attempt 6 (even with the CORRECT password from a fresh IP) is locked out for 15 minutes
+        # Attempts 6..20 continue until 20 consecutive failures accumulate
+        for idx in range(6, 21):
+            ri = client.post(
+                "/api/v1/auth/login",
+                json={"email": target_email, "password": "WrongPassword!"},
+                headers={"X-Forwarded-For": f"198.51.100.{idx}"},
+            )
+            assert ri.status_code == 401
+
+        # Attempt 21 (even with the CORRECT password from a fresh IP) is locked out for 15 minutes
         locked_resp = client.post(
             "/api/v1/auth/login",
             json={"email": target_email, "password": os.getenv("ADMIN_INITIAL_PASSWORD")},
-            headers={"X-Forwarded-For": "198.51.100.6"},
+            headers={"X-Forwarded-For": "198.51.100.21"},
         )
         assert locked_resp.status_code == 429
         assert int(locked_resp.headers["Retry-After"]) >= 890

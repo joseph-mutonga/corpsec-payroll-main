@@ -19,11 +19,66 @@ function setToken(token, userDetails) {
   }
 }
 
+function dismissGuardSplash() {
+  if (window.__guardSplashSafetyTimer) {
+    clearTimeout(window.__guardSplashSafetyTimer);
+    window.__guardSplashSafetyTimer = null;
+  }
+  try {
+    sessionStorage.setItem('guard_splash_seen', '1');
+  } catch (e) {}
+  const splash = document.getElementById('guard-launch-splash');
+  if (!splash || splash.classList.contains('is-hidden')) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    splash.classList.add('is-hidden');
+    return;
+  }
+  splash.classList.add('is-fading');
+  setTimeout(() => {
+    splash.classList.add('is-hidden');
+  }, 240);
+}
+
+function getCachedShiftSnapshot(userId) {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(`guard_home_shift_v1_${userId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveCachedShiftSnapshot(userId, data) {
+  if (!userId || !data || !data.today_shift) return;
+  try {
+    // Cache ONLY non-sensitive shift schedule display (never payslip amounts or credentials)
+    const minimal = {
+      employee_number: data.employee_number || '--',
+      full_name: data.full_name || '',
+      is_today_off: !!data.is_today_off,
+      today_shift: {
+        site_name: data.today_shift.site_name || '',
+        shift_name: data.today_shift.shift_name || '',
+        start_time: data.today_shift.start_time || '',
+        end_time: data.today_shift.end_time || '',
+        is_scheduled: data.today_shift.is_scheduled,
+      },
+    };
+    localStorage.setItem(`guard_home_shift_v1_${userId}`, JSON.stringify(minimal));
+  } catch (e) {}
+}
+
 function clearToken() {
   sessionStorage.removeItem('guard_auth_token');
   sessionStorage.removeItem('guard_user');
   localStorage.removeItem('guard_auth_token');
   localStorage.removeItem('guard_user');
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('guard_home_shift_v1_'))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (e) {}
 }
 
 function getStoredUser() {
@@ -61,6 +116,11 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   let res;
+  const abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = abortCtrl ? setTimeout(() => abortCtrl.abort(), 8000) : null;
+  if (abortCtrl && !options.signal) {
+    options.signal = abortCtrl.signal;
+  }
   try {
     res = await fetch(`${API_BASE}${endpoint}`, options);
   } catch (networkErr) {
@@ -68,6 +128,8 @@ async function apiFetch(endpoint, options = {}) {
     const banner = document.getElementById('portal-offline-banner');
     if (banner) banner.hidden = false;
     throw new Error('Network error: Unable to connect to server.');
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 
   if (navigator.onLine) {
@@ -299,6 +361,7 @@ function showLoginView(alertMessage = null, alertType = 'danger') {
   const pwInput = document.getElementById('login-password');
   if (pwInput) pwInput.value = '';
   setLoginAlert(alertMessage, alertType);
+  dismissGuardSplash();
 }
 
 function showForcePasswordView(alertMessage = null) {
@@ -320,6 +383,7 @@ function showForcePasswordView(alertMessage = null) {
     if (el) el.value = '';
   });
   setForcePwdAlert(alertMessage, 'danger');
+  dismissGuardSplash();
 }
 
 function showPortalView() {
@@ -591,8 +655,25 @@ async function loadDashboard() {
 
   const clockStatus = document.getElementById('dash-clock-status');
   const clockBtn = document.getElementById('btn-clock-action');
+  const storedUser = getStoredUser();
+  const cachedSnap = storedUser ? getCachedShiftSnapshot(storedUser.user_id) : null;
+  if (cachedSnap) {
+    const empEl = document.getElementById('dash-emp-num');
+    const siteEl = document.getElementById('dash-site-name');
+    const shiftEl = document.getElementById('dash-shift-name');
+    if (empEl && empEl.innerText === '--') empEl.innerText = cachedSnap.employee_number || '--';
+    if (siteEl && cachedSnap.today_shift && siteEl.innerText === 'Loading...') {
+      siteEl.innerText = cachedSnap.today_shift.site_name || 'Assigned Site';
+    }
+    if (shiftEl && cachedSnap.today_shift && shiftEl.innerText === '--') {
+      const sh = cachedSnap.today_shift;
+      const tr = (sh.start_time && sh.end_time && sh.start_time !== '--:--') ? ` (${sh.start_time} - ${sh.end_time})` : '';
+      shiftEl.innerText = `${sh.shift_name || 'Shift'}${tr}`;
+    }
+    dismissGuardSplash();
+  }
   if (clockStatus && clockStatus.innerText === 'Loading...') {
-    clockStatus.innerText = '⏳ Loading shift...';
+    clockStatus.innerText = '⏳ Refreshing shift...';
   }
   if (clockBtn && !currentShiftId) {
     clockBtn.disabled = true;
@@ -608,10 +689,15 @@ async function loadDashboard() {
         clockStatus.innerText = '⚠️ Error Loading Dashboard';
       }
       console.error('Dashboard load failed:', errData);
+      dismissGuardSplash();
       return;
     }
 
     const data = await res.json();
+    if (storedUser && storedUser.user_id) {
+      saveCachedShiftSnapshot(storedUser.user_id, data);
+    }
+    dismissGuardSplash();
     
     // Header & User badge
     if (data.full_name) {

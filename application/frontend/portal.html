@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-  <meta name="theme-color" content="#0F172A">
+  <meta name="theme-color" content="#000000">
 
   <meta name="apple-mobile-web-app-capable" content="yes">
 
@@ -20,17 +20,86 @@
 
   <title>CorpSec Guard Mobile Portal</title>
 
-  <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico?v=20261128_v1">
+  <link rel="icon" type="image/png" href="/static/images/guard_pwa_192.png?v=20261128_v2">
 
-  <link rel="apple-touch-icon" href="/static/images/corpsec_pwa_192.png?v=20261128_v1">
+  <link rel="apple-touch-icon" href="/static/images/guard_apple_touch_icon.png?v=20261128_v2">
 
   <link rel="manifest" href="/portal-manifest.json">
 
-  <link rel="stylesheet" href="/static/css/portal.css?v=20261128_v1">
+  <style>
+    /* Critical inline splash styles — paints black aperture logo at FCP before external CSS/JS */
+    html.guard-splash-skip #guard-launch-splash { display: none !important; }
+    #guard-launch-splash {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100dvh;
+      background: #000000;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+      opacity: 1;
+      transition: opacity 0.24s ease-out;
+    }
+    #guard-launch-splash.is-fading {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #guard-launch-splash.is-hidden {
+      display: none !important;
+    }
+    .guard-splash-mark {
+      width: clamp(104px, 34vw, 160px);
+      height: auto;
+      display: block;
+      animation: guardSplashEnter 0.22s ease-out both;
+    }
+    @keyframes guardSplashEnter {
+      from { opacity: 0.75; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #guard-launch-splash { transition: none !important; }
+      .guard-splash-mark { animation: none !important; }
+    }
+  </style>
+  <script>
+    try {
+      if (sessionStorage.getItem('guard_splash_seen') === '1') {
+        document.documentElement.classList.add('guard-splash-skip');
+      }
+    } catch (e) {}
+  </script>
+
+  <link rel="stylesheet" href="/static/css/portal.css?v=20261128_v2">
 
 </head>
 
 <body class="portal-body">
+
+  <!-- Cold-start Guard Portal Launch Screen (Inline traced logo SVG, #000000 bg, <=2KB) -->
+  <div id="guard-launch-splash" role="presentation" aria-hidden="true">
+    <svg class="guard-splash-mark" viewBox="0 0 840 840" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
+      <rect width="840" height="840" fill="#000000"/>
+      <path fill="#F67426" d="M92,448L92,425L92,402L94,380L96,357L103,335L108,312L117,291L126,270L138,251L151,231L165,213L179,195L195,179L213,165L232,152L251,138L270,126L292,118L312,108L335,103L357,96L380,94L402,92L425,91L448,93L471,95L492,105L509,126L525,145L538,165L550,184L559,205L566,225L572,244L576,263L579,281L572,287L558,281L546,275L531,271L520,265L506,263L494,259L482,258L470,256L458,254L446,253L434,251L422,252L411,252L399,252L387,252L375,253L363,256L351,258L339,261L326,264L313,267L299,270L286,276L272,282L258,289L244,297L228,305L214,315L200,326L184,338L167,352L154,368L139,385L125,404L110,425L99,448Z"/>
+      <path fill="#00AEEA" d="M590,702L569,714L548,722L527,732L505,737L482,742L460,746L437,748L414,748L391,747L368,744L346,740L323,734L302,727L280,719L260,707L240,695L222,682L203,669L186,653L171,635L157,618L144,599L133,578L121,558L112,537L105,516L109,491L118,467L130,445L142,424L156,406L170,389L185,374L199,360L212,348L227,353L227,368L228,382L230,396L233,410L234,423L237,435L241,448L245,460L250,471L255,483L261,494L266,505L272,515L279,525L284,537L293,546L301,556L309,566L318,576L327,586L337,596L348,605L360,615L372,624L386,633L400,642L416,650L432,656L450,665L469,673L489,678L510,683L533,687L558,691L583,691Z"/>
+      <path fill="#313596" d="M559,120L579,132L599,144L618,157L636,170L653,186L669,203L682,222L695,240L707,260L719,280L728,301L735,323L740,346L745,368L747,391L749,414L749,437L747,460L743,482L738,505L732,527L723,548L714,569L702,590L690,609L676,627L661,645L635,651L608,653L584,654L560,653L537,649L516,648L497,644L478,639L461,634L461,632L474,622L487,614L498,604L509,596L519,586L529,576L538,566L546,556L554,545L562,535L569,524L575,513L581,502L586,490L591,478L596,467L600,455L603,442L607,429L610,416L614,402L616,388L617,374L618,359L619,343L621,326L618,309L617,291L614,273L611,253L606,233L601,211L592,190L583,168L571,146L557,124Z"/>
+      <circle cx="420" cy="420" r="136" fill="#F67426"/>
+      <circle cx="420" cy="420" r="68" fill="#000000"/>
+      <circle cx="355" cy="412" r="28" fill="#FFFFFF"/>
+    </svg>
+  </div>
+  <script>
+    window.__guardSplashSafetyTimer = setTimeout(function () {
+      var s = document.getElementById('guard-launch-splash');
+      if (s && !s.classList.contains('is-hidden')) {
+        s.classList.add('is-hidden');
+        try { sessionStorage.setItem('guard_splash_seen', '1'); } catch (e) {}
+      }
+    }, 3000);
+  </script>
 
   <div id="portal-offline-banner" class="portal-offline-banner" hidden>
     You are offline. Connect to mobile data or Wi-Fi to sign in or sync attendance.
@@ -823,7 +892,7 @@
 
 
 
-  <script src="/static/js/portal.js?v=20261128_v1" defer></script>
+  <script src="/static/js/portal.js?v=20261128_v2" defer></script>
 
 </body>
 

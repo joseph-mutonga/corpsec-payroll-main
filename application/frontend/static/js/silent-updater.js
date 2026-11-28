@@ -17,7 +17,7 @@
   const STORAGE_KEY_LAST_CHECK = 'corpsec_last_update_check';
   const STORAGE_KEY_UPDATE_PENDING = 'corpsec_pending_update_reload';
 
-  const CHECK_INTERVAL_MS = 15000; // Poll server every 15 seconds
+  const CHECK_INTERVAL_MS = 120000; // Poll server every 2 minutes when active (pauses when hidden)
   const VERSION_ENDPOINT = '/api/v1/desktop/version';
 
   let isUpdating = false;
@@ -284,7 +284,7 @@
    * Checks the server for a newer release than what is currently running on this device.
    */
   async function checkForUpdates(isManual = false) {
-    if (isUpdating) return;
+    if (isUpdating || (!isManual && document.hidden)) return;
 
     try {
       const manifest = await fetchVersionManifest();

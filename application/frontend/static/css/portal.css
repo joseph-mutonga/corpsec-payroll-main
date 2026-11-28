@@ -10,6 +10,12 @@ html, body {
   max-width: 100%;
   overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+img, video, svg {
+  max-width: 100%;
+  height: auto;
 }
 
 .portal-body {
@@ -737,11 +743,87 @@ body.portal-logged-in .install-app-banner {
 .portal-modal-card {
   width: 100%;
   max-width: 460px;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
   background: #FFFFFF;
   border-radius: 20px;
   padding: 20px;
+}
+
+@media (max-width: 1024px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  button,
+  .form-input,
+  .form-select,
+  .form-textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .btn-toggle-pw {
+    min-height: 44px;
+    min-width: 48px;
+  }
+
+  .action-tile {
+    min-height: 96px;
+  }
+
+  .portal-card,
+  .login-card,
+  .portal-bottom-nav,
+  .portal-header {
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  }
+}
+
+@media (min-width: 640px) {
+  .portal-main {
+    max-width: 680px;
+    padding: 20px 20px calc(92px + env(safe-area-inset-bottom, 0px)) 20px;
+  }
+}
+
+@media (min-width: 1025px) {
+  .portal-main {
+    max-width: 760px;
+  }
+}
+
+@media (max-width: 639px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-content,
+  .portal-modal-card {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 16px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .loading-skeleton-bar {

@@ -2,9 +2,9 @@
 Reusable Multi-Layer Login Security Middleware for FastAPI / Starlette.
 
 Implements:
-1. IP-based Rate Limiting (default: 5 login attempts per 15 minutes per IP -> HTTP 429).
+1. IP-based Rate Limiting (default: 20 login attempts per 15 minutes per IP -> HTTP 429).
 2. Account-based Lockout & Progressive Delays (increasing delay after 3 failed attempts;
-   15-minute lockout after 5 consecutive failures; reset counter on successful login).
+   15-minute lockout after 20 consecutive failures; reset counter on successful login).
 3. In-memory thread-safe store by default, with automatic Redis support when REDIS_URL is set.
 """
 
@@ -30,10 +30,10 @@ class BaseLoginSecurityStore:
 
     def __init__(
         self,
-        ip_max_attempts: int = 5,
+        ip_max_attempts: int = 20,
         ip_window_seconds: int = 900,
         delay_threshold: int = 3,
-        lockout_threshold: int = 5,
+        lockout_threshold: int = 20,
         lockout_seconds: int = 900,
         base_delay_seconds: float = 2.0,
         max_delay_seconds: float = 16.0,
@@ -265,9 +265,9 @@ def _format_retry_message(prefix: str, retry_after_seconds: int) -> str:
 class LoginSecurityMiddleware(BaseHTTPMiddleware):
     """
     Reusable FastAPI/Starlette middleware enforcing:
-    - IP-based Rate Limiting (5 attempts / 15 min -> HTTP 429)
+    - IP-based Rate Limiting (20 attempts / 15 min -> HTTP 429)
     - Progressive Delays after 3 failed login attempts
-    - 15-minute Account Lockout after 5 consecutive failed attempts
+    - 15-minute Account Lockout after 20 consecutive failed attempts
     - Automatic failure-counter reset on successful authentication
     """
 
@@ -319,7 +319,7 @@ class LoginSecurityMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        # 2. Layer 1: IP-based Rate Limiting (5 attempts per 15 minutes per IP)
+        # 2. Layer 1: IP-based Rate Limiting (20 attempts per 15 minutes per IP)
         ip_allowed, ip_retry = self.store.check_and_record_ip(client_ip)
         if not ip_allowed:
             return JSONResponse(
