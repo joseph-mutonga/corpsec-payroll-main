@@ -155,6 +155,27 @@ def test_guard_pwa_manifest_and_service_worker_routes(client):
     assert sw_resp.headers.get("service-worker-allowed") == "/portal"
     assert "no-cache" in sw_resp.headers.get("cache-control", "").lower()
     assert "GUARD_SW_VERSION" in sw_resp.text
+    assert "__ASSET_VERSION__" not in sw_resp.text
+
+    # Central ASSET_VERSION injection & HTTP caching policy
+    from application.backend.app.core.config import settings
+    portal_resp = client.get("/portal")
+    assert portal_resp.status_code == 200
+    assert f"?v={settings.ASSET_VERSION}" in portal_resp.text
+    assert "__ASSET_VERSION__" not in portal_resp.text
+    assert "no-store" in portal_resp.headers.get("cache-control", "").lower()
+
+    versioned_css = client.get(f"/static/css/portal.css?v={settings.ASSET_VERSION}")
+    assert versioned_css.status_code == 200
+    assert "immutable" in versioned_css.headers.get("cache-control", "").lower()
+
+    unversioned_css = client.get("/static/css/portal.css")
+    assert unversioned_css.status_code == 200
+    assert "no-store" in unversioned_css.headers.get("cache-control", "").lower()
+
+    api_health = client.get("/api/health")
+    assert api_health.status_code == 200
+    assert "no-store" in api_health.headers.get("cache-control", "").lower()
 
 
 

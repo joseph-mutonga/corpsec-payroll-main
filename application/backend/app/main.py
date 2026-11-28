@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from application.backend.app.core.config import settings
@@ -61,16 +61,23 @@ if settings.BACKEND_CORS_ORIGINS:
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
     """
-    Ensures HTML entrypoints, service workers, manifests, and unversioned static assets
-    are revalidated cleanly, while allowing long-lived browser caching on explicitly
-    versioned Guard Portal assets (?v=...) for fast mobile startup without stale deploys.
+    Controls HTTP caching across the application:
+    - All /api/* responses receive strict no-cache / no-store headers.
+    - Explicitly versioned static assets (/static/...?v=<ASSET_VERSION>) receive long-lived immutable caching.
+    - HTML entrypoints, manifests, service workers, and unversioned static assets always revalidate.
     """
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
+        if path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
+
         has_version_tag = bool(request.query_params.get("v"))
         if path.startswith("/static/") and has_version_tag:
-            response.headers["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
             return response
 
         if (
@@ -164,16 +171,26 @@ def read_root():
     }
 
 
+def _render_versioned_frontend_file(file_path: str, media_type: str, extra_headers: dict | None = None) -> Response:
+    with open(file_path, "r", encoding="utf-8") as fh:
+        content = fh.read().replace("__ASSET_VERSION__", settings.ASSET_VERSION)
+    headers = {
+        "Content-Disposition": "inline",
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    return Response(content=content, media_type=media_type, headers=headers)
+
+
 @app.get("/portal")
 @app.get("/portal.html")
 def read_guard_portal():
     portal_file = os.path.join(frontend_dir, "portal.html")
     if os.path.exists(portal_file):
-        return FileResponse(
-            portal_file,
-            media_type="text/html; charset=utf-8",
-            headers={"Content-Disposition": "inline", "Cache-Control": "no-cache"},
-        )
+        return _render_versioned_frontend_file(portal_file, media_type="text/html; charset=utf-8")
     return {
         "system": "CorpSec Guard Portal",
         "version": settings.VERSION,
@@ -198,16 +215,7 @@ def read_manifest():
 def read_portal_manifest():
     manifest_file = os.path.join(frontend_dir, "portal-manifest.json")
     if os.path.exists(manifest_file):
-        return FileResponse(
-            manifest_file,
-            media_type="application/manifest+json",
-            headers={
-                "Content-Disposition": "inline",
-                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
-        )
+        return _render_versioned_frontend_file(manifest_file, media_type="application/manifest+json")
     return JSONResponse(status_code=404, content={"error": "portal manifest not found"})
 
 
@@ -215,16 +223,10 @@ def read_portal_manifest():
 def read_guard_service_worker():
     sw_file = os.path.join(frontend_dir, "guard-sw.js")
     if os.path.exists(sw_file):
-        return FileResponse(
+        return _render_versioned_frontend_file(
             sw_file,
             media_type="application/javascript",
-            headers={
-                "Content-Disposition": "inline",
-                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0",
-                "Service-Worker-Allowed": "/portal",
-            },
+            extra_headers={"Service-Worker-Allowed": "/portal"},
         )
     return JSONResponse(status_code=404, content={"error": "guard service worker not found"})
 

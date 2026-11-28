@@ -17,6 +17,9 @@ load_dotenv(".env", override=False)
 class Settings(BaseSettings):
     PROJECT_NAME: str = "CorpSec Payroll System"
     VERSION: str = "2.5.20"
+    # Single central release version token for versioned static assets (?v=...) and Guard PWA cache busting.
+    # Bump this value once per release to invalidate cached CSS/JS/icons across portal.html, portal-manifest.json, and guard-sw.js.
+    ASSET_VERSION: str = "20261128_v3"
     API_V1_STR: str = "/api/v1"
     
     # Security
