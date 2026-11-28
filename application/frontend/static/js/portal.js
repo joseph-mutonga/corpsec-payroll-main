@@ -52,21 +52,65 @@ function getCachedShiftSnapshot(userId) {
 function saveCachedShiftSnapshot(userId, data) {
   if (!userId || !data || !data.today_shift) return;
   try {
-    // Cache ONLY non-sensitive shift schedule display (never payslip amounts or credentials)
+    if (data.server_time) {
+      recordMeasuredClockSkew(userId, data.server_time);
+    }
+    // Cache ONLY non-sensitive shift schedule display & site geofence radius (never payslip amounts or credentials)
     const minimal = {
+      guard_id: data.guard_id || null,
       employee_number: data.employee_number || '--',
       full_name: data.full_name || '',
       is_today_off: !!data.is_today_off,
+      last_updated_iso: new Date().toISOString(),
       today_shift: {
+        site_id: data.today_shift.site_id || null,
         site_name: data.today_shift.site_name || '',
+        shift_id: data.today_shift.shift_id || null,
         shift_name: data.today_shift.shift_name || '',
         start_time: data.today_shift.start_time || '',
         end_time: data.today_shift.end_time || '',
         is_scheduled: data.today_shift.is_scheduled,
+        is_clocked_in: !!data.today_shift.is_clocked_in,
+        site_latitude: data.today_shift.site_latitude ?? null,
+        site_longitude: data.today_shift.site_longitude ?? null,
+        geofence_radius: data.today_shift.geofence_radius || 200,
       },
     };
     localStorage.setItem(`guard_home_shift_v1_${userId}`, JSON.stringify(minimal));
   } catch (e) {}
+}
+
+function recordMeasuredClockSkew(userId, serverTimeIso) {
+  if (!userId || !serverTimeIso) return;
+  try {
+    const serverMs = new Date(serverTimeIso).getTime();
+    if (!Number.isNaN(serverMs)) {
+      const skewMs = Date.now() - serverMs;
+      localStorage.setItem(`guard_clock_skew_ms_${userId}`, String(Math.round(skewMs)));
+    }
+  } catch (e) {}
+}
+
+function getMeasuredClockSkew(userId) {
+  if (!userId) return 0;
+  try {
+    const raw = localStorage.getItem(`guard_clock_skew_ms_${userId}`);
+    const parsed = raw !== null ? parseInt(raw, 10) : 0;
+    return Number.isNaN(parsed) ? 0 : parsed;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function formatLastUpdatedLabel(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const dt = new Date(isoStr);
+    if (Number.isNaN(dt.getTime())) return '';
+    return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return '';
+  }
 }
 
 function clearToken() {
@@ -76,7 +120,7 @@ function clearToken() {
   localStorage.removeItem('guard_user');
   try {
     Object.keys(localStorage)
-      .filter((k) => k.startsWith('guard_home_shift_v1_'))
+      .filter((k) => k.startsWith('guard_home_shift_v1_') || k.startsWith('guard_clock_skew_ms_'))
       .forEach((k) => localStorage.removeItem(k));
   } catch (e) {}
 }
@@ -94,13 +138,23 @@ function getStoredUser() {
 
 function updateOfflineBanner(customText = null) {
   const banner = document.getElementById('portal-offline-banner');
-  if (!banner) return;
-  if (!navigator.onLine) {
-    banner.textContent = customText || 'You are offline. Connect to mobile data or Wi-Fi to sign in or sync attendance.';
-    banner.hidden = false;
-  } else {
-    banner.hidden = true;
+  const storedUser = getStoredUser();
+  const snap = storedUser ? getCachedShiftSnapshot(storedUser.user_id) : null;
+  const lastUpd = snap && snap.last_updated_iso ? formatLastUpdatedLabel(snap.last_updated_iso) : '';
+
+  if (banner) {
+    if (!navigator.onLine) {
+      const suffix = lastUpd ? ` (Offline — last updated ${lastUpd})` : '';
+      banner.textContent = customText || `You are offline.${suffix} Clock-in, clock-out & incident reports will be saved on this phone and synced automatically when online.`;
+      banner.hidden = false;
+    } else if (customText) {
+      banner.textContent = customText;
+      banner.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
   }
+  updateSyncStatusBarUi();
 }
 
 // REST API Fetch Wrapper
@@ -158,6 +212,13 @@ async function apiFetch(endpoint, options = {}) {
 function registerPortalServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (!event.data) return;
+    if (event.data.type === 'GUARD_SW_TRIGGER_SYNC') {
+      flushGuardOutbox('sw-background-sync');
+    }
+  });
+
   const startReg = () => {
     navigator.serviceWorker.register('/guard-sw.js', { scope: '/portal', updateViaCache: 'none' })
       .then((reg) => {
@@ -175,6 +236,18 @@ function registerPortalServiceWorker() {
     setTimeout(startReg, 50);
   } else {
     window.addEventListener('load', () => setTimeout(startReg, 50), { once: true });
+  }
+}
+
+async function requestBackgroundSyncRegistration() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (reg && 'sync' in reg) {
+      await reg.sync.register('corpsec-guard-outbox-sync');
+    }
+  } catch (e) {
+    // iOS Safari & desktop browsers without BackgroundSync use online / visibilitychange fallbacks
   }
 }
 
@@ -269,8 +342,22 @@ function setupInstallPrompt() {
 // App Initialization
 document.addEventListener('DOMContentLoaded', () => {
   updateOfflineBanner();
-  window.addEventListener('online', () => updateOfflineBanner());
-  window.addEventListener('offline', () => updateOfflineBanner());
+  window.addEventListener('online', () => {
+    updateOfflineBanner();
+    flushGuardOutbox('online-event');
+  });
+  window.addEventListener('offline', () => {
+    updateOfflineBanner();
+    renderOutboxQueueUi();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      updateOfflineBanner();
+      if (navigator.onLine) {
+        flushGuardOutbox('visibilitychange');
+      }
+    }
+  });
 
   registerPortalServiceWorker();
   setupInstallPrompt();
@@ -283,6 +370,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       showPortalView();
       switchPortalTab('home');
+      renderOutboxQueueUi();
+      if (navigator.onLine) {
+        setTimeout(() => flushGuardOutbox('app-open'), 400);
+      }
     }
   } else {
     showLoginView();
@@ -521,6 +612,10 @@ window.handlePortalLogin = async function (event) {
     } else {
       showPortalView();
       switchPortalTab('home');
+      renderOutboxQueueUi();
+      if (navigator.onLine) {
+        setTimeout(() => flushGuardOutbox('post-login'), 300);
+      }
     }
   } catch (err) {
     setLoginAlert('Unable to connect to CorpSec server. Check your internet connection and retry.', 'danger');
@@ -593,9 +688,19 @@ window.handleForcePasswordChange = async function (event) {
   }
 };
 
-function logoutGuard() {
+async function logoutGuard() {
+  try {
+    const unsyncedCount = await getUnsyncedCountForCurrentGuard();
+    if (unsyncedCount > 0) {
+      const proceed = confirm(
+        `⚠️ You have ${unsyncedCount} unsynced offline item(s) saved on this phone that have not yet been sent to the server.\n\nIf you sign out now, these items will remain safely in your private queue on this device and will sync the next time you sign back in.\n\nDo you still want to sign out?`
+      );
+      if (!proceed) return;
+    }
+  } catch (e) {}
+
   const token = getToken();
-  if (token) {
+  if (token && navigator.onLine) {
     fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -682,8 +787,36 @@ async function loadDashboard() {
       shiftEl.innerText = `${sh.shift_name || 'Shift'}${tr}`;
       shiftEl.dataset.hydrated = 'cache';
     }
+    if (!currentShiftSite && cachedSnap.today_shift) {
+      currentShiftId = cachedSnap.today_shift.shift_id || null;
+      currentShiftSite = {
+        site_id: cachedSnap.today_shift.site_id,
+        site_name: cachedSnap.today_shift.site_name,
+        latitude: cachedSnap.today_shift.site_latitude,
+        longitude: cachedSnap.today_shift.site_longitude,
+        radius: cachedSnap.today_shift.geofence_radius || 200,
+      };
+    }
+    if (!navigator.onLine && clockBtn) {
+      clockBtn.disabled = false;
+      applyCachedClockButtonState(cachedSnap.today_shift.is_clocked_in);
+    }
   }
   dismissGuardSplash();
+  updateOfflineBanner();
+  renderOutboxQueueUi();
+  if (!navigator.onLine) {
+    if (clockStatus && clockStatus.dataset.hydrated !== 'live') {
+      const updLabel = cachedSnap && cachedSnap.last_updated_iso ? formatLastUpdatedLabel(cachedSnap.last_updated_iso) : '';
+      clockStatus.className = 'status-badge warning';
+      clockStatus.innerText = updLabel ? `📴 Offline — last updated ${updLabel}` : '📴 Offline Mode';
+    }
+    if (clockBtn && clockBtn.disabled) {
+      clockBtn.disabled = false;
+      applyCachedClockButtonState(cachedSnap && cachedSnap.today_shift ? cachedSnap.today_shift.is_clocked_in : false);
+    }
+    return;
+  }
   if (clockStatus && clockStatus.dataset.hydrated !== 'live') {
     clockStatus.innerText = '⏳ Refreshing shift...';
   }
@@ -859,11 +992,49 @@ async function loadDashboard() {
   return dashboardInFlight;
 }
 
+function applyCachedClockButtonState(isClockedIn) {
+  const clockBtn = document.getElementById('btn-clock-action');
+  const clockStatus = document.getElementById('dash-clock-status');
+  if (!clockBtn) return;
+  clockBtn.disabled = false;
+  if (isClockedIn) {
+    clockBtn.className = 'btn-clock clock-out';
+    clockBtn.innerHTML = '🛑 Clock Out Now';
+    clockBtn.onclick = handleClockOut;
+    if (clockStatus) {
+      clockStatus.className = 'status-badge active';
+      clockStatus.innerText = navigator.onLine ? '🟢 Clocked In (On Duty)' : '🟢 Clocked In (Offline Ready)';
+    }
+  } else {
+    clockBtn.className = 'btn-clock clock-in';
+    clockBtn.innerHTML = '▶ Clock In Now';
+    clockBtn.onclick = () => handleClockIn(currentShiftId);
+  }
+}
+
+function acquireGpsPositionWithFallback(timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject({ code: 0, message: 'Geolocation not supported' });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: Math.round(pos.coords.accuracy || 0),
+      }),
+      (err) => reject(err),
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30000 }
+    );
+  });
+}
+
 async function handleClockIn(shiftId) {
   const clockBtn = document.getElementById('btn-clock-action');
-  const originalText = clockBtn ? clockBtn.innerHTML : 'Clock In';
+  const originalText = clockBtn ? clockBtn.innerHTML : '▶ Clock In Now';
 
-  if (!navigator.geolocation) {
+  if (!navigator.geolocation && navigator.onLine) {
     alert('📍 Geolocation is not supported by your device browser.\n\nGuards without GPS-capable smartphones must be signed in by the Site Super Guard.');
     return;
   }
@@ -873,50 +1044,11 @@ async function handleClockIn(shiftId) {
     clockBtn.innerHTML = '📡 Acquiring GPS Location...';
   }
 
-  const geoOptions = {
-    enableHighAccuracy: true,
-    timeout: 12000,
-    maximumAge: 0
-  };
-
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      try {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        const accuracy = Math.round(position.coords.accuracy || 0);
-
-        if (clockBtn) clockBtn.innerHTML = '⏳ Verifying Site Geofence...';
-
-        let url = `/attendance/clock-in?latitude=${lat}&longitude=${lng}`;
-        if (shiftId) url += `&shift_id=${shiftId}`;
-
-        const res = await apiFetch(url, { method: 'POST' });
-        const data = await res.json();
-
-        if (!res.ok) {
-          const errMsg = data.detail || 'Clock-in rejected';
-          const isGeofenceErr = errMsg.toLowerCase().includes('metres away') || errMsg.toLowerCase().includes('radius') || errMsg.toLowerCase().includes('geofence');
-          if (isGeofenceErr) {
-            alert(`❌ Clock-In Failed (Geofence Check):\n\n${errMsg}\n\nNote: If you do not have a smartphone or device GPS is inaccurate, please request your Site Super Guard to clock you in.`);
-          } else {
-            alert(`❌ Clock-In Failed:\n\n${errMsg}`);
-          }
-          return;
-        }
-
-        alert(`✅ Clocked In Successfully!\n\nDevice GPS verified within site perimeter (Accuracy: ±${accuracy}m). Have a safe shift!`);
-        loadDashboard();
-      } catch (err) {
-        alert('Network or clock-in error: ' + err.message);
-      } finally {
-        if (clockBtn) {
-          clockBtn.disabled = false;
-          clockBtn.innerHTML = originalText;
-        }
-      }
-    },
-    (err) => {
+  let gps = { latitude: null, longitude: null, accuracy: null };
+  try {
+    gps = await acquireGpsPositionWithFallback(10000);
+  } catch (err) {
+    if (navigator.onLine) {
       if (clockBtn) {
         clockBtn.disabled = false;
         clockBtn.innerHTML = originalText;
@@ -925,25 +1057,165 @@ async function handleClockIn(shiftId) {
       if (err.code === 1) explanation = 'GPS location permission was denied. Please allow location access in your browser settings to verify you are within 200m of the site.';
       else if (err.code === 2) explanation = 'GPS position unavailable. Please ensure your device location/GPS is switched ON.';
       else if (err.code === 3) explanation = 'GPS request timed out. Please try again with clear sky or Wi-Fi visibility.';
-
       alert(`📍 GPS Verification Required:\n\n${explanation}\n\nGuards stationed at this site without a smartphone can be clocked in directly by their Site Super Guard.`);
-    },
-    geoOptions
-  );
+      return;
+    }
+    // When offline, still allow queuing clock-in even if GPS timed out — server will flag for supervisor review
+  }
+
+  const storedUser = getStoredUser() || {};
+  const userId = storedUser.user_id;
+  const clientUuid = generateClientUuid();
+  const deviceTimestamp = new Date().toISOString();
+  const clockSkewMs = getMeasuredClockSkew(userId);
+
+  const payload = {
+    shift_id: shiftId || currentShiftId || null,
+    latitude: gps.latitude,
+    longitude: gps.longitude,
+    client_uuid: clientUuid,
+    device_timestamp: deviceTimestamp,
+    clock_skew_ms: clockSkewMs,
+    submitted_offline: !navigator.onLine,
+  };
+
+  if (navigator.onLine) {
+    try {
+      if (clockBtn) clockBtn.innerHTML = '⏳ Verifying Site Geofence...';
+      const res = await apiFetch('/attendance/clock-in', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status >= 500) {
+          throw new Error('Server 5xx error');
+        }
+        const errMsg = data.detail || 'Clock-in rejected';
+        alert(`❌ Clock-In Failed:\n\n${errMsg}`);
+        if (clockBtn) {
+          clockBtn.disabled = false;
+          clockBtn.innerHTML = originalText;
+        }
+        return;
+      }
+      alert(`✅ Clocked In Successfully!\n\nDevice GPS verified (Accuracy: ±${gps.accuracy || 0}m). Have a safe shift!`);
+      loadDashboard();
+      return;
+    } catch (netErr) {
+      if (netErr.message === 'Unauthorized' || netErr.message === 'Password change required') {
+        if (clockBtn) {
+          clockBtn.disabled = false;
+          clockBtn.innerHTML = originalText;
+        }
+        return;
+      }
+      // Network or 5xx failure while attempting clock-in -> fall through to offline outbox queue
+      payload.submitted_offline = true;
+    }
+  }
+
+  // Queue in IndexedDB Outbox
+  const queued = await enqueueGuardOutboxItem({
+    client_uuid: clientUuid,
+    action_type: 'CLOCK_IN',
+    label: `Duty Clock-In (${currentShiftSite && currentShiftSite.site_name ? currentShiftSite.site_name : 'Assigned Site'})`,
+    payload: payload,
+    gps: gps,
+    device_timestamp: deviceTimestamp,
+    clock_skew_ms: clockSkewMs,
+  });
+
+  if (queued) {
+    updateCachedClockState(userId, true);
+    applyCachedClockButtonState(true);
+    showSyncNoticeBanner('💾 Clock-In saved on this phone, not yet sent. Will sync automatically when connection returns.', 'info');
+  } else if (clockBtn) {
+    clockBtn.disabled = false;
+    clockBtn.innerHTML = originalText;
+  }
 }
 
 async function handleClockOut() {
-  try {
-    const res = await apiFetch('/attendance/clock-out', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.detail || 'Clock-out failed');
+  const clockBtn = document.getElementById('btn-clock-action');
+  const originalText = clockBtn ? clockBtn.innerHTML : '🛑 Clock Out Now';
+  if (clockBtn) {
+    clockBtn.disabled = true;
+    clockBtn.innerHTML = '⏳ Recording Clock-Out...';
+  }
+
+  const storedUser = getStoredUser() || {};
+  const userId = storedUser.user_id;
+  const clientUuid = generateClientUuid();
+  const deviceTimestamp = new Date().toISOString();
+  const clockSkewMs = getMeasuredClockSkew(userId);
+
+  // Check if there is a queued CLOCK_IN in the outbox for this guard
+  const parentClockIn = await findLatestQueuedClockInForCurrentGuard();
+
+  const payload = {
+    client_uuid: clientUuid,
+    parent_clock_in_uuid: parentClockIn ? parentClockIn.client_uuid : null,
+    orphaned_clock_in_reason: (parentClockIn && parentClockIn.status === 'failed') ? (parentClockIn.last_error || 'Preceding offline clock-in failed') : null,
+    device_timestamp: deviceTimestamp,
+    clock_skew_ms: clockSkewMs,
+    submitted_offline: !navigator.onLine || !!parentClockIn,
+  };
+
+  // If online AND there is no unsynced parent clock-in ahead of us in the queue, send directly
+  if (navigator.onLine && !parentClockIn) {
+    try {
+      const res = await apiFetch('/attendance/clock-out', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status >= 500) {
+          throw new Error('Server 5xx error');
+        }
+        alert(data.detail || 'Clock-out failed');
+        if (clockBtn) {
+          clockBtn.disabled = false;
+          clockBtn.innerHTML = originalText;
+        }
+        return;
+      }
+      alert(`✅ Clocked out successfully! (Hours: ${data.regular_hours} hrs, OT: ${data.overtime_hours} hrs)`);
+      loadDashboard();
       return;
+    } catch (netErr) {
+      if (netErr.message === 'Unauthorized' || netErr.message === 'Password change required') {
+        if (clockBtn) {
+          clockBtn.disabled = false;
+          clockBtn.innerHTML = originalText;
+        }
+        return;
+      }
+      payload.submitted_offline = true;
     }
-    alert(`✅ Clocked out successfully! (Hours: ${data.regular_hours} hrs, OT: ${data.overtime_hours} hrs)`);
-    loadDashboard();
-  } catch (err) {
-    alert('Clock-out error: ' + err.message);
+  }
+
+  const queued = await enqueueGuardOutboxItem({
+    client_uuid: clientUuid,
+    action_type: 'CLOCK_OUT',
+    label: `Duty Clock-Out (${currentShiftSite && currentShiftSite.site_name ? currentShiftSite.site_name : 'Assigned Site'})`,
+    payload: payload,
+    parent_client_uuid: parentClockIn ? parentClockIn.client_uuid : null,
+    device_timestamp: deviceTimestamp,
+    clock_skew_ms: clockSkewMs,
+  });
+
+  if (queued) {
+    updateCachedClockState(userId, false);
+    applyCachedClockButtonState(false);
+    showSyncNoticeBanner('💾 Clock-Out saved on this phone, not yet sent. Will sync in order after any pending items.', 'info');
+    if (navigator.onLine) {
+      flushGuardOutbox('clock-out-queued');
+    }
+  } else if (clockBtn) {
+    clockBtn.disabled = false;
+    clockBtn.innerHTML = originalText;
   }
 }
 
@@ -977,6 +1249,11 @@ async function handleLeaveSubmit(event) {
   // Validation: Missing or too short reason
   if (!reason || reason.length < 3) {
     showLeaveError('Please provide a reason for your leave request (at least 3 characters).');
+    return;
+  }
+
+  if (!navigator.onLine) {
+    showLeaveError('Leave requests require an active internet connection so your allowance and schedule can be validated live.');
     return;
   }
 
@@ -1057,7 +1334,7 @@ async function loadLeaveRequests() {
 }
 
 // -------------------------------------------------------------
-// 3. INCIDENT REPORTING SCREEN
+// 3. INCIDENT REPORTING SCREEN (WITH OFFLINE QUEUE & PHOTO COMPRESSION)
 // -------------------------------------------------------------
 async function handleIncidentSubmit(event) {
   event.preventDefault();
@@ -1068,6 +1345,8 @@ async function handleIncidentSubmit(event) {
 
   const incidentType = document.getElementById('incident-type').value;
   const description = document.getElementById('incident-desc').value.trim();
+  const photoInput = document.getElementById('incident-photo');
+  const rawPhotoFile = (photoInput && photoInput.files && photoInput.files[0]) ? photoInput.files[0] : null;
 
   // Validation: Short description check
   if (!description || description.length < 5) {
@@ -1075,32 +1354,104 @@ async function handleIncidentSubmit(event) {
     return;
   }
 
-  try {
-    const res = await apiFetch('/guard-portal/incidents', {
-      method: 'POST',
-      body: JSON.stringify({
-        incident_type: incidentType,
-        description: description
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      const msg = typeof data.detail === 'string' ? data.detail : (Array.isArray(data.detail) ? data.detail[0].msg : 'Failed to submit incident report.');
-      showIncidentError(msg);
+  let compressedPhotoBlob = null;
+  let compressedPhotoName = null;
+  if (rawPhotoFile) {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes((rawPhotoFile.type || '').toLowerCase())) {
+      showIncidentError('Unsupported photo type. Please attach a JPEG, PNG, or WebP photo.');
       return;
     }
+    try {
+      compressedPhotoBlob = await compressIncidentPhoto(rawPhotoFile);
+      compressedPhotoName = 'incident_photo.jpg';
+      if (compressedPhotoBlob.size > 5 * 1024 * 1024) {
+        showIncidentError('Photo is still larger than the 5 MB limit after compression. Please choose a smaller photo.');
+        return;
+      }
+    } catch (compErr) {
+      showIncidentError(compErr.message || 'Could not process attached photo.');
+      return;
+    }
+  }
 
+  const storedUser = getStoredUser() || {};
+  const userId = storedUser.user_id;
+  const clientUuid = generateClientUuid();
+  const deviceTimestamp = new Date().toISOString();
+  const clockSkewMs = getMeasuredClockSkew(userId);
+
+  const payload = {
+    incident_type: incidentType,
+    description: description,
+    client_uuid: clientUuid,
+    device_timestamp: deviceTimestamp,
+    clock_skew_ms: clockSkewMs,
+    submitted_offline: !navigator.onLine,
+  };
+
+  if (navigator.onLine) {
+    try {
+      const res = await apiFetch('/guard-portal/incidents', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status >= 500) {
+          throw new Error('Server 5xx error');
+        }
+        const msg = typeof data.detail === 'string' ? data.detail : (Array.isArray(data.detail) ? data.detail[0].msg : 'Failed to submit incident report.');
+        showIncidentError(msg);
+        return;
+      }
+
+      let photoNote = '';
+      if (compressedPhotoBlob && data.id) {
+        try {
+          await uploadCompressedIncidentPhoto(data.id, compressedPhotoBlob, compressedPhotoName);
+          photoNote = ' (with compressed photo)';
+        } catch (photoErr) {
+          photoNote = ` (text saved; photo upload warning: ${photoErr.message})`;
+        }
+      }
+
+      if (successEl) {
+        successEl.style.display = 'block';
+        successEl.innerHTML = `✅ <strong>Incident Reported Successfully${photoNote}!</strong><br>Reference Number: <span style="font-family:monospace; font-size:16px; font-weight:800;">${data.reference_number || 'INC-0001'}</span>`;
+      }
+
+      document.getElementById('incident-form').reset();
+      clearIncidentPhotoPreview();
+      loadIncidents();
+      return;
+    } catch (netErr) {
+      if (netErr.message === 'Unauthorized' || netErr.message === 'Password change required') return;
+      payload.submitted_offline = true;
+    }
+  }
+
+  // Save incident (and compressed photo blob) to IndexedDB outbox
+  const queued = await enqueueGuardOutboxItem({
+    client_uuid: clientUuid,
+    action_type: 'INCIDENT_REPORT',
+    label: `Incident Report: ${incidentType}${compressedPhotoBlob ? ' + Photo' : ''}`,
+    payload: payload,
+    photo_blob: compressedPhotoBlob,
+    photo_name: compressedPhotoName,
+    photo_status: compressedPhotoBlob ? 'pending' : 'none',
+    device_timestamp: deviceTimestamp,
+    clock_skew_ms: clockSkewMs,
+  });
+
+  if (queued) {
     if (successEl) {
       successEl.style.display = 'block';
-      successEl.innerHTML = `✅ <strong>Incident Reported Successfully!</strong><br>Reference Number: <span style="font-family:monospace; font-size:16px; font-weight:800;">${data.reference_number || 'INC-0001'}</span>`;
+      successEl.innerHTML = `💾 <strong>Saved on this phone, not yet sent!</strong><br>Your <strong>${incidentType}</strong> report${compressedPhotoBlob ? ' and compressed photo' : ''} will be uploaded automatically when your connection returns.`;
     }
-
     document.getElementById('incident-form').reset();
-    loadIncidents();
-
-  } catch (err) {
-    showIncidentError('Network error or server unreachable.');
+    clearIncidentPhotoPreview();
+    showSyncNoticeBanner('💾 Incident report saved on this phone, not yet sent.', 'info');
   }
 }
 
@@ -1258,6 +1609,10 @@ function escapeQuote(str) {
 }
 
 async function superGuardClockIn(guardId, guardName) {
+  if (!navigator.onLine) {
+    alert('⚠️ Super Guard mandate actions on behalf of other guards require an active internet connection.');
+    return;
+  }
   const confirmMsg = `Authorize on-site duty clock-in for guard:
 
 ${guardName}
@@ -1282,6 +1637,10 @@ This confirms the guard is physically present on-site without a smartphone. Proc
 }
 
 async function superGuardClockOut(guardId, guardName) {
+  if (!navigator.onLine) {
+    alert('⚠️ Super Guard mandate actions on behalf of other guards require an active internet connection.');
+    return;
+  }
   const confirmMsg = `Sign out guard ${guardName} from site duty?`;
   if (!confirm(confirmMsg)) return;
 
@@ -1570,6 +1929,14 @@ async function handleOffDaySubmit(event) {
     return;
   }
 
+  if (!navigator.onLine) {
+    if (alertEl) {
+      alertEl.innerText = '⚠️ Off-day requests require an active internet connection for allowance validation.';
+      alertEl.style.display = 'block';
+    }
+    return;
+  }
+
   try {
     const res = await apiFetch('/off-days/requests', {
       method: 'POST',
@@ -1674,6 +2041,16 @@ async function submitAnonymousTip(e) {
     return;
   }
 
+  if (!navigator.onLine) {
+    if (alertEl) {
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#FEF3C7';
+      alertEl.style.color = '#92400E';
+      alertEl.innerText = '🔒 For your privacy, anonymous reports are never stored offline on your phone. Please reconnect to mobile data or Wi-Fi to transmit directly.';
+    }
+    return;
+  }
+
   if (btn) btn.disabled = true;
   if (btnText) btnText.style.display = 'none';
   if (btnSpinner) btnSpinner.style.display = 'inline';
@@ -1715,3 +2092,576 @@ async function submitAnonymousTip(e) {
 
 window.updateAnonCharCounter = updateAnonCharCounter;
 window.submitAnonymousTip = submitAnonymousTip;
+
+// =============================================================
+// 7. PHASE 1 OFFLINE OUTBOX ENGINE (IndexedDB + FIFO Sync + Photo Compression)
+// =============================================================
+const OUTBOX_DB_NAME = 'corpsec_guard_outbox_v1';
+const OUTBOX_STORE_NAME = 'outbox';
+const MAX_OUTBOX_ITEMS_PER_GUARD = 50;
+let outboxSyncInFlight = false;
+let outboxBackoffTimer = null;
+
+function generateClientUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function getCurrentGuardOwnerKey() {
+  const user = getStoredUser();
+  if (!user) return null;
+  if (user.guard_id) return `guard_${user.guard_id}`;
+  if (user.user_id) return `user_${user.user_id}`;
+  if (user.email) return `email_${user.email}`;
+  return null;
+}
+
+function updateCachedClockState(userId, isClockedIn) {
+  if (!userId) return;
+  try {
+    const snap = getCachedShiftSnapshot(userId);
+    if (snap && snap.today_shift) {
+      snap.today_shift.is_clocked_in = !!isClockedIn;
+      localStorage.setItem(`guard_home_shift_v1_${userId}`, JSON.stringify(snap));
+    }
+  } catch (e) {}
+}
+
+function openGuardOutboxDb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB is not available in this browser'));
+      return;
+    }
+    const req = indexedDB.open(OUTBOX_DB_NAME, 1);
+    req.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(OUTBOX_STORE_NAME)) {
+        const store = db.createObjectStore(OUTBOX_STORE_NAME, { keyPath: 'client_uuid' });
+        store.createIndex('by_owner_key', 'owner_key', { unique: false });
+        store.createIndex('by_created_at', 'created_at_ms', { unique: false });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Failed to open offline outbox database'));
+  });
+}
+
+async function getGuardOutboxItems() {
+  const ownerKey = getCurrentGuardOwnerKey();
+  if (!ownerKey) return [];
+  try {
+    const db = await openGuardOutboxDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(OUTBOX_STORE_NAME, 'readonly');
+      const store = tx.objectStore(OUTBOX_STORE_NAME);
+      const index = store.index('by_owner_key');
+      const req = index.getAll(IDBKeyRange.only(ownerKey));
+      req.onsuccess = () => {
+        const items = Array.isArray(req.result) ? req.result : [];
+        items.sort((a, b) => (a.created_at_ms || 0) - (b.created_at_ms || 0));
+        resolve(items);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn('getGuardOutboxItems warning:', e);
+    return [];
+  }
+}
+
+async function getUnsyncedCountForCurrentGuard() {
+  const items = await getGuardOutboxItems();
+  return items.filter((i) => i.status !== 'synced').length;
+}
+
+async function findLatestQueuedClockInForCurrentGuard() {
+  const items = await getGuardOutboxItems();
+  const clockIns = items.filter((i) => i.action_type === 'CLOCK_IN' && i.status !== 'synced');
+  return clockIns.length > 0 ? clockIns[clockIns.length - 1] : null;
+}
+
+async function enqueueGuardOutboxItem(itemSpec) {
+  const ownerKey = getCurrentGuardOwnerKey();
+  const user = getStoredUser() || {};
+  if (!ownerKey) {
+    alert('Please sign in first before performing this action.');
+    return false;
+  }
+
+  try {
+    const existingItems = await getGuardOutboxItems();
+    const unsynced = existingItems.filter((i) => i.status !== 'synced');
+    if (unsynced.length >= MAX_OUTBOX_ITEMS_PER_GUARD) {
+      alert(`⚠️ Offline Queue Full (${MAX_OUTBOX_ITEMS_PER_GUARD} items):\n\nYour phone has reached the maximum number of unsynced offline actions. Please connect to mobile data or Wi-Fi to sync existing items first.`);
+      return false;
+    }
+
+    const record = {
+      client_uuid: itemSpec.client_uuid || generateClientUuid(),
+      owner_key: ownerKey,
+      guard_id: user.guard_id || null,
+      user_id: user.user_id || null,
+      action_type: itemSpec.action_type,
+      label: itemSpec.label || itemSpec.action_type,
+      payload: itemSpec.payload || {},
+      gps: itemSpec.gps || null,
+      photo_blob: itemSpec.photo_blob || null,
+      photo_name: itemSpec.photo_name || null,
+      photo_status: itemSpec.photo_status || 'none',
+      remote_incident_id: null,
+      parent_client_uuid: itemSpec.parent_client_uuid || null,
+      device_timestamp: itemSpec.device_timestamp || new Date().toISOString(),
+      clock_skew_ms: itemSpec.clock_skew_ms || 0,
+      status: 'pending', // pending | sending | failed | synced
+      permanent_failure: false,
+      retry_count: 0,
+      next_retry_at: 0,
+      last_error: null,
+      created_at_ms: Date.now(),
+    };
+
+    const db = await openGuardOutboxDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(OUTBOX_STORE_NAME, 'readwrite');
+      tx.objectStore(OUTBOX_STORE_NAME).put(record);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    await renderOutboxQueueUi();
+    requestBackgroundSyncRegistration();
+    return true;
+  } catch (err) {
+    const isQuota = err && (err.name === 'QuotaExceededError' || String(err.message || '').toLowerCase().includes('quota'));
+    if (isQuota) {
+      alert('⚠️ Device Storage Full (IndexedDB Quota Exceeded):\n\nYour phone does not have enough free browser storage to save this item offline. Please free up storage or connect to the internet to sync pending items.');
+    } else {
+      alert('⚠️ Could not save action to offline outbox: ' + (err.message || 'Storage error'));
+    }
+    return false;
+  }
+}
+
+async function putGuardOutboxRecord(record) {
+  const db = await openGuardOutboxDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX_STORE_NAME, 'readwrite');
+    tx.objectStore(OUTBOX_STORE_NAME).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function deleteGuardOutboxRecord(clientUuid) {
+  const db = await openGuardOutboxDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX_STORE_NAME, 'readwrite');
+    tx.objectStore(OUTBOX_STORE_NAME).delete(clientUuid);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function compressIncidentPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read selected photo file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Selected file is not a valid image.'));
+      img.onload = () => {
+        const maxDim = 1280;
+        let width = img.width || 800;
+        let height = img.height || 600;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Photo compression failed on this device.'));
+              return;
+            }
+            resolve(blob);
+          },
+          'image/jpeg',
+          0.74
+        );
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadCompressedIncidentPhoto(incidentId, photoBlob, photoName = 'incident_photo.jpg') {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('file', photoBlob, photoName);
+
+  const res = await fetch(`${API_BASE}/guard-portal/incidents/${incidentId}/photo`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (res.status === 409) {
+    // Photo already uploaded on an earlier attempt — treat as idempotent success
+    return true;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.detail || `Photo upload failed (HTTP ${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return true;
+}
+
+async function flushGuardOutbox(triggerSource = 'manual') {
+  if (outboxSyncInFlight || !navigator.onLine) {
+    await renderOutboxQueueUi();
+    return;
+  }
+  const token = getToken();
+  const ownerKey = getCurrentGuardOwnerKey();
+  if (!token || !ownerKey) return;
+
+  const items = await getGuardOutboxItems();
+  const actionable = items.filter((i) => i.status === 'pending' || (i.status === 'failed' && !i.permanent_failure));
+  if (actionable.length === 0) {
+    await renderOutboxQueueUi();
+    return;
+  }
+
+  outboxSyncInFlight = true;
+  if (outboxBackoffTimer) {
+    clearTimeout(outboxBackoffTimer);
+    outboxBackoffTimer = null;
+  }
+
+  let syncedAny = false;
+  let encounteredTempFailure = false;
+  let nextBackoffDelayMs = 2000;
+
+  try {
+    for (const item of actionable) {
+      if (!navigator.onLine) break;
+
+      // If this is a CLOCK_OUT whose parent CLOCK_IN failed permanently, mark orphaned reason explicitly
+      if (item.action_type === 'CLOCK_OUT' && item.parent_client_uuid) {
+        const latestItems = await getGuardOutboxItems();
+        const parentItem = latestItems.find((x) => x.client_uuid === item.parent_client_uuid);
+        if (parentItem && parentItem.status === 'failed' && parentItem.permanent_failure) {
+          item.payload.orphaned_clock_in_reason = `Parent offline clock-in failed: ${parentItem.last_error || 'Validation error'}`;
+        }
+      }
+
+      item.status = 'sending';
+      await putGuardOutboxRecord(item);
+      await renderOutboxQueueUi();
+
+      try {
+        await sendSingleOutboxItem(item);
+        item.status = 'synced';
+        item.last_error = null;
+        await putGuardOutboxRecord(item);
+        await renderOutboxQueueUi();
+        syncedAny = true;
+
+        // Clear synced item promptly from IndexedDB
+        setTimeout(() => {
+          deleteGuardOutboxRecord(item.client_uuid).then(() => renderOutboxQueueUi()).catch(() => {});
+        }, 1800);
+      } catch (err) {
+        if (err.status === 401) {
+          // Expired token: pause without losing queue, ask guard to sign back in
+          item.status = 'pending';
+          item.last_error = 'Session expired — sign in again to finish syncing';
+          await putGuardOutboxRecord(item);
+          const remaining = await getUnsyncedCountForCurrentGuard();
+          clearToken();
+          resetPortalDomState();
+          showLoginView(`Session expired. Please sign in again to sync ${remaining} saved offline item(s).`, 'danger');
+          return;
+        }
+
+        if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) {
+          // Permanent 4xx validation failure — mark "Failed - needs attention" with reason
+          item.status = 'failed';
+          item.permanent_failure = true;
+          item.last_error = err.message || 'Failed - needs attention';
+          await putGuardOutboxRecord(item);
+          await renderOutboxQueueUi();
+          showSyncNoticeBanner(`⚠️ Offline item failed — needs attention: ${item.last_error}`, 'danger');
+          // Continue loop so dependent clock-outs can still be sent with orphaned_clock_in_reason
+          continue;
+        }
+
+        // Network error or 5xx/429 -> exponential backoff, preserve FIFO order
+        item.retry_count = (item.retry_count || 0) + 1;
+        nextBackoffDelayMs = Math.min(2000 * Math.pow(2, item.retry_count - 1), 60000);
+        item.status = 'pending';
+        item.next_retry_at = Date.now() + nextBackoffDelayMs;
+        item.last_error = `Temporary connection issue — retry #${item.retry_count} in ${Math.round(nextBackoffDelayMs / 1000)}s`;
+        await putGuardOutboxRecord(item);
+        await renderOutboxQueueUi();
+        encounteredTempFailure = true;
+        break;
+      }
+    }
+
+    if (syncedAny) {
+      showSyncNoticeBanner('✅ All queued offline actions synced to CorpSec server!', 'success');
+      loadDashboard();
+      loadIncidents();
+    }
+  } finally {
+    outboxSyncInFlight = false;
+    await renderOutboxQueueUi();
+    if (encounteredTempFailure && navigator.onLine) {
+      outboxBackoffTimer = setTimeout(() => flushGuardOutbox('backoff-retry'), nextBackoffDelayMs);
+    }
+  }
+}
+
+async function sendSingleOutboxItem(item) {
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  let endpoint = '';
+  if (item.action_type === 'CLOCK_IN') {
+    endpoint = '/attendance/clock-in';
+  } else if (item.action_type === 'CLOCK_OUT') {
+    endpoint = '/attendance/clock-out';
+  } else if (item.action_type === 'INCIDENT_REPORT') {
+    endpoint = '/guard-portal/incidents';
+  } else {
+    const e = new Error(`Unsupported offline action type: ${item.action_type}`);
+    e.status = 400;
+    throw e;
+  }
+
+  // Step 1: Send JSON payload (unless incident text already succeeded and only photo remains)
+  let responseData = null;
+  if (!(item.action_type === 'INCIDENT_REPORT' && item.remote_incident_id)) {
+    const bodyPayload = Object.assign({}, item.payload, { submitted_offline: true });
+    let res;
+    try {
+      res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(bodyPayload),
+      });
+    } catch (netErr) {
+      const e = new Error('Network unreachable');
+      e.status = 0;
+      throw e;
+    }
+
+    responseData = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const detail = typeof responseData.detail === 'string'
+        ? responseData.detail
+        : (Array.isArray(responseData.detail) ? responseData.detail[0].msg : `HTTP ${res.status}`);
+      const e = new Error(detail);
+      e.status = res.status;
+      throw e;
+    }
+
+    if (item.action_type === 'INCIDENT_REPORT' && responseData && responseData.id) {
+      item.remote_incident_id = responseData.id;
+      await putGuardOutboxRecord(item);
+    }
+  }
+
+  // Step 2: If incident has a compressed photo blob pending upload, upload it after text record
+  if (item.action_type === 'INCIDENT_REPORT' && item.photo_blob && item.photo_status !== 'uploaded') {
+    const incId = item.remote_incident_id || (responseData && responseData.id);
+    if (incId) {
+      await uploadCompressedIncidentPhoto(incId, item.photo_blob, item.photo_name || 'incident_photo.jpg');
+      item.photo_status = 'uploaded';
+      item.photo_blob = null; // Free IndexedDB space immediately once photo is uploaded
+      await putGuardOutboxRecord(item);
+    }
+  }
+}
+
+window.retryGuardOutboxItem = async function (clientUuid) {
+  const items = await getGuardOutboxItems();
+  const target = items.find((i) => i.client_uuid === clientUuid);
+  if (!target) return;
+  target.status = 'pending';
+  target.permanent_failure = false;
+  target.last_error = null;
+  await putGuardOutboxRecord(target);
+  await renderOutboxQueueUi();
+  if (navigator.onLine) {
+    flushGuardOutbox('manual-item-retry');
+  } else {
+    showSyncNoticeBanner('Item queued for retry as soon as connection returns.', 'info');
+  }
+};
+
+window.removeFailedGuardOutboxItem = async function (clientUuid) {
+  if (!confirm('Remove this failed item from your phone outbox?')) return;
+  await deleteGuardOutboxRecord(clientUuid);
+  await renderOutboxQueueUi();
+};
+
+window.toggleGuardOutboxDrawer = function () {
+  const drawer = document.getElementById('portal-outbox-drawer');
+  if (!drawer) return;
+  drawer.hidden = !drawer.hidden;
+};
+
+function showSyncNoticeBanner(message, type = 'info') {
+  const toastEl = document.getElementById('portal-sync-toast');
+  if (!toastEl) return;
+  toastEl.className = `portal-sync-toast toast-${type}`;
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  clearTimeout(window.__portalSyncToastTimer);
+  window.__portalSyncToastTimer = setTimeout(() => {
+    toastEl.hidden = true;
+  }, 5500);
+}
+
+async function updateSyncStatusBarUi() {
+  const pillEl = document.getElementById('portal-net-indicator');
+  const lastUpdEl = document.getElementById('portal-last-updated-label');
+  const storedUser = getStoredUser();
+  const snap = storedUser ? getCachedShiftSnapshot(storedUser.user_id) : null;
+  const updTime = snap && snap.last_updated_iso ? formatLastUpdatedLabel(snap.last_updated_iso) : '';
+
+  if (pillEl) {
+    if (navigator.onLine) {
+      pillEl.className = 'net-status-pill online';
+      pillEl.innerHTML = '🟢 Online';
+    } else {
+      pillEl.className = 'net-status-pill offline';
+      pillEl.innerHTML = '📴 Offline';
+    }
+  }
+  if (lastUpdEl) {
+    if (!navigator.onLine && updTime) {
+      lastUpdEl.textContent = `Offline — last updated ${updTime}`;
+      lastUpdEl.hidden = false;
+    } else if (updTime) {
+      lastUpdEl.textContent = `Updated ${updTime}`;
+      lastUpdEl.hidden = false;
+    } else {
+      lastUpdEl.hidden = true;
+    }
+  }
+}
+
+async function renderOutboxQueueUi() {
+  await updateSyncStatusBarUi();
+  const counterBtn = document.getElementById('portal-outbox-counter-btn');
+  const listEl = document.getElementById('portal-outbox-list');
+  const drawer = document.getElementById('portal-outbox-drawer');
+
+  const items = await getGuardOutboxItems();
+  const waitingCount = items.filter((i) => i.status !== 'synced').length;
+
+  if (counterBtn) {
+    if (waitingCount > 0) {
+      counterBtn.hidden = false;
+      counterBtn.textContent = `🔄 ${waitingCount} item${waitingCount > 1 ? 's' : ''} waiting to sync`;
+    } else {
+      counterBtn.hidden = true;
+    }
+  }
+
+  if (!listEl) return;
+  if (items.length === 0) {
+    listEl.innerHTML = '<div style="font-size:12px; color:#64748B; text-align:center; padding:10px;">No offline items waiting to sync.</div>';
+    if (drawer && waitingCount === 0) drawer.hidden = true;
+    return;
+  }
+
+  listEl.innerHTML = items.map((item) => {
+    const timeStr = formatLastUpdatedLabel(item.device_timestamp);
+    let badge = '';
+    if (item.status === 'pending') {
+      badge = '<span class="outbox-badge pending">⏳ Saved on phone (Pending)</span>';
+    } else if (item.status === 'sending') {
+      badge = '<span class="outbox-badge sending">🔄 Sending...</span>';
+    } else if (item.status === 'failed') {
+      badge = '<span class="outbox-badge failed">⚠️ Failed — needs attention</span>';
+    } else {
+      badge = '<span class="outbox-badge synced">✅ Synced</span>';
+    }
+
+    const errHtml = item.last_error
+      ? `<div class="outbox-item-error">${item.last_error}</div>`
+      : '<div class="outbox-item-sub">Saved on this phone, not yet sent</div>';
+
+    const actionsHtml = (item.status === 'failed' || item.status === 'pending')
+      ? `<div class="outbox-item-actions">
+           <button type="button" class="btn-outbox-retry" onclick="retryGuardOutboxItem('${item.client_uuid}')">Retry Now</button>
+           ${item.status === 'failed' ? `<button type="button" class="btn-outbox-dismiss" onclick="removeFailedGuardOutboxItem('${item.client_uuid}')">Dismiss</button>` : ''}
+         </div>`
+      : '';
+
+    return `
+      <div class="outbox-item-card">
+        <div class="outbox-item-top">
+          <strong>${item.label}</strong>
+          ${badge}
+        </div>
+        <div class="outbox-item-meta">Recorded at ${timeStr || item.device_timestamp}</div>
+        ${errHtml}
+        ${actionsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+window.handleIncidentPhotoSelect = function (inputEl) {
+  const previewWrap = document.getElementById('incident-photo-preview-wrap');
+  const previewName = document.getElementById('incident-photo-preview-name');
+  if (!inputEl || !inputEl.files || !inputEl.files[0]) {
+    clearIncidentPhotoPreview();
+    return;
+  }
+  const f = inputEl.files[0];
+  if (previewWrap && previewName) {
+    const kb = Math.round(f.size / 1024);
+    previewName.textContent = `📷 ${f.name} (${kb} KB — will be compressed on phone before upload)`;
+    previewWrap.style.display = 'flex';
+  }
+};
+
+function clearIncidentPhotoPreview() {
+  const inputEl = document.getElementById('incident-photo');
+  const previewWrap = document.getElementById('incident-photo-preview-wrap');
+  if (inputEl) inputEl.value = '';
+  if (previewWrap) previewWrap.style.display = 'none';
+}
+window.clearIncidentPhotoPreview = clearIncidentPhotoPreview;
+window.flushGuardOutbox = flushGuardOutbox;
