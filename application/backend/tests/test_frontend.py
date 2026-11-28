@@ -137,5 +137,26 @@ def test_guards_directory_download_application_section(client):
     assert "triggerPortalPwaInstall()" in p_html
 
 
+def test_guard_pwa_manifest_and_service_worker_routes(client):
+    # Dedicated Guard PWA manifest
+    manifest_resp = client.get("/portal-manifest.json")
+    assert manifest_resp.status_code == 200
+    assert "application/manifest+json" in manifest_resp.headers.get("content-type", "")
+    assert "no-cache" in manifest_resp.headers.get("cache-control", "").lower()
+    manifest_data = manifest_resp.json()
+    assert manifest_data["start_url"] == "/portal"
+    assert manifest_data["scope"] == "/portal"
+    assert len(manifest_data.get("icons", [])) >= 2
+
+    # Dedicated Guard PWA service worker
+    sw_resp = client.get("/guard-sw.js")
+    assert sw_resp.status_code == 200
+    assert "javascript" in sw_resp.headers.get("content-type", "")
+    assert sw_resp.headers.get("service-worker-allowed") == "/portal"
+    assert "no-cache" in sw_resp.headers.get("cache-control", "").lower()
+    assert "GUARD_SW_VERSION" in sw_resp.text
+
+
+
 
 

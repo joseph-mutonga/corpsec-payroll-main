@@ -189,9 +189,44 @@ def read_manifest():
         return FileResponse(
             manifest_file,
             media_type="application/manifest+json",
-            headers={"Content-Disposition": "inline", "Cache-Control": "no-cache"},
+            headers={"Content-Disposition": "inline", "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"},
         )
     return {"error": "manifest not found"}
+
+
+@app.get("/portal-manifest.json")
+def read_portal_manifest():
+    manifest_file = os.path.join(frontend_dir, "portal-manifest.json")
+    if os.path.exists(manifest_file):
+        return FileResponse(
+            manifest_file,
+            media_type="application/manifest+json",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+    return JSONResponse(status_code=404, content={"error": "portal manifest not found"})
+
+
+@app.get("/guard-sw.js")
+def read_guard_service_worker():
+    sw_file = os.path.join(frontend_dir, "guard-sw.js")
+    if os.path.exists(sw_file):
+        return FileResponse(
+            sw_file,
+            media_type="application/javascript",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+                "Service-Worker-Allowed": "/portal",
+            },
+        )
+    return JSONResponse(status_code=404, content={"error": "guard service worker not found"})
 
 
 @app.get("/portal-manifest.json")

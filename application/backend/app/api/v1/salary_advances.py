@@ -2,7 +2,7 @@ import io
 import os
 import re
 import math
-from typing import List, Optional
+from typing import Any, List, Optional
 from datetime import datetime, date
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
