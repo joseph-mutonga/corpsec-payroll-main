@@ -3649,6 +3649,40 @@ async function handleManualAttendanceSubmit(e) {
 
 // Attendance Filter and Shift Display Logic
 let currentAttendanceShiftFilter = 'ALL'; // 'ALL', 'DAY', 'NIGHT'
+let currentAttendanceNeedsReviewOnly = false;
+
+function toggleAttendanceNeedsReviewFilter() {
+  currentAttendanceNeedsReviewOnly = !currentAttendanceNeedsReviewOnly;
+  const btn = document.getElementById('att-btn-needs-review');
+  if (btn) {
+    btn.style.background = currentAttendanceNeedsReviewOnly ? '#F59E0B' : '#FFFBEB';
+    btn.style.color = currentAttendanceNeedsReviewOnly ? '#FFFFFF' : '#B45309';
+  }
+  filterAttendanceLogs();
+}
+window.toggleAttendanceNeedsReviewFilter = toggleAttendanceNeedsReviewFilter;
+
+async function approveOfflineAttendanceReview(attendanceId) {
+  try {
+    const res = await apiFetch(`/attendance/${attendanceId}/approve-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Approved via Admin/Supervisor Attendance Dashboard' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Failed to approve attendance review: ' + (err.detail || 'Server error'));
+      return;
+    }
+    if (typeof showToast === 'function') {
+      showToast('Attendance review approved!', 'success');
+    }
+    loadAttendance();
+  } catch (e) {
+    alert('Error approving review: ' + e.message);
+  }
+}
+window.approveOfflineAttendanceReview = approveOfflineAttendanceReview;
 
 function setAttendanceShiftFilter(type) {
   currentAttendanceShiftFilter = type;
@@ -3688,6 +3722,12 @@ function resetAttendanceFilters() {
   if (siteSelect) siteSelect.value = '';
   if (dateInput) dateInput.value = '';
   if (searchInput) searchInput.value = '';
+  currentAttendanceNeedsReviewOnly = false;
+  const revBtn = document.getElementById('att-btn-needs-review');
+  if (revBtn) {
+    revBtn.style.background = '#FFFBEB';
+    revBtn.style.color = '#B45309';
+  }
   setAttendanceShiftFilter('ALL');
 }
 
@@ -3711,8 +3751,14 @@ function filterAttendanceLogs() {
   let countTotal = 0;
   let countDay = 0;
   let countNight = 0;
+  const countNeedsReview = atts.filter(x => !!x.needs_supervisor_review).length;
+  const revCountEl = document.getElementById('att-count-needs-review');
+  if (revCountEl) revCountEl.innerText = countNeedsReview;
 
   const filtered = atts.filter(a => {
+    if (currentAttendanceNeedsReviewOnly && !a.needs_supervisor_review) {
+      return false;
+    }
     // 1. Site filter
     if (siteVal && String(a.site_id) !== String(siteVal)) {
       return false;
@@ -3785,11 +3831,26 @@ function filterAttendanceLogs() {
       ? '<span class="badge" style="background:#EEF2FF; color:#4338CA; border:1px solid #C7D2FE; font-weight:700;">🌙 Night Shift</span>'
       : '<span class="badge" style="background:#FFFBEB; color:#B45309; border:1px solid #FDE68A; font-weight:700;">☀️ Day Shift</span>';
 
-    const statusBadge = a.status === 'PRESENT'
+    let statusBadge = a.status === 'PRESENT'
       ? '<span class="badge badge-active">PRESENT</span>'
       : (a.status === 'LATE'
         ? '<span class="badge badge-warning" style="background:#FEF3C7; color:#B45309;">LATE</span>'
         : `<span class="badge badge-inactive">${escapeHtml(a.status || 'ABSENT')}</span>`);
+
+    if (a.submitted_offline) {
+      statusBadge += ' <span class="badge" style="background:#E0F2FE; color:#0369A1; font-size:10px; font-weight:700;">📴 Offline Sync</span>';
+    }
+    if (a.needs_supervisor_review) {
+      const reasonTitle = escapeHtml(a.review_reason || 'Flagged offline sync record requires supervisor review');
+      statusBadge += `<div style="margin-top:4px;"><span class="badge" style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; font-size:10.5px; font-weight:800;" title="${reasonTitle}">⚠️ Needs Review</span><div style="font-size:10.5px; color:#B45309; max-width:220px; white-space:normal; line-height:1.25; margin-top:2px;">${reasonTitle}</div></div>`;
+    }
+
+    const actionBtns = `
+      <div style="display:flex; gap:5px; flex-wrap:wrap;">
+        ${a.needs_supervisor_review ? `<button class="btn btn-primary" style="padding:4px 8px; font-size:11px; background:#059669; border-color:#059669;" onclick="approveOfflineAttendanceReview(${a.id})" title="Approve flagged offline record">✅ Approve</button>` : ''}
+        <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openCorrectAttendanceModal(${a.id})">✏️ Correct</button>
+      </div>
+    `;
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -3802,7 +3863,7 @@ function filterAttendanceLogs() {
       <td><b>${a.regular_hours || 0}h</b></td>
       <td><span style="color:#0284c7; font-weight:700;">${a.overtime_hours || 0}h</span></td>
       <td>${statusBadge}</td>
-      <td><button class="btn btn-secondary" style="padding:4px 8px; font-size:12px;" onclick="openCorrectAttendanceModal(${a.id})">✏️ Correct</button></td>
+      <td>${actionBtns}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -5415,14 +5476,38 @@ function filterAdminIncidents(filterType) {
   const btnOpen = document.getElementById('inc-filter-open');
   const btnInv = document.getElementById('inc-filter-investigating');
   const btnRes = document.getElementById('inc-filter-resolved');
+  const btnRev = document.getElementById('inc-filter-needs-review');
 
   if (btnAll) btnAll.className = filterType === 'ALL' ? 'btn btn-primary' : 'btn btn-secondary';
   if (btnOpen) btnOpen.className = filterType === 'OPEN' ? 'btn btn-primary' : 'btn btn-secondary';
   if (btnInv) btnInv.className = filterType === 'INVESTIGATING' ? 'btn btn-primary' : 'btn btn-secondary';
   if (btnRes) btnRes.className = filterType === 'RESOLVED' ? 'btn btn-primary' : 'btn btn-secondary';
+  if (btnRev) btnRev.className = filterType === 'NEEDS_REVIEW' ? 'btn btn-primary' : 'btn btn-secondary';
 
   renderAdminIncidentsTable();
 }
+
+async function approveIncidentOfflineReview(incidentId) {
+  try {
+    const res = await apiFetch(`/incidents/${incidentId}/approve-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Approved via Admin Incidents Dashboard' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Failed to approve incident review: ' + (err.detail || 'Server error'));
+      return;
+    }
+    if (typeof showToast === 'function') {
+      showToast('Incident offline review approved!', 'success');
+    }
+    loadAdminIncidents();
+  } catch (e) {
+    alert('Error approving incident review: ' + e.message);
+  }
+}
+window.approveIncidentOfflineReview = approveIncidentOfflineReview;
 
 function handleIncidentSearch() {
   const input = document.getElementById('inc-search-input');
@@ -5437,12 +5522,18 @@ function renderAdminIncidentsTable() {
   tbody.innerHTML = '';
 
   let filtered = allAdminIncidents;
+  const revCountEl = document.getElementById('inc-count-needs-review');
+  if (revCountEl) {
+    revCountEl.innerText = (allAdminIncidents || []).filter(i => !!i.needs_supervisor_review).length;
+  }
   if (currentIncidentFilter === 'OPEN') {
     filtered = allAdminIncidents.filter(i => i.status === 'OPEN');
   } else if (currentIncidentFilter === 'INVESTIGATING') {
     filtered = allAdminIncidents.filter(i => i.status === 'INVESTIGATING');
   } else if (currentIncidentFilter === 'RESOLVED') {
     filtered = allAdminIncidents.filter(i => i.status === 'RESOLVED');
+  } else if (currentIncidentFilter === 'NEEDS_REVIEW') {
+    filtered = allAdminIncidents.filter(i => !!i.needs_supervisor_review);
   }
 
   // Apply search query filter
@@ -5483,6 +5574,16 @@ function renderAdminIncidentsTable() {
     } else {
       badgeHtml = '<span class="badge" style="background:#D1FAE5; color:#065F46; font-weight:700; border:1px solid #6EE7B7;">✅ RESOLVED</span>';
     }
+    if (inc.submitted_offline) {
+      badgeHtml += ' <span class="badge" style="background:#E0F2FE; color:#0369A1; font-size:10px; font-weight:700;">📴 Offline</span>';
+    }
+    if (inc.photo_path) {
+      badgeHtml += ' <span class="badge" style="background:#F3E8FF; color:#6B21A8; font-size:10px; font-weight:700;">📷 Photo</span>';
+    }
+    if (inc.needs_supervisor_review) {
+      const rText = escapeHtml(inc.review_reason || 'Flagged offline incident requires supervisor review');
+      badgeHtml += `<div style="margin-top:4px;"><span class="badge" style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; font-size:10.5px; font-weight:800;" title="${rText}">⚠️ Needs Review</span><div style="font-size:10.5px; color:#B45309; max-width:210px; white-space:normal; line-height:1.25; margin-top:2px;">${rText}</div></div>`;
+    }
 
     let actionButtons = '';
     if (inc.status === 'OPEN') {
@@ -5505,6 +5606,11 @@ function renderAdminIncidentsTable() {
     }
 
     let extraActions = '';
+    if (inc.needs_supervisor_review) {
+      extraActions += `
+        <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11px; background:#059669; border-color:#059669;" onclick="approveIncidentOfflineReview(${inc.id})" title="Approve flagged offline incident review">✅ Approve Review</button>
+      `;
+    }
     if (inc.incident_type === 'Property Damage' || (inc.description && inc.description.toLowerCase().includes('damage'))) {
       extraActions += `
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11px; color:#DC2626; border-color:#FECACA; background:#FEF2F2; font-weight:700;" onclick="openDamageDeductionForIncident(${inc.id})" title="Deduct damaged property penalty from guard salary">⚠️ Deduct Damage</button>

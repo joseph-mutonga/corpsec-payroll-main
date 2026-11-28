@@ -240,6 +240,37 @@
 
   </header>
 
+  <!-- 2B. ONLINE/OFFLINE STATUS BAR, SYNC COUNTER & EXPANDABLE OUTBOX QUEUE -->
+  <div id="portal-sync-status-bar" class="portal-sync-bar">
+    <div class="portal-sync-left">
+      <span id="portal-net-indicator" class="net-status-pill online">🟢 Online</span>
+      <span id="portal-last-updated-label" class="portal-last-updated" hidden></span>
+    </div>
+    <div class="portal-sync-right">
+      <button type="button" id="portal-outbox-counter-btn" class="portal-outbox-counter-btn" onclick="toggleGuardOutboxDrawer()" hidden>
+        🔄 0 items waiting to sync
+      </button>
+    </div>
+  </div>
+
+  <div id="portal-sync-toast" class="portal-sync-toast" role="status" aria-live="polite" hidden></div>
+
+  <section id="portal-outbox-drawer" class="portal-outbox-drawer" aria-label="Offline Sync Outbox" hidden>
+    <div class="portal-outbox-header">
+      <div>
+        <strong>📥 Offline Outbox Queue</strong>
+        <p class="portal-outbox-note">
+          Background Sync only wakes an open page; saved items sync automatically when you open the app or reconnect while it is open.
+        </p>
+      </div>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button type="button" class="btn-outbox-sync-now" onclick="flushGuardOutbox('manual-button')">Sync Now</button>
+        <button type="button" class="btn-outbox-close" onclick="toggleGuardOutboxDrawer()" aria-label="Close outbox">✕</button>
+      </div>
+    </div>
+    <div id="portal-outbox-list" class="portal-outbox-list"></div>
+  </section>
+
 
 
   <aside id="install-app-banner" class="install-app-banner" role="dialog" aria-label="Install CorpSec Guard" hidden>
@@ -630,6 +661,15 @@
 
             <textarea id="incident-desc" class="form-textarea" rows="4" placeholder="Describe what happened, location on site, time, and action taken..." required></textarea>
 
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="incident-photo">Photo Evidence (Optional — Compressed on Phone, Max 5 MB)</label>
+            <input type="file" id="incident-photo" class="form-input" accept="image/jpeg,image/png,image/webp" onchange="handleIncidentPhotoSelect(this)">
+            <div id="incident-photo-preview-wrap" style="display:none; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:8px 10px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; font-size:12px; color:#334155;">
+              <span id="incident-photo-preview-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+              <button type="button" onclick="clearIncidentPhotoPreview()" style="background:none; border:none; color:#DC2626; font-weight:700; cursor:pointer; font-size:12px;">Remove</button>
+            </div>
           </div>
 
           <button type="submit" class="btn-submit" style="background-color:#EF4444;">🚨 Submit Incident Report</button>

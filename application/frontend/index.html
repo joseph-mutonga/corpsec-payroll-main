@@ -1993,6 +1993,13 @@
                 style="font-size:12px; padding:6px 10px; width:100%;">
             </div>
 
+            <!-- 4B. Offline Sync Supervisor Review Filter -->
+            <button type="button" id="att-btn-needs-review" class="btn btn-secondary" onclick="toggleAttendanceNeedsReviewFilter()"
+              style="font-size:11px; font-weight:700; padding:6px 10px; border:1px solid #F59E0B; color:#B45309; background:#FFFBEB;"
+              title="Show only offline-synced attendance logs flagged for supervisor review">
+              ⚠️ Needs Review (<span id="att-count-needs-review">0</span>)
+            </button>
+
             <!-- 5. Reset Filters Button -->
             <button type="button" class="btn btn-secondary" onclick="resetAttendanceFilters()"
               style="font-size:11px; font-weight:600; padding:6px 10px;" title="Reset all site and shift filters">↺
@@ -4703,6 +4710,9 @@
                 id="inc-count-investigating">0</span>)</button>
             <button class="btn btn-secondary" id="inc-filter-resolved" onclick="filterAdminIncidents('RESOLVED')">✅
               Resolved (<span id="inc-count-resolved">0</span>)</button>
+            <button class="btn btn-secondary" id="inc-filter-needs-review" onclick="filterAdminIncidents('NEEDS_REVIEW')"
+              style="border-color:#F59E0B; color:#B45309;">⚠️
+              Needs Review (<span id="inc-count-needs-review">0</span>)</button>
           </div>
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="text" id="inc-search-input" placeholder="🔍 Search ref, guard, site, type..."
