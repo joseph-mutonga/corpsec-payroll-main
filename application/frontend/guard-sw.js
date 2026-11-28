@@ -70,6 +70,32 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.action === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+  if (event.data && event.data.action === 'TRIGGER_OUTBOX_SYNC') {
+    event.waitUntil(notifyGuardClientsToFlushOutbox());
+  }
+});
+
+/**
+ * Background Sync relay ('corpsec-guard-outbox-sync'):
+ * Note: Because JWT auth tokens are never stored inside the Service Worker or CacheStorage,
+ * Background Sync wakes/notifies any open Guard Portal window client to flush its per-guard
+ * IndexedDB outbox. If the app was closed (or on iOS Safari where Background Sync is unsupported),
+ * queued items sync automatically as soon as the guard opens the app or reconnects while it is open.
+ */
+async function notifyGuardClientsToFlushOutbox() {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+  clients.forEach((client) => {
+    client.postMessage({
+      type: 'GUARD_SW_TRIGGER_SYNC',
+      tag: 'corpsec-guard-outbox-sync',
+    });
+  });
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'corpsec-guard-outbox-sync') {
+    event.waitUntil(notifyGuardClientsToFlushOutbox());
+  }
 });
 
 function isUnsafeToCache(response) {
